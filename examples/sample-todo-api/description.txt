@@ -1,0 +1,7 @@
+I want to build a TODO API. Users should be able to sign up, log in, and manage their own
+TODO items. Each TODO has a title, optional description, optional due date, and a done/not-done
+status. Users should be able to filter their TODOs by status and due date. The API should be
+deployable as a Docker container and use Postgres for storage. I'd like JWT-based auth with
+refresh tokens. Rate limiting on auth endpoints to prevent brute force. Logs should be
+structured JSON for easy parsing. Performance target: p99 latency under 200ms for read
+endpoints, 500ms for writes.

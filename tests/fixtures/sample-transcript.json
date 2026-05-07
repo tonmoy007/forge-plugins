@@ -1,0 +1,37 @@
+{
+  "session_id": "test-session-fixture-001",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Build a quick auth check script."
+    },
+    {
+      "role": "assistant",
+      "content": "I'll write a script that checks JWT tokens. Let me create auth-check.py..."
+    },
+    {
+      "role": "user",
+      "content": "No, don't put it in the root. Use scripts/ — that's where utility scripts go in this project."
+    },
+    {
+      "role": "assistant",
+      "content": "Got it. Moving to scripts/auth-check.py."
+    },
+    {
+      "role": "user",
+      "content": "Also you forgot the shebang. Always include #!/usr/bin/env python3 in scripts."
+    },
+    {
+      "role": "assistant",
+      "content": "Right — adding the shebang and making it executable."
+    },
+    {
+      "role": "user",
+      "content": "And the verification step — when you say done, run the actual command and show me the output. Don't just claim it works."
+    },
+    {
+      "role": "assistant",
+      "content": "Understood. Running the script now to verify..."
+    }
+  ]
+}

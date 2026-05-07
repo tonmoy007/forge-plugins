@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Virtual envs
+venv/
+env/
+ENV/
+.venv/
+.env
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Forge runtime artifacts (these belong in projects, not in this dev repo)
+.forge/sessions/
+.forge/correction-flags.jsonl
+.forge/session-log.jsonl
+
+# Build outputs
+build/dist/
+*.tar.gz
+*.zip
+
+# Logs
+*.log
+logs/
+
+# Local config
+.local/
+local.config.yaml
+
+# Plugin install caches
+.claude-plugin/cache/

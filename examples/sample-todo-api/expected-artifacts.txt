@@ -1,0 +1,58 @@
+# Expected Artifacts per Stage
+#
+# Used by tests/integration/full-pipeline.sh to assert each stage produces what it should.
+# One artifact per line. Lines starting with # are comments.
+# Format: <stage>:<relative-path>
+
+# Stage 1: SRS
+1:pipeline/01-srs/srs.md
+
+# Stage 2: Product (api profile — no wireframes)
+2:pipeline/02-product-ux/prd.md
+2:pipeline/02-product-ux/user-flows.md
+2:pipeline/02-product-ux/design-system.md
+
+# Stage 3: Architecture
+3:pipeline/03-architecture/architecture.md
+3:pipeline/03-architecture/data-model.md
+3:pipeline/03-architecture/api-contracts.md
+3:pipeline/03-architecture/openapi-spec.yaml
+3:pipeline/03-architecture/adr
+
+# Stage 4: Spec
+4:pipeline/04-spec/technical-spec.md
+4:pipeline/04-spec/interface-spec.md
+4:pipeline/04-spec/test-strategy.md
+
+# Stage 5: Plan
+5:pipeline/05-plan/task-dag.md
+5:pipeline/05-plan/risk-register.md
+5:pipeline/05-plan/milestones.md
+
+# Stage 6: Implementation
+6:pipeline/06-implementation/progress.md
+6:pipeline/06-implementation/decisions.md
+# Plus actual source code — verified by separate test
+
+# Stage 7: Eval
+7:pipeline/07-evaluation/eval-report.md
+7:pipeline/07-evaluation/test-results.md
+
+# Stage 8: Deploy
+8:pipeline/08-deploy/deploy-plan.md
+
+# Stage 9: Monitor
+9:pipeline/09-monitor/observability.md
+
+# Stage 10: Feedback (typically empty in e2e — no real users yet)
+10:pipeline/10-feedback/feedback-log.md
+10:pipeline/10-feedback/triage.md
+
+# Stage 11: Resolve (typically empty in e2e)
+11:pipeline/11-resolve/hotfixes.md
+11:pipeline/11-resolve/backlog-updates.md
+
+# Stage 12: Release
+12:pipeline/12-release/release-notes.md
+12:pipeline/12-release/release-checklist.md
+12:pipeline/12-release/retrospective.md

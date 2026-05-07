@@ -1,0 +1,20 @@
+# Forge Plugin Development — Python Dependencies
+#
+# These are for SCRIPTS, not hooks. Hooks are stdlib-only by design (see ADR-001).
+# Scripts can use these freely.
+
+# Frontmatter parsing for state.md and SKILL.md files
+python-frontmatter>=1.0.0
+
+# YAML for gate-criteria.md, profile files, lessons.yaml
+PyYAML>=6.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: for richer terminal output in scripts (not required)
+# rich>=13.0.0
+
+# Optional: CLI framework if scripts get complex
+# click>=8.1.0
