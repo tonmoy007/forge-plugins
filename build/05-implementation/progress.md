@@ -13,7 +13,7 @@
 
 | Task | Status | Started | Completed | Commit | Notes |
 |------|--------|---------|-----------|--------|-------|
-| T-001 | 🟢 done | 2026-05-06 | 2026-05-07 | pending | plugin.json, 7 stubs, validate-plugin.py, tests |
+| T-001 | 🟢 done | 2026-05-06 | 2026-05-07 | 86a0b03 | plugin.json, 7 stubs, validate-plugin.py, tests |
 | T-002 | 🔲 todo | — | — | — | |
 | T-003 | 🔲 todo | — | — | — | |
 | T-004 | 🔲 todo | — | — | — | |
