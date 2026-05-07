@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-002 — forge-init skill
+- **Current task**: T-003
 - **Last session ended**: 2026-05-07
 
 ## Task Status
@@ -14,7 +14,7 @@
 | Task | Status | Started | Completed | Commit | Notes |
 |------|--------|---------|-----------|--------|-------|
 | T-001 | 🟢 done | 2026-05-06 | 2026-05-07 | 86a0b03 | plugin.json, 7 stubs, validate-plugin.py, tests |
-| T-002 | 🔲 todo | — | — | — | |
+| T-002 | 🟢 done | 2026-05-07 | 2026-05-07 | — | forge-init skill, init-pipeline.sh, detect-project-type.py, 14 tests |
 | T-003 | 🔲 todo | — | — | — | |
 | T-004 | 🔲 todo | — | — | — | |
 | T-005 | 🔲 todo | — | — | — | |

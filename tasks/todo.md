@@ -4,17 +4,24 @@
 
 ---
 
-## Active Task: T-002 — forge-init skill
+## Active Task: T-003
 
-**Goal**: Skill that scaffolds `pipeline/`, `tasks/`, `.forge/` in a target project. Detects project type. Writes initial `state.md`.
+**Goal**: See `prompts/development/T-003-*.md` for full details.
 
 **Context**:
-- See `prompts/development/T-002-forge-init.md` for the full prompt.
-- Depends on T-001 (done).
+- Depends on T-002 (done).
 
 ---
 
 ## Archive
+
+### T-002 — forge-init skill ✅ 2026-05-07
+- `skills/forge-init/SKILL.md` with correct frontmatter (name, description, allowed-tools)
+- `scripts/init-pipeline.sh` — idempotent, creates 12 stage dirs + tasks/ + .forge/
+- `scripts/detect-project-type.py` — 5 project types, stdlib only, `--cwd` flag, JSON output
+- `tests/unit/test_init_pipeline.py` — 5 tests passing
+- `tests/unit/test_detect_project_type.py` — 9 tests passing
+- 14/14 tests pass; plugin.json still validates
 
 ### T-001 — Plugin scaffolding ✅ 2026-05-07
 - `.claude-plugin/plugin.json` with all 7 hook registrations
