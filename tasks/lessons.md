@@ -35,6 +35,20 @@
 - **Why**: `coverage.py` only tracks the current process; subprocess children run in a separate process with no coverage instrumentation.
 - **Tags**: [testing, coverage, subprocess, cli]
 
+### 2026-05-10 — sys.exit() raises SystemExit, not Exception; catch it explicitly
+
+- **Trigger**: Any hook that calls `_state_lib.read_state()` inside a `try/except Exception` block without first checking that `pipeline/state.md` exists
+- **Rule**: Always check `(cwd / "pipeline" / "state.md").exists()` before calling `read_state()`. If you must wrap it, catch `BaseException` or `SystemExit` specifically — `except Exception` does not catch `sys.exit()`.
+- **Why**: `_state_lib._ensure_state_exists()` calls `sys.exit(1)` when the file is missing. `sys.exit()` raises `SystemExit(BaseException)`, which bypasses `except Exception` and propagates uncaught, exiting the hook with code 1 instead of 0.
+- **Tags**: [python, hooks, _state_lib, error-handling]
+
+### 2026-05-10 — Regex negative lookaheads backtrack through \s* — use explicit substring checks
+
+- **Trigger**: Writing patterns like `re.compile(r"font-family\s*:\s*(?!var\(--font)")` to skip CSS variable usage
+- **Rule**: Instead of `pattern:\s*(?!keyword)`, use `re.search(r"pattern:", line) and "keyword" not in line`. The `\s*` before the lookahead lets the engine backtrack to a zero-match, placing the lookahead before the whitespace, causing false positives.
+- **Why**: `\s*` is greedy but can match 0; when the lookahead fails at `\s*=N`, the engine retries with `\s*=N-1`, shifting the lookahead position before the space — where the keyword no longer appears.
+- **Tags**: [python, regex, hooks, pre-tool-write]
+
 ### 2026-05-07 — Hyphenated script filenames can't be imported directly
 - **Trigger**: Writing tests for any script in `scripts/` with a hyphen in its filename (e.g. `validate-plugin.py`, `check-gate.py`)
 - **Rule**: Use `importlib.util.spec_from_file_location` to import by file path, not by module name. Never name test imports after the hyphenated filename.
