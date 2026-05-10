@@ -4,19 +4,45 @@
 
 ---
 
-## Active Task: T-010
+## Active Task: T-016
 
-**Goal**: `hooks/session-end.py` — final state persist + session summary written to `.forge/sessions/<ts>.md`.
+**Goal**: Cross-stage agent personas — `agents/{reflector,lesson-extractor,skill-miner,gate-checker}.md`
 
 **Context**:
-- Depends on T-003 (done).
-- Done when: `.forge/sessions/<ts>.md` written with duration, tasks, lessons, files modified.
-- See `build/04-plan/task-dag.md` T-010, `build/03-spec/technical-spec.md` §2.7.
-- REQ-IDs: REQ-036
+- Depends on T-014 (done — 12 stage agent personas committed 7751bce).
+- Done when: All 4 files exist with correct frontmatter + workflow, callable by hooks.
+- See `build/04-plan/task-dag.md` T-016.
+- REQ-IDs: REQ-021
 
 ---
 
 ## Archive
+
+### T-015 — 12 stage skill files ✅ 2026-05-10
+- `skills/forge-{srs,product,arch,spec,plan,build,eval,deploy,monitor,feedback,resolve,release}/SKILL.md`
+- Each: YAML frontmatter + When to Use / Pre-flight / Steps / Verification / Next Step
+- Added "product" (→2) and "arch" (→3) aliases to `hooks/prompt-submit.py`
+- 201 tests pass; `validate-plugin.py` OK
+
+### T-014 — 12 agent persona files ✅ 2026-05-10
+- `agents/requirements-analyst.md` through `agents/release-manager.md`
+- Each: YAML frontmatter + Role/Goal/Context Scope/Output Contract/Workflow sections
+
+### T-013 — plugin.json wiring ✅ 2026-05-10
+- Pre-wired in T-001; validate-plugin.py confirms all 7 hooks + skills valid
+
+### T-012 — post-tool-use.py hook ✅ 2026-05-10
+- `hooks/post-tool-use.py` — session-log.jsonl append + pattern detection
+- `tests/unit/test_post_tool_use.py` — 18 tests
+
+### T-011 — pre-tool-write.py hook ✅ 2026-05-10
+- `hooks/pre-tool-write.py` — 5 design system violation types (hex, px, font-family, z-index, !important)
+- `tests/unit/test_pre_tool_write.py` — 35 tests
+- Lesson: regex `\s*(?!pat)` false positive — use substring check instead
+
+### T-010 — session-end.py hook ✅ 2026-05-10
+- `hooks/session-end.py` — session summary to `.forge/sessions/<ts>.md`
+- `tests/unit/test_session_end.py` — 18 tests
 
 ### T-009 — stop-reflect.py hook ✅ 2026-05-10
 - `hooks/stop-reflect.py` — 4-step pipeline: reflect, lesson extract, gate check, skill mine (async)

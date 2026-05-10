@@ -18,11 +18,13 @@ _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 import _state_lib as lib
 
-# /forge:<command> → stage number
+# /forge:<command> → stage number (aliases keep backward compat; last alias wins _STAGE_NAMES)
 _COMMAND_TO_STAGE: dict[str, int] = {
     "srs": 1,
     "ux": 2,
+    "product": 2,
     "architecture": 3,
+    "arch": 3,
     "spec": 4,
     "plan": 5,
     "build": 6,
