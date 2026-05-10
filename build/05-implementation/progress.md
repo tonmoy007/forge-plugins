@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-008
+- **Current task**: T-009
 - **Last session ended**: 2026-05-10
 
 ## Task Status
@@ -20,7 +20,7 @@
 | T-005 | 🟢 done | 2026-05-07 | 2026-05-07 | b023844 | pre-authored in foundation commit; 12 stages, all YAML valid |
 | T-006 | 🟢 done | 2026-05-10 | 2026-05-10 | — | check-gate.py, 14 tests, all 4 check types |
 | T-007 | 🟢 done | 2026-05-10 | 2026-05-10 | — | session-start.py hook, 17 tests, token budget enforced |
-| T-008 | 🔲 todo | — | — | — | |
+| T-008 | 🟢 done | 2026-05-10 | 2026-05-10 | — | prompt-submit.py hook, 16 tests, stage intent + correction flagging |
 | T-009 | 🔲 todo | — | — | — | |
 | T-010 | 🔲 todo | — | — | — | |
 | T-011 | 🔲 todo | — | — | — | |
