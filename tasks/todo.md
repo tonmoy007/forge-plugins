@@ -4,17 +4,25 @@
 
 ---
 
-## Active Task: T-006
+## Active Task: T-007
 
-**Goal**: `scripts/check-gate.py` — evaluates gate criteria for a stage, returns JSON pass/fail.
+**Goal**: `hooks/session-start.py` — loads pipeline state + filtered lessons + design summary into context (< 2000 tokens).
 
 **Context**:
-- Depends on T-005 (done).
-- See `build/04-plan/task-dag.md` T-006 and `build/03-spec/technical-spec.md` §3.2.
+- Depends on T-003 (done). This is the first real hook implementation.
+- Done when: hook outputs valid context block; under token budget; handles non-Forge dirs silently.
+- See `build/04-plan/task-dag.md` T-007, `build/03-spec/technical-spec.md` hook specs.
+- REQ-IDs: REQ-030, REQ-040, REQ-044, NFR-001, NFR-003
 
 ---
 
 ## Archive
+
+### T-006 — check-gate.py ✅ 2026-05-10
+- `scripts/check-gate.py` — CLI: `--stage N --cwd PATH --plugin-dir PATH` → JSON report
+- Implements all 4 check types: file_exists, file_contains, script_returns_zero, all_tests_pass
+- Missing helper scripts fail gracefully with "not yet implemented" message
+- `tests/unit/test_check_gate.py` — 14 tests, all pass
 
 ### T-005 — gate-criteria.md ✅ 2026-05-07 (pre-authored)
 - `references/gate-criteria.md` — 12 stages, 60 criteria total, all YAML parses cleanly

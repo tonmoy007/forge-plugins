@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-006
+- **Current task**: T-007
 - **Last session ended**: 2026-05-10
 
 ## Task Status
@@ -18,7 +18,7 @@
 | T-003 | 🟢 done | 2026-05-10 | 2026-05-10 | 0950935 | _state_lib.py, state-manager.py CLI, 36 tests, 93% cov |
 | T-004 | 🟢 done | 2026-05-10 | 2026-05-10 | — | forge-status SKILL.md |
 | T-005 | 🟢 done | 2026-05-07 | 2026-05-07 | b023844 | pre-authored in foundation commit; 12 stages, all YAML valid |
-| T-006 | 🔲 todo | — | — | — | |
+| T-006 | 🟢 done | 2026-05-10 | 2026-05-10 | — | check-gate.py, 14 tests, all 4 check types |
 | T-007 | 🔲 todo | — | — | — | |
 | T-008 | 🔲 todo | — | — | — | |
 | T-009 | 🔲 todo | — | — | — | |
