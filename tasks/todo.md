@@ -4,16 +4,22 @@
 
 ---
 
-## Active Task: T-004
+## Active Task: T-005
 
-**Goal**: See `prompts/development/T-004-*.md` for full details.
+**Goal**: `references/gate-criteria.md` — machine-readable YAML exit criteria for all 12 stages.
 
 **Context**:
-- Depends on T-003 (done).
+- Depends on T-001 (done). Can proceed independently of T-004.
+- See `build/04-plan/task-dag.md` T-005 for details.
 
 ---
 
 ## Archive
+
+### T-004 — forge-status skill ✅ 2026-05-10
+- `skills/forge-status/SKILL.md` — reads state, renders dashboard, suggests next step
+- Handles missing check-gate.py gracefully (skips gate section)
+- plugin.json picks it up via `skills/*` glob — no manual registration
 
 ### T-003 — state-manager script ✅ 2026-05-10
 - `scripts/_state_lib.py` — importable library: read/write/advance/append_to_section/validate
