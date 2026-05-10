@@ -4,17 +4,21 @@
 
 ---
 
-## Active Task: T-005
+## Active Task: T-006
 
-**Goal**: `references/gate-criteria.md` — machine-readable YAML exit criteria for all 12 stages.
+**Goal**: `scripts/check-gate.py` — evaluates gate criteria for a stage, returns JSON pass/fail.
 
 **Context**:
-- Depends on T-001 (done). Can proceed independently of T-004.
-- See `build/04-plan/task-dag.md` T-005 for details.
+- Depends on T-005 (done).
+- See `build/04-plan/task-dag.md` T-006 and `build/03-spec/technical-spec.md` §3.2.
 
 ---
 
 ## Archive
+
+### T-005 — gate-criteria.md ✅ 2026-05-07 (pre-authored)
+- `references/gate-criteria.md` — 12 stages, 60 criteria total, all YAML parses cleanly
+- Was included in foundation commit b023844; no additional implementation needed
 
 ### T-004 — forge-status skill ✅ 2026-05-10
 - `skills/forge-status/SKILL.md` — reads state, renders dashboard, suggests next step
