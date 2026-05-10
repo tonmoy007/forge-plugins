@@ -56,3 +56,4 @@ local.config.yaml
 
 # Plugin install caches
 .claude-plugin/cache/
+.omc/
