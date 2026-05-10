@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Reusable state library for pipeline/state.md. Imported directly by hooks (no shelling out)."""
+
+from __future__ import annotations
+
+import datetime
+import os
+import sys
+import tempfile
+from pathlib import Path
+from typing import Optional
+
+import frontmatter
+
+
+def _normalize_metadata(metadata: dict) -> dict:
+    """Convert PyYAML-parsed datetime/date objects to ISO strings.
+
+    PyYAML automatically parses bare ISO timestamps (e.g. 2026-05-07T12:00:00Z)
+    as datetime objects. This ensures callers always see strings for last_updated.
+    """
+    result = {}
+    for k, v in metadata.items():
+        if isinstance(v, datetime.datetime):
+            result[k] = v.strftime("%Y-%m-%dT%H:%M:%SZ")
+        elif isinstance(v, datetime.date):
+            result[k] = v.isoformat()
+        else:
+            result[k] = v
+    return result
+
+STATE_RELPATH = "pipeline/state.md"
+
+# Field name → expected Python type(s). Order matches state.md schema.
+REQUIRED_FIELDS: dict[str, type | tuple[type, ...]] = {
+    "schema_version": int,
+    "project_type": str,
+    "cycle": int,
+    "current_stage": int,
+    "current_task": (str, type(None)),
+    "current_milestone": (str, type(None)),
+    "total_tasks": (int, type(None)),
+    "last_updated": str,
+    "blockers": list,
+}
+
+
+def validate_frontmatter(data: dict) -> tuple[bool, list[str]]:
+    """Return (is_valid, error_messages). Checks required fields and types."""
+    errors: list[str] = []
+    for field, expected in REQUIRED_FIELDS.items():
+        if field not in data:
+            errors.append(f"missing required field: '{field}'")
+            continue
+        val = data[field]
+        types = expected if isinstance(expected, tuple) else (expected,)
+        if not isinstance(val, types):
+            type_names = " | ".join(t.__name__ for t in types)
+            errors.append(f"'{field}' must be {type_names}, got {type(val).__name__}")
+    return len(errors) == 0, errors
+
+
+def _state_path(cwd: str) -> Path:
+    return Path(cwd) / STATE_RELPATH
+
+
+def _ensure_state_exists(cwd: str) -> Path:
+    p = _state_path(cwd)
+    if not p.exists():
+        print(
+            f"error: {STATE_RELPATH} not found in {cwd!r} — run /forge:init first",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return p
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Write content to path atomically via tempfile + fsync + rename."""
+    dir_ = path.parent
+    fd, tmp = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        if path.exists():
+            os.chmod(tmp, path.stat().st_mode)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def read_state(cwd: str) -> dict:
+    """Load and return the frontmatter dict from pipeline/state.md."""
+    p = _ensure_state_exists(cwd)
+    post = frontmatter.load(str(p))
+    return _normalize_metadata(dict(post.metadata))
+
+
+def write_state(cwd: str, frontmatter_dict: dict) -> None:
+    """Validate and atomically write updated frontmatter, preserving markdown body."""
+    p = _ensure_state_exists(cwd)
+    normalized = _normalize_metadata(frontmatter_dict)
+    valid, errors = validate_frontmatter(normalized)
+    if not valid:
+        print(f"error: invalid frontmatter — {'; '.join(errors)}", file=sys.stderr)
+        sys.exit(1)
+    post = frontmatter.load(str(p))
+    for key, val in normalized.items():
+        post[key] = val
+    _atomic_write(p, frontmatter.dumps(post))
+
+
+def advance_stage(cwd: str, to: Optional[int] = None) -> dict:
+    """Increment current_stage (or jump to `to`), update last_updated, return new state."""
+    p = _ensure_state_exists(cwd)
+    post = frontmatter.load(str(p))
+    state = dict(post.metadata)
+
+    old = state.get("current_stage", 0)
+    if to is not None:
+        if to < old:
+            print(f"warning: moving backward from stage {old} to {to}", file=sys.stderr)
+        elif to > old + 1:
+            print(f"warning: skipping stages {old + 1}–{to - 1}", file=sys.stderr)
+        new = to
+    else:
+        new = old + 1
+
+    state["current_stage"] = new
+    state["last_updated"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    for key, val in state.items():
+        post[key] = val
+    _atomic_write(p, frontmatter.dumps(post))
+    return state
+
+
+def append_to_section(cwd: str, section_title: str, content: str) -> None:
+    """Append content at the end of a ## section in the markdown body."""
+    p = _ensure_state_exists(cwd)
+    post = frontmatter.load(str(p))
+    body = post.content
+    header = f"## {section_title}"
+    lines = body.split("\n")
+
+    header_idx = next((i for i, ln in enumerate(lines) if ln.strip() == header), None)
+    if header_idx is None:
+        body = body.rstrip("\n") + f"\n\n{header}\n{content}\n"
+    else:
+        end_idx = len(lines)
+        for i in range(header_idx + 1, len(lines)):
+            if lines[i].startswith("## "):
+                end_idx = i
+                break
+        lines.insert(end_idx, content)
+        body = "\n".join(lines)
+
+    post.content = body
+    _atomic_write(p, frontmatter.dumps(post))

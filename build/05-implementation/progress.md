@@ -6,8 +6,8 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-003
-- **Last session ended**: 2026-05-07
+- **Current task**: T-004
+- **Last session ended**: 2026-05-10
 
 ## Task Status
 
@@ -15,7 +15,7 @@
 |------|--------|---------|-----------|--------|-------|
 | T-001 | 🟢 done | 2026-05-06 | 2026-05-07 | 86a0b03 | plugin.json, 7 stubs, validate-plugin.py, tests |
 | T-002 | 🟢 done | 2026-05-07 | 2026-05-07 | 80e4f1f | forge-init skill, init-pipeline.sh, detect-project-type.py, 14 tests |
-| T-003 | 🔲 todo | — | — | — | |
+| T-003 | 🟢 done | 2026-05-10 | 2026-05-10 | — | _state_lib.py, state-manager.py CLI, 36 tests, 93% cov |
 | T-004 | 🔲 todo | — | — | — | |
 | T-005 | 🔲 todo | — | — | — | |
 | T-006 | 🔲 todo | — | — | — | |

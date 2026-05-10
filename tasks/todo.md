@@ -4,16 +4,24 @@
 
 ---
 
-## Active Task: T-003
+## Active Task: T-004
 
-**Goal**: See `prompts/development/T-003-*.md` for full details.
+**Goal**: See `prompts/development/T-004-*.md` for full details.
 
 **Context**:
-- Depends on T-002 (done).
+- Depends on T-003 (done).
 
 ---
 
 ## Archive
+
+### T-003 — state-manager script ✅ 2026-05-10
+- `scripts/_state_lib.py` — importable library: read/write/advance/append_to_section/validate
+- `scripts/state-manager.py` — CLI: read, advance, set, reflect, history-add subcommands
+- `tests/unit/test_state_lib.py` — 21 tests, 93% coverage on `_state_lib.py`
+- `tests/unit/test_state_manager.py` — 15 tests covering all CLI subcommands via subprocess
+- Atomic writes via tempfile+fsync+rename; schema validation rejects bad frontmatter
+- Key lesson: PyYAML parses ISO timestamps as `datetime` — normalize on load
 
 ### T-002 — forge-init skill ✅ 2026-05-07
 - `skills/forge-init/SKILL.md` with correct frontmatter (name, description, allowed-tools)
