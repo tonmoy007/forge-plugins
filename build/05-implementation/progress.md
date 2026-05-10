@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-012
+- **Current task**: T-013
 - **Last session ended**: 2026-05-10
 
 ## Task Status
@@ -24,7 +24,7 @@
 | T-009 | 🟢 done | 2026-05-10 | 2026-05-10 | — | stop-reflect.py, _invoke_agent.py, 20 unit + 8 integration tests |
 | T-010 | 🟢 done | 2026-05-10 | 2026-05-10 | — | session-end.py, 18 tests, session summary to .forge/sessions/ |
 | T-011 | 🟢 done | 2026-05-10 | 2026-05-10 | — | pre-tool-write.py, 35 tests, 5 violation types detected |
-| T-012 | 🔲 todo | — | — | — | |
+| T-012 | 🟢 done | 2026-05-10 | 2026-05-10 | — | post-tool-use.py, 18 tests, session-log + patterns.jsonl |
 | T-013 | 🔲 todo | — | — | — | |
 | T-014 | 🔲 todo | — | — | — | |
 | T-015 | 🔲 todo | — | — | — | |
