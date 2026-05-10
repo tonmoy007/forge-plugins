@@ -4,19 +4,29 @@
 
 ---
 
-## Active Task: T-008
+## Active Task: T-010
 
-**Goal**: `hooks/prompt-submit.py` — detects stage intent from prompt, prunes context, flags corrections.
+**Goal**: `hooks/session-end.py` — final state persist + session summary written to `.forge/sessions/<ts>.md`.
 
 **Context**:
 - Depends on T-003 (done).
-- Done when: detects "/forge:build" → returns Stage 6 context; corrections flagged to file.
-- See `build/04-plan/task-dag.md` T-008, `build/03-spec/technical-spec.md` §2.2.
-- REQ-IDs: REQ-031
+- Done when: `.forge/sessions/<ts>.md` written with duration, tasks, lessons, files modified.
+- See `build/04-plan/task-dag.md` T-010, `build/03-spec/technical-spec.md` §2.7.
+- REQ-IDs: REQ-036
 
 ---
 
 ## Archive
+
+### T-009 — stop-reflect.py hook ✅ 2026-05-10
+- `hooks/stop-reflect.py` — 4-step pipeline: reflect, lesson extract, gate check, skill mine (async)
+- `hooks/_invoke_agent.py` — subagent invocation stub (LLM reflector deferred to T-016)
+- `tests/unit/test_stop_reflect.py` — 20 tests; `tests/integration/test_stop_pipeline.py` — 8 tests
+- All 130 tests pass
+
+### T-008 — prompt-submit.py hook ✅ 2026-05-10
+- `hooks/prompt-submit.py` — stage intent detection + correction flagging
+- `tests/unit/test_prompt_submit.py` — 16 tests, all pass
 
 ### T-007 — session-start.py hook ✅ 2026-05-10
 - `hooks/session-start.py` — loads state + lessons (≤5 project, ≤3 global) + gate summary

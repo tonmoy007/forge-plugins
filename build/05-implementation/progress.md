@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-010
+- **Current task**: T-011
 - **Last session ended**: 2026-05-10
 
 ## Task Status
@@ -22,7 +22,7 @@
 | T-007 | 🟢 done | 2026-05-10 | 2026-05-10 | — | session-start.py hook, 17 tests, token budget enforced |
 | T-008 | 🟢 done | 2026-05-10 | 2026-05-10 | — | prompt-submit.py hook, 16 tests, stage intent + correction flagging |
 | T-009 | 🟢 done | 2026-05-10 | 2026-05-10 | — | stop-reflect.py, _invoke_agent.py, 20 unit + 8 integration tests |
-| T-010 | 🔲 todo | — | — | — | |
+| T-010 | 🟢 done | 2026-05-10 | 2026-05-10 | — | session-end.py, 18 tests, session summary to .forge/sessions/ |
 | T-011 | 🔲 todo | — | — | — | |
 | T-012 | 🔲 todo | — | — | — | |
 | T-013 | 🔲 todo | — | — | — | |
