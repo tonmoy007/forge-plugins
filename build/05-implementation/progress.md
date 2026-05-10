@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-013
+- **Current task**: T-014
 - **Last session ended**: 2026-05-10
 
 ## Task Status
@@ -25,7 +25,7 @@
 | T-010 | 🟢 done | 2026-05-10 | 2026-05-10 | — | session-end.py, 18 tests, session summary to .forge/sessions/ |
 | T-011 | 🟢 done | 2026-05-10 | 2026-05-10 | — | pre-tool-write.py, 35 tests, 5 violation types detected |
 | T-012 | 🟢 done | 2026-05-10 | 2026-05-10 | — | post-tool-use.py, 18 tests, session-log + patterns.jsonl |
-| T-013 | 🔲 todo | — | — | — | |
+| T-013 | 🟢 done | 2026-05-10 | 2026-05-10 | — | plugin.json pre-wired in T-001; validate-plugin.py confirms all 7 hooks valid |
 | T-014 | 🔲 todo | — | — | — | |
 | T-015 | 🔲 todo | — | — | — | |
 | T-016 | 🔲 todo | — | — | — | |
