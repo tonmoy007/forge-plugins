@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-014
+- **Current task**: T-015
 - **Last session ended**: 2026-05-10
 
 ## Task Status
@@ -26,7 +26,7 @@
 | T-011 | 🟢 done | 2026-05-10 | 2026-05-10 | — | pre-tool-write.py, 35 tests, 5 violation types detected |
 | T-012 | 🟢 done | 2026-05-10 | 2026-05-10 | — | post-tool-use.py, 18 tests, session-log + patterns.jsonl |
 | T-013 | 🟢 done | 2026-05-10 | 2026-05-10 | — | plugin.json pre-wired in T-001; validate-plugin.py confirms all 7 hooks valid |
-| T-014 | 🔲 todo | — | — | — | |
+| T-014 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 12 agent persona files; role/goal/scope/output/workflow per spec |
 | T-015 | 🔲 todo | — | — | — | |
 | T-016 | 🔲 todo | — | — | — | |
 | T-017 | 🔲 todo | — | — | — | |
