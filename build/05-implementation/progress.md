@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-016
+- **Current task**: T-017
 - **Last session ended**: 2026-05-10
 
 ## Task Status
@@ -28,7 +28,7 @@
 | T-013 | 🟢 done | 2026-05-10 | 2026-05-10 | — | plugin.json pre-wired in T-001; validate-plugin.py confirms all 7 hooks valid |
 | T-014 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 12 agent persona files; role/goal/scope/output/workflow per spec |
 | T-015 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 12 stage SKILL.md files + prompt-submit aliases (product, arch) |
-| T-016 | 🔲 todo | — | — | — | |
+| T-016 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 4 cross-stage agent personas: reflector, lesson-extractor, skill-miner, gate-checker |
 | T-017 | 🔲 todo | — | — | — | |
 | T-018 | 🔲 todo | — | — | — | |
 | T-019 | 🔲 todo | — | — | — | |

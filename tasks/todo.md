@@ -4,19 +4,25 @@
 
 ---
 
-## Active Task: T-016
+## Active Task: T-017
 
-**Goal**: Cross-stage agent personas — `agents/{reflector,lesson-extractor,skill-miner,gate-checker}.md`
+**Goal**: `scripts/context-pruner.py` — given a stage, return prioritized artifact list within token budget.
 
 **Context**:
-- Depends on T-014 (done — 12 stage agent personas committed 7751bce).
-- Done when: All 4 files exist with correct frontmatter + workflow, callable by hooks.
-- See `build/04-plan/task-dag.md` T-016.
-- REQ-IDs: REQ-021
+- Depends on T-005 (done — gate-criteria.md with 12 stages pre-authored).
+- Done when: Stage 6 returns task-dag + spec sections + design system, NOT full SRS or architecture.
+- See `build/04-plan/task-dag.md` T-017.
+- REQ-IDs: REQ-023, NFR-003
 
 ---
 
 ## Archive
+
+### T-016 — cross-stage agent personas ✅ 2026-05-10
+- `agents/reflector.md` — reviews session turn, writes to pipeline/state.md Last Reflection
+- `agents/lesson-extractor.md` — distills correction flags into tasks/lessons.md entries
+- `agents/skill-miner.md` — detects repeated patterns, proposes skills to .forge/proposals.jsonl
+- `agents/gate-checker.md` — evaluates stage gate criteria with evidence-backed verdicts
 
 ### T-015 — 12 stage skill files ✅ 2026-05-10
 - `skills/forge-{srs,product,arch,spec,plan,build,eval,deploy,monitor,feedback,resolve,release}/SKILL.md`
