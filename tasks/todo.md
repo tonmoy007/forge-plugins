@@ -4,19 +4,24 @@
 
 ---
 
-## Active Task: T-007
+## Active Task: T-008
 
-**Goal**: `hooks/session-start.py` — loads pipeline state + filtered lessons + design summary into context (< 2000 tokens).
+**Goal**: `hooks/prompt-submit.py` — detects stage intent from prompt, prunes context, flags corrections.
 
 **Context**:
-- Depends on T-003 (done). This is the first real hook implementation.
-- Done when: hook outputs valid context block; under token budget; handles non-Forge dirs silently.
-- See `build/04-plan/task-dag.md` T-007, `build/03-spec/technical-spec.md` hook specs.
-- REQ-IDs: REQ-030, REQ-040, REQ-044, NFR-001, NFR-003
+- Depends on T-003 (done).
+- Done when: detects "/forge:build" → returns Stage 6 context; corrections flagged to file.
+- See `build/04-plan/task-dag.md` T-008, `build/03-spec/technical-spec.md` §2.2.
+- REQ-IDs: REQ-031
 
 ---
 
 ## Archive
+
+### T-007 — session-start.py hook ✅ 2026-05-10
+- `hooks/session-start.py` — loads state + lessons (≤5 project, ≤3 global) + gate summary
+- Token budget: ≤2000 tokens enforced; silent exit on non-Forge dirs; graceful on corrupt state
+- `tests/unit/test_session_start.py` — 17 tests covering all spec cases
 
 ### T-006 — check-gate.py ✅ 2026-05-10
 - `scripts/check-gate.py` — CLI: `--stage N --cwd PATH --plugin-dir PATH` → JSON report
