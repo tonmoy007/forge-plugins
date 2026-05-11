@@ -4,18 +4,25 @@
 
 ---
 
-## Active Task: T-019
+## Active Task: T-020
 
-**Goal**: `scripts/extract-lessons.py` — parse conversation transcript for corrections → structured lessons (Trigger/Rule/Why).
+**Goal**: Update `hooks/session-start.py` — filter lessons by stage tags + project type, include top N relevant ones.
 
 **Context**:
-- Done when: Sample correction → valid YAML lesson; offline mode works (rule-based fallback).
-- See `build/04-plan/task-dag.md` T-019.
-- REQ-IDs: REQ-050
+- Done when: Stage 6 ML project session shows GPU lessons, not docs lessons.
+- See `build/04-plan/task-dag.md` T-020.
+- REQ-IDs: REQ-044
+- Depends on: T-007 (session-start.py exists), T-019 (lessons have tags)
 
 ---
 
 ## Archive
+
+### T-019 — extract-lessons.py ✅ 2026-05-11
+- `scripts/extract-lessons.py` — CLI: `--input`, `--output`, `--dry-run`, `--since`, `--llm`
+- Rule-based extraction: don't/never/stop/always/prefer/use-instead patterns → Trigger/Rule/Why/Tags
+- Deduplication via `difflib.SequenceMatcher` (ratio ≥ 0.8); atomic write
+- `tests/unit/test_extract_lessons.py` — 43 tests; done-when criterion verified
 
 ### T-018 — forge-resume skill ✅ 2026-05-11
 - `skills/forge-resume/SKILL.md` — reads state, calls context-pruner.py, injects stage-appropriate context
