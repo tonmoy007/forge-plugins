@@ -5,8 +5,8 @@
 
 ## Current State
 
-- **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-018
+- **Active milestone**: M3 — Skills
+- **Current task**: T-019
 - **Last session ended**: 2026-05-11
 
 ## Task Status
@@ -30,7 +30,7 @@
 | T-015 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 12 stage SKILL.md files + prompt-submit aliases (product, arch) |
 | T-016 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 4 cross-stage agent personas: reflector, lesson-extractor, skill-miner, gate-checker |
 | T-017 | 🟢 done | 2026-05-11 | 2026-05-11 | — | context-pruner.py, 35 tests, stage 6 exclusions verified |
-| T-018 | 🔲 todo | — | — | — | |
+| T-018 | 🟢 done | 2026-05-11 | 2026-05-11 | — | forge-resume SKILL.md; uses context-pruner + state-manager |
 | T-019 | 🔲 todo | — | — | — | |
 | T-020 | 🔲 todo | — | — | — | |
 | T-021 | 🔲 todo | — | — | — | |

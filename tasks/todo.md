@@ -4,19 +4,23 @@
 
 ---
 
-## Active Task: T-018
+## Active Task: T-019
 
-**Goal**: `skills/forge-resume/SKILL.md` — `/forge:resume` reads state, injects full context for current task, continues work.
+**Goal**: `scripts/extract-lessons.py` — parse conversation transcript for corrections → structured lessons (Trigger/Rule/Why).
 
 **Context**:
-- Depends on T-003 (done), T-017 (done — context-pruner.py).
-- Done when: After session restart, `/forge:resume` picks up exactly where last session ended.
-- See `build/04-plan/task-dag.md` T-018.
-- REQ-IDs: REQ-004, REQ-011
+- Done when: Sample correction → valid YAML lesson; offline mode works (rule-based fallback).
+- See `build/04-plan/task-dag.md` T-019.
+- REQ-IDs: REQ-050
 
 ---
 
 ## Archive
+
+### T-018 — forge-resume skill ✅ 2026-05-11
+- `skills/forge-resume/SKILL.md` — reads state, calls context-pruner.py, injects stage-appropriate context
+- Resume summary: stage/task/last reflection/gate status/next action
+- Auto-registered via `skills/*` glob in plugin.json
 
 ### T-017 — context-pruner.py ✅ 2026-05-11
 - `scripts/context-pruner.py` — CLI: `--stage N --cwd PATH [--budget N]` → JSON
