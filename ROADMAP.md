@@ -11,26 +11,26 @@
 
 ---
 
-## M1: Core Skeleton — "Pipeline works manually" 🔲
+## M1: Core Skeleton — "Pipeline works manually" 🟢
 
 **Goal**: A user can install the plugin, run `/forge:init`, and see `/forge:status`
 display the current pipeline state. No hooks yet, no agents yet — just the plumbing.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T-001: Plugin scaffolding (plugin.json, dirs) | 🔲 | |
-| T-002: forge-init skill (scaffold pipeline/) | 🔲 | |
-| T-003: state-manager.py script | 🔲 | |
-| T-004: forge-status skill | 🔲 | |
-| T-005: gate-criteria.md reference (machine-readable) | 🔲 | |
-| T-006: check-gate.py script | 🔲 | |
+| T-001: Plugin scaffolding (plugin.json, dirs) | 🟢 | commit 86a0b03 |
+| T-002: forge-init skill (scaffold pipeline/) | 🟢 | commit 80e4f1f; 14 tests |
+| T-003: state-manager.py script | 🟢 | _state_lib.py + CLI; 36 tests |
+| T-004: forge-status skill | 🟢 | SKILL.md; gate section gracefully optional |
+| T-005: gate-criteria.md reference (machine-readable) | 🟢 | 12 stages, 60 criteria |
+| T-006: check-gate.py script | 🟢 | 4 check types; 14 tests |
 
 **Definition of done**: `claude plugin install --plugin-dir .` works, `/forge:init` scaffolds
 a pipeline, `/forge:status` reads the state, `check-gate.py --stage 1` returns valid JSON.
 
 ---
 
-## M2: Hook System — "Pipeline enforces itself" 🔲
+## M2: Hook System — "Pipeline enforces itself" 🟢
 
 **Goal**: All 7 hooks fire at the right lifecycle events. Pipeline state is automatically
 loaded into context. Design system enforcement runs on file writes. Stop hook does basic
@@ -38,13 +38,13 @@ reflection + gate check.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T-007: session-start.py hook | 🔲 | |
-| T-008: prompt-submit.py hook | 🔲 | |
-| T-009: stop-reflect.py hook | 🔲 | |
-| T-010: session-end.py hook | 🔲 | |
-| T-011: pre-tool-write.py hook (design system) | 🔲 | |
-| T-012: post-tool-use.py hook (decision logger) | 🔲 | |
-| T-013: Wire all hooks into plugin.json | 🔲 | |
+| T-007: session-start.py hook | 🟢 | token-budget context injection; 17 tests |
+| T-008: prompt-submit.py hook | 🟢 | stage intent + correction flagging; 16 tests |
+| T-009: stop-reflect.py hook | 🟢 | v4.1 Proposal/Validator/Executor pipeline; 48 tests |
+| T-010: session-end.py hook | 🟢 | session summary to .forge/sessions/; 18 tests |
+| T-011: pre-tool-write.py hook (design system) | 🟢 | 5 violation types; 35 tests |
+| T-012: post-tool-use.py hook (decision logger) | 🟢 | session-log + patterns.jsonl; 18 tests |
+| T-013: Wire all hooks into plugin.json | 🟢 | pre-wired in T-001; validate-plugin.py confirms |
 
 **Definition of done**: opening a Claude Code session in a Forge-managed project shows the
 `[Forge]` context block. Writing `color: #3b82f6` in a UI file triggers a token suggestion.
@@ -52,33 +52,33 @@ The `Stop` hook produces a reflection log entry.
 
 ---
 
-## M3: Specialized Agents — "Each stage has a brain" 🔲
+## M3: Specialized Agents — "Each stage has a brain" 🟢
 
 **Goal**: All 12 stage agents and 4 cross-stage agents are written and wired to skills.
 Each `/forge:*` command spawns the right agent with the right tools and context.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T-014: Write all 12 stage agent personas | 🔲 | Large task — split per agent |
-| T-015: Write all 12 stage skills (SKILL.md) | 🔲 | Wires skill → agent |
-| T-016: Write 4 cross-stage agents | 🔲 | reflector, lesson-extractor, skill-miner, gate-checker |
-| T-017: context-pruner.py script | 🔲 | Stage-aware artifact selection |
-| T-018: forge-resume skill | 🔲 | |
+| T-014: Write all 12 stage agent personas | 🟢 | Role/Goal/Scope/Output/Workflow per spec |
+| T-015: Write all 12 stage skills (SKILL.md) | 🟢 | + "product" and "arch" prompt-submit aliases |
+| T-016: Write 4 cross-stage agents | 🟢 | reflector, lesson-extractor, skill-miner, gate-checker |
+| T-017: context-pruner.py script | 🟢 | Stage-aware artifact selection; 35 tests |
+| T-018: forge-resume skill | 🟢 | Uses context-pruner + state-manager |
 
 **Definition of done**: `/forge:srs` spawns the requirements analyst agent with a clean
 context (no architecture/spec leakage), produces `srs.md` with REQ-IDs.
 
 ---
 
-## M4: Memory + Lessons — "Pipeline learns from mistakes" 🔲
+## M4: Memory + Lessons — "Pipeline learns from mistakes" 🟡
 
 **Goal**: User corrections become lessons automatically. Lessons inject into relevant
 sessions. Cross-project lessons graduate to `~/.forge/`.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T-019: extract-lessons.py script | 🔲 | |
-| T-020: Lesson injection in SessionStart | 🔲 | |
+| T-019: extract-lessons.py script | 🟢 | Rule-based extraction + dedup + atomic write; 43 tests |
+| T-020: Lesson injection in SessionStart | 🔲 | Filter by stage tags + project type |
 | T-021: .forge/lessons.yaml machine-readable mirror | 🔲 | |
 | T-022: Tier 3 cross-project memory | 🔲 | |
 

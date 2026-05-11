@@ -3,7 +3,7 @@
 > A Claude Code plugin that turns Claude into a full-lifecycle software development engine
 > with specialized agents, persistent memory, auto-reflection, and adaptive workflows.
 
-**Status**: 🚧 Pre-alpha — actively being built by Claude with human oversight.
+**Status**: 🚧 Active development — M1–M3 complete, M4 (Memory + Lessons) in progress.
 
 ---
 
@@ -98,15 +98,17 @@ Then it picks up the work — exactly the experience the finished plugin will pr
 
 ## Current Phase
 
-| Milestone | Status | Description |
-|-----------|--------|-------------|
-| M1: Core Skeleton | 🔲 Not started | Plugin scaffold + state manager + status command |
-| M2: Hook System | 🔲 Not started | 7 hooks across 6 lifecycle events |
-| M3: Specialized Agents | 🔲 Not started | 12 stage + 4 cross-stage agents |
-| M4: Memory + Lessons | 🔲 Not started | 3-tier memory, lesson extraction |
-| M5: Adaptive Workflow | 🔲 Not started | Project type detection + profiles |
-| M6: Auto-Skill Creation | 🔲 Not started | Pattern mining → skill generation |
-| M7: Polish + Docs | 🔲 Not started | README, contribution guide, e2e test |
+| Milestone | Status | Tasks | Description |
+|-----------|--------|-------|-------------|
+| M1: Core Skeleton | 🟢 Done | T-001–006 | Plugin scaffold + state manager + status command |
+| M2: Hook System | 🟢 Done | T-007–013 | 7 hooks across 6 lifecycle events |
+| M3: Specialized Agents | 🟢 Done | T-014–018 | 12 stage + 4 cross-stage agents; context-pruner; forge-resume |
+| M4: Memory + Lessons | 🟡 In progress | T-019–022 | Lesson extraction done; injection + cross-project memory pending |
+| M5: Adaptive Workflow | 🔲 Not started | T-023–025 | Project type detection + profiles |
+| M6: Auto-Skill Creation | 🔲 Not started | T-026–029 | Pattern mining → skill generation |
+| M7: Polish + Docs | 🔲 Not started | T-030–033 | README, contribution guide, e2e test |
+
+**Tests passing**: 338 &nbsp;·&nbsp; **Tasks complete**: 19 / 33
 
 See `ROADMAP.md` for the full task list with dependencies.
 
