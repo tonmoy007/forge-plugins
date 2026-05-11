@@ -6,8 +6,8 @@
 ## Current State
 
 - **Active milestone**: M1 — Core Skeleton
-- **Current task**: T-017
-- **Last session ended**: 2026-05-10
+- **Current task**: T-018
+- **Last session ended**: 2026-05-11
 
 ## Task Status
 
@@ -29,7 +29,7 @@
 | T-014 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 12 agent persona files; role/goal/scope/output/workflow per spec |
 | T-015 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 12 stage SKILL.md files + prompt-submit aliases (product, arch) |
 | T-016 | 🟢 done | 2026-05-10 | 2026-05-10 | — | 4 cross-stage agent personas: reflector, lesson-extractor, skill-miner, gate-checker |
-| T-017 | 🔲 todo | — | — | — | |
+| T-017 | 🟢 done | 2026-05-11 | 2026-05-11 | — | context-pruner.py, 35 tests, stage 6 exclusions verified |
 | T-018 | 🔲 todo | — | — | — | |
 | T-019 | 🔲 todo | — | — | — | |
 | T-020 | 🔲 todo | — | — | — | |

@@ -4,19 +4,25 @@
 
 ---
 
-## Active Task: T-017
+## Active Task: T-018
 
-**Goal**: `scripts/context-pruner.py` — given a stage, return prioritized artifact list within token budget.
+**Goal**: `skills/forge-resume/SKILL.md` — `/forge:resume` reads state, injects full context for current task, continues work.
 
 **Context**:
-- Depends on T-005 (done — gate-criteria.md with 12 stages pre-authored).
-- Done when: Stage 6 returns task-dag + spec sections + design system, NOT full SRS or architecture.
-- See `build/04-plan/task-dag.md` T-017.
-- REQ-IDs: REQ-023, NFR-003
+- Depends on T-003 (done), T-017 (done — context-pruner.py).
+- Done when: After session restart, `/forge:resume` picks up exactly where last session ended.
+- See `build/04-plan/task-dag.md` T-018.
+- REQ-IDs: REQ-004, REQ-011
 
 ---
 
 ## Archive
+
+### T-017 — context-pruner.py ✅ 2026-05-11
+- `scripts/context-pruner.py` — CLI: `--stage N --cwd PATH [--budget N]` → JSON
+- Per-stage artifact priority map (12 stages); stage 6 excludes SRS + architecture per REQ-023
+- Section extraction for large files; max_tokens cap per artifact; partial-include on tight budget
+- `tests/unit/test_context_pruner.py` — 35 tests; done-when criterion verified
 
 ### T-016 — cross-stage agent personas ✅ 2026-05-10
 - `agents/reflector.md` — reviews session turn, writes to pipeline/state.md Last Reflection
