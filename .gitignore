@@ -58,3 +58,4 @@ local.config.yaml
 .claude-plugin/cache/
 .omc/
 .venv/
+.forge

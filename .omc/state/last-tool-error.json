@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"python3 -m pytest tests/unit/test_validate_plugin.py -v 2>&1\",\"description\":\"Run unit tests for validate-plugin\"}",
-  "error": "Exit code 2\n============================= test session starts ==============================\nplatform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0 -- /usr/bin/python3\ncachedir: .pytest_cache\nrootdir: /mnt/data/project/forge-plugin\nplugins: anyio-4.12.1\ncollecting ... collected 0 items / 1 error\n\n==================================== ERRORS ====================================\n_____________ ERROR collecting tests/unit/test_validate_plugin.py ______________\nImportError while importing test mo...",
-  "timestamp": "2026-05-07T07:15:47.032Z",
-  "retry_count": 1
-}
