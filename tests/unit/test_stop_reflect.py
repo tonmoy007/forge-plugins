@@ -246,3 +246,109 @@ class TestEdgeCases:
             "transcript_path": transcript,
         }, cwd=str(tmp_path))
         assert r.returncode == 0
+
+
+class TestSessionMetaLoopGuard:
+    """v4.1 FR-SEM-004 — loop detection via session-meta."""
+
+    def _inject_meta(self, tmp_path: Path, session_id: str, count: int, max_: int = 3) -> None:
+        import json as _json
+        meta_dir = tmp_path / ".forge" / "session-meta"
+        meta_dir.mkdir(parents=True, exist_ok=True)
+        (meta_dir / f"{session_id}.json").write_text(_json.dumps({
+            "session_id": session_id,
+            "started_at": "2026-05-11T00:00:00+00:00",
+            "reflection_count": count,
+            "max_reflections_per_session": max_,
+            "cost_today_usd": 0.0,
+            "cost_cap_today_usd": 1.00,
+        }))
+
+    def test_first_three_reflections_allowed(self, tmp_path):
+        """Counts 1, 2, 3 are within limit — hook runs normally."""
+        _make_state(tmp_path)
+        sid = "loop-test"
+        self._inject_meta(tmp_path, sid, count=0)  # will increment to 1
+        r = _run({"hook_event_name": "Stop", "session_id": sid}, cwd=str(tmp_path))
+        assert r.returncode == 0
+        assert "limit" not in r.stdout.lower()
+
+    def test_fourth_reflection_short_circuits(self, tmp_path):
+        """After 3 reflections, 4th invocation exits 0 with notice."""
+        _make_state(tmp_path)
+        sid = "loop-test"
+        self._inject_meta(tmp_path, sid, count=3)  # will increment to 4 > max(3)
+        r = _run({"hook_event_name": "Stop", "session_id": sid}, cwd=str(tmp_path))
+        assert r.returncode == 0
+        assert "limit" in r.stdout.lower() or "reflection" in r.stdout.lower()
+
+    def test_no_reflection_written_on_loop_cutoff(self, tmp_path):
+        """When loop guard fires, state.md must not be modified."""
+        _make_state(tmp_path)
+        sid = "loop-test"
+        self._inject_meta(tmp_path, sid, count=3)
+        _run({"hook_event_name": "Stop", "session_id": sid}, cwd=str(tmp_path))
+        state_text = (tmp_path / "pipeline" / "state.md").read_text()
+        assert "Timestamp" not in state_text
+
+
+class TestCostGuard:
+    """v4.1 FR-COST-004 — daily cost cap enforcement."""
+
+    def _inject_meta_at_cap(self, tmp_path: Path, session_id: str) -> None:
+        import json as _json
+        meta_dir = tmp_path / ".forge" / "session-meta"
+        meta_dir.mkdir(parents=True, exist_ok=True)
+        (meta_dir / f"{session_id}.json").write_text(_json.dumps({
+            "session_id": session_id,
+            "started_at": "2026-05-11T00:00:00+00:00",
+            "reflection_count": 0,
+            "max_reflections_per_session": 3,
+            "cost_today_usd": 1.00,
+            "cost_cap_today_usd": 1.00,
+        }))
+
+    def test_cap_reached_exits_0_with_notice(self, tmp_path):
+        _make_state(tmp_path)
+        sid = "cost-test"
+        self._inject_meta_at_cap(tmp_path, sid)
+        r = _run({"hook_event_name": "Stop", "session_id": sid}, cwd=str(tmp_path))
+        assert r.returncode == 0
+        assert "cap" in r.stdout.lower() or "cost" in r.stdout.lower()
+
+    def test_no_reflection_written_when_cap_reached(self, tmp_path):
+        _make_state(tmp_path)
+        sid = "cost-test"
+        self._inject_meta_at_cap(tmp_path, sid)
+        _run({"hook_event_name": "Stop", "session_id": sid}, cwd=str(tmp_path))
+        state_text = (tmp_path / "pipeline" / "state.md").read_text()
+        assert "Timestamp" not in state_text
+
+
+class TestEventLog:
+    """v4.1 FR-DDB-002 — every successful reflection produces an event."""
+
+    def test_events_jsonl_created_on_reflection(self, tmp_path):
+        _make_state(tmp_path)
+        _run({"hook_event_name": "Stop", "session_id": "s1"}, cwd=str(tmp_path))
+        assert (tmp_path / ".forge" / "events.jsonl").exists()
+
+    def test_event_type_is_reflection_recorded(self, tmp_path):
+        _make_state(tmp_path)
+        _run({"hook_event_name": "Stop", "session_id": "s1"}, cwd=str(tmp_path))
+        import json as _json
+        line = (tmp_path / ".forge" / "events.jsonl").read_text().strip().splitlines()[0]
+        event = _json.loads(line)
+        assert event["type"] == "ReflectionRecorded"
+        assert event["validator_outcome"] == "accepted"
+
+    def test_event_chain_verifies(self, tmp_path):
+        _make_state(tmp_path)
+        # Two Stop hook invocations → two chained events
+        _run({"hook_event_name": "Stop", "session_id": "s1"}, cwd=str(tmp_path))
+        _run({"hook_event_name": "Stop", "session_id": "s1"}, cwd=str(tmp_path))
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).parent.parent.parent / "hooks"))
+        import _event_log as _el
+        ok, reason = _el.verify(tmp_path / ".forge")
+        assert ok, reason

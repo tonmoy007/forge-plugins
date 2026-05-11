@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Stop hook: reflect, extract lessons, check gate, mine skills.
+"""Stop hook: reflect, extract lessons, check gate, mine skills (v4.1-hardened).
 
-Four-step sequential pipeline per ADR-004:
-  1. Reflection (always) — lightweight summary written to state.md
-  2. Lesson extraction (when corrections flagged) — calls extract-lessons.py
-  3. Gate check (always) — calls check-gate.py; exit 2 on unmet blockers + done signal
-  4. Skill mining (async, fire-and-forget) — Popen mine-skills.py if present
+Pipeline (T-009 v4.1 — Proposal → Validator → Executor):
+  0. Pre-flight  — session-meta loop guard + daily cost guard
+  1. Reflector   — builds ReflectionProposal (lightweight v0.1; T-016 adds LLM)
+  2. Lesson Extractor — LessonProposals when corrections are flagged
+  3. Gate Check  — GateProposal; exit 2 on unmet blockers + done signal
+  4. Skill Miner — async fire-and-forget
+  5+6. Validate → Execute (atomic writes + HMAC event log)
 
 Errors are logged to .forge/errors.log and never crash the session.
 """
-
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import logging
 import os
@@ -22,7 +24,19 @@ from pathlib import Path
 
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent))
+
 import _state_lib as lib
+import _event_log as event_log
+import _executor as executor
+import _session_meta as session_meta_mod
+import _validator as validator
+from _proposals import (
+    GateProposal,
+    LessonProposal,
+    ReflectionProposal,
+    StageAdvanceProposal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,21 +56,17 @@ _DONE_PATTERNS = [
 
 
 def _log_error(forge_dir: Path, kind: str, detail: str) -> None:
-    """Append one JSON line to .forge/errors.log — never raises."""
     try:
         forge_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.datetime.now(datetime.timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         line = json.dumps({"ts": ts, "kind": kind, "detail": str(detail)}) + "\n"
         with (forge_dir / "errors.log").open("a") as f:
             f.write(line)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 
 def _read_transcript_tail(transcript_path: str, last_n: int = 10) -> list[dict]:
-    """Read last N messages from a JSONL transcript. Returns [] on any failure."""
     if not transcript_path:
         return []
     p = Path(transcript_path)
@@ -71,12 +81,11 @@ def _read_transcript_tail(transcript_path: str, last_n: int = 10) -> list[dict]:
             except json.JSONDecodeError:
                 pass
         return messages[-last_n:]
-    except Exception:  # noqa: BLE001
+    except Exception:
         return []
 
 
 def _extract_text(content: object) -> str:
-    """Flatten message content (str or list of content blocks) to plain text."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -91,10 +100,10 @@ def _extract_text(content: object) -> str:
 
 
 def _detect_done_signal(transcript_path: str) -> bool:
-    """Return True only if the user explicitly signaled stage completion.
+    """Return True only if the user explicitly signalled stage completion.
 
     Conservative — false positives block the user; false negatives just require
-    them to be more explicit.
+    the user to be more explicit.
     """
     messages = _read_transcript_tail(transcript_path, last_n=5)
     for msg in reversed(messages):
@@ -106,8 +115,8 @@ def _detect_done_signal(transcript_path: str) -> bool:
     return False
 
 
-def _compose_reflection(state: dict, messages: list[dict]) -> str:
-    """Lightweight reflection without LLM (v0.1). T-016 adds LLM-backed reflector."""
+def _compose_reflection_prose(state: dict, messages: list[dict]) -> str:
+    """Build lightweight reflection prose (v0.1). T-016 replaces with LLM reflector."""
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     stage = state.get("current_stage", "?")
     task = state.get("current_task") or "none"
@@ -141,53 +150,17 @@ def _compose_reflection(state: dict, messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _run_extract_lessons(
-    forge_dir: Path, transcript_path: str, plugin_dir: Path
-) -> int:
-    """Call extract-lessons.py if it exists. Returns count of lessons captured."""
-    script = plugin_dir / "scripts" / "extract-lessons.py"
-    if not script.exists():
-        return 0
-    flags_path = forge_dir / "correction-flags.jsonl"
-    try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(script),
-                "--transcript",
-                transcript_path,
-                "--since-flag",
-                str(flags_path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.count("- id:")
-    except subprocess.TimeoutExpired:
-        _log_error(forge_dir, "extract_lessons_timeout", "")
-    except Exception as e:  # noqa: BLE001
-        _log_error(forge_dir, "extract_lessons_failed", str(e))
-    return 0
-
-
 def _run_gate_check(cwd: Path, stage: int, plugin_dir: Path) -> dict:
-    """Call check-gate.py and return parsed result dict. Returns {} on failure."""
     script = plugin_dir / "scripts" / "check-gate.py"
     if not script.exists():
         return {}
     try:
         result = subprocess.run(
             [
-                sys.executable,
-                str(script),
-                "--stage",
-                str(stage),
-                "--cwd",
-                str(cwd),
-                "--plugin-dir",
-                str(plugin_dir),
+                sys.executable, str(script),
+                "--stage", str(stage),
+                "--cwd", str(cwd),
+                "--plugin-dir", str(plugin_dir),
             ],
             capture_output=True,
             text=True,
@@ -197,9 +170,48 @@ def _run_gate_check(cwd: Path, stage: int, plugin_dir: Path) -> dict:
             return json.loads(result.stdout)
     except (subprocess.TimeoutExpired, json.JSONDecodeError):
         pass
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return {}
+
+
+def _parse_lesson_output(
+    stdout: str, session_id: str, stage: int
+) -> list[LessonProposal]:
+    """Parse extract-lessons.py YAML stdout into LessonProposal objects.
+
+    Expected: a YAML list of dicts with trigger / rule / why keys.
+    """
+    import yaml
+    try:
+        items = yaml.safe_load(stdout)
+        if not isinstance(items, list):
+            return []
+    except Exception:
+        return []
+
+    proposals: list[LessonProposal] = []
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            proposals.append(LessonProposal(
+                trigger=str(item.get("trigger", ""))[:200],
+                rule=str(item.get("rule", ""))[:500],
+                why=str(item.get("why", ""))[:500],
+                stage_tags=item.get("stage_tags", [stage]),
+                trust="ephemeral",
+                source_session=session_id,
+                source_corrections=[],
+                model="extract-lessons.py",
+                prompt_hash="",
+                temperature=0.0,
+                created_at=now,
+            ))
+        except Exception:
+            pass
+    return proposals
 
 
 def main() -> None:
@@ -208,12 +220,12 @@ def main() -> None:
     except json.JSONDecodeError:
         payload = {}
 
-    # Loop prevention — Claude can Stop during hook execution
+    # Claude can Stop during hook execution — prevent recursion
     if payload.get("stop_hook_active"):
         sys.exit(0)
 
     cwd = Path(payload.get("cwd", os.getcwd()))
-    session_id: str = payload.get("session_id", "")
+    session_id: str = payload.get("session_id", "unknown")
     transcript_path: str = payload.get("transcript_path", "")
 
     if not (cwd / "pipeline" / "state.md").exists():
@@ -223,69 +235,119 @@ def main() -> None:
 
     try:
         state = lib.read_state(str(cwd))
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         _log_error(forge_dir, "state_read_failed", str(e))
         sys.exit(0)
+
+    # --- Step 0: Pre-flight ---
+    try:
+        meta = session_meta_mod.load(forge_dir, session_id)
+        meta = session_meta_mod.increment_reflection(forge_dir, meta)
+        if session_meta_mod.is_loop_detected(meta):
+            print(
+                f"[forge] Reflection limit reached "
+                f"({meta.max_reflections_per_session}/session). Skipping."
+            )
+            sys.exit(0)
+        if session_meta_mod.is_cost_exceeded(meta):
+            print(
+                f"[forge] Daily cost cap reached "
+                f"(${meta.cost_cap_today_usd:.2f}). Skipping."
+            )
+            sys.exit(0)
+    except Exception as e:
+        _log_error(forge_dir, "session_meta_failed", str(e))
+        # Non-fatal — continue without guards rather than silently skip session
 
     current_stage: int = state.get("current_stage", 0)
     messages = _read_transcript_tail(transcript_path, last_n=10)
 
-    # Step 1: Reflection
+    # Proposals are collected first; writes happen only after gate check
+    reflection_proposal: ReflectionProposal | None = None
+    lesson_proposals: list[LessonProposal] = []
+
+    # --- Step 1: Reflector ---
     try:
-        reflection = _compose_reflection(state, messages)
-        lib.append_to_section(str(cwd), "Last Reflection", reflection)
-    except Exception as e:  # noqa: BLE001
+        prose = _compose_reflection_prose(state, messages)
+        prompt_hash = hashlib.sha256(prose.encode()).hexdigest()[:16]
+        proposal = ReflectionProposal(
+            stage=current_stage,
+            score=5,
+            gaps=[],
+            prose=prose,
+            model="v0.1-lightweight",
+            prompt_hash=prompt_hash,
+            temperature=0.0,
+            created_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        ok, reason = validator.validate(proposal, forge_dir)
+        if ok:
+            reflection_proposal = proposal
+        else:
+            _log_error(forge_dir, "reflection_rejected", reason)
+    except Exception as e:
         _log_error(forge_dir, "reflection_failed", str(e))
 
-    # Step 2: Lesson extraction
+    # --- Step 2: Lesson Extractor ---
     correction_flags = forge_dir / "correction-flags.jsonl"
     if correction_flags.exists() and correction_flags.stat().st_size > 0:
-        count = _run_extract_lessons(forge_dir, transcript_path, _PLUGIN_DIR)
-        if count > 0:
-            print(f"📚 Captured {count} lesson(s) from corrections.")
+        script = _PLUGIN_DIR / "scripts" / "extract-lessons.py"
+        if script.exists():
             try:
-                correction_flags.write_text("")
-            except Exception:  # noqa: BLE001
-                pass
+                result = subprocess.run(
+                    [
+                        sys.executable, str(script),
+                        "--transcript", transcript_path,
+                        "--since-flag", str(correction_flags),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    for raw in _parse_lesson_output(result.stdout, session_id, current_stage):
+                        ok, reason = validator.validate(raw, forge_dir)
+                        if ok:
+                            lesson_proposals.append(raw)
+                        else:
+                            _log_error(forge_dir, "lesson_rejected", reason)
+            except subprocess.TimeoutExpired:
+                _log_error(forge_dir, "extract_lessons_timeout", "")
+            except Exception as e:
+                _log_error(forge_dir, "extract_lessons_failed", str(e))
 
-    # Step 3: Gate check
-    gate_result = _run_gate_check(cwd, current_stage, _PLUGIN_DIR)
-    if gate_result:
-        passed = gate_result.get("passed", 0)
-        total = gate_result.get("total", 0)
-        details = gate_result.get("details", [])
+    # --- Step 3: Gate Check ---
+    gate_raw = _run_gate_check(cwd, current_stage, _PLUGIN_DIR)
+    stage_advance: StageAdvanceProposal | None = None
+    user_done = _detect_done_signal(transcript_path)
+
+    if gate_raw:
+        passed = gate_raw.get("passed", 0)
+        total = gate_raw.get("total", 0)
+        details = gate_raw.get("details", [])
         unmet_blockers = [
             d for d in details
             if not d.get("passed") and d.get("severity") == "blocker"
         ]
-        user_done = _detect_done_signal(transcript_path)
 
         if user_done:
             if not unmet_blockers:
-                try:
-                    lib.advance_stage(str(cwd))
-                    print(
-                        f"✅ Stage {current_stage} gate passed."
-                        f" Advanced to stage {current_stage + 1}."
-                    )
-                except Exception as e:  # noqa: BLE001
-                    _log_error(forge_dir, "advance_stage_failed", str(e))
-            else:
-                print(
-                    f"🚫 Cannot advance from Stage {current_stage}."
-                    " Unmet blockers:"
+                stage_advance = StageAdvanceProposal(
+                    from_stage=current_stage,
+                    to_stage=current_stage + 1,
+                    triggered_by="done_signal_with_passing_gate",
+                    created_at=datetime.datetime.now(datetime.timezone.utc),
                 )
+            else:
+                print(f"🚫 Cannot advance from Stage {current_stage}. Unmet blockers:")
                 for b in unmet_blockers:
                     print(f"  - {b.get('check', '?')}: {b.get('description', '')}")
                 sys.exit(2)
         else:
             if total > 0:
-                print(
-                    f"⚠️ Stage {current_stage}:"
-                    f" {passed}/{total} gate criteria met."
-                )
+                print(f"⚠️ Stage {current_stage}: {passed}/{total} gate criteria met.")
 
-    # Step 4: Skill mining (async, fire-and-forget)
+    # --- Step 4: Skill Miner (async fire-and-forget) ---
     mine_script = _PLUGIN_DIR / "scripts" / "mine-skills.py"
     if mine_script.exists():
         try:
@@ -295,8 +357,31 @@ def main() -> None:
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             _log_error(forge_dir, "skill_mining_spawn_failed", str(e))
+
+    # --- Steps 5+6: Validate → Execute (atomic writes + event log) ---
+    if reflection_proposal is not None:
+        if not executor.execute_reflection(cwd, reflection_proposal, forge_dir, session_id):
+            _log_error(forge_dir, "execute_reflection_failed", "")
+
+    if lesson_proposals:
+        count = executor.execute_lessons(cwd, lesson_proposals, forge_dir, session_id)
+        if count > 0:
+            print(f"📚 Captured {count} lesson(s) from corrections.")
+            try:
+                correction_flags.write_text("")
+            except Exception:
+                pass
+
+    if stage_advance is not None:
+        if executor.execute_stage_advance(cwd, stage_advance, forge_dir, session_id):
+            print(
+                f"✅ Stage {current_stage} gate passed."
+                f" Advanced to stage {current_stage + 1}."
+            )
+        else:
+            _log_error(forge_dir, "advance_stage_failed", "")
 
     sys.exit(0)
 

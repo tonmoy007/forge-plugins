@@ -154,3 +154,49 @@ class TestEndToEnd:
         state_text = _read_state_md(project)
         # Two Timestamp lines should appear
         assert state_text.count("**Timestamp**") >= 2
+
+    def test_events_jsonl_written_and_verifies(self, tmp_path):
+        """Each reflection produces an HMAC-chained event; chain verifies after 2 runs."""
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).parent.parent.parent / "hooks"))
+        import _event_log as _el
+
+        project = _scaffold_project(tmp_path)
+        _run_hook(str(project), session_id="verify-test")
+        _run_hook(str(project), session_id="verify-test")
+
+        forge_dir = project / ".forge"
+        assert (forge_dir / "events.jsonl").exists()
+        ok, reason = _el.verify(forge_dir)
+        assert ok, reason
+
+    def test_loop_guard_stops_fourth_reflection(self, tmp_path):
+        """After 3 reflections in the same session, the 4th exits 0 with a notice."""
+        project = _scaffold_project(tmp_path)
+        sid = "loop-integ"
+        for _ in range(3):
+            r = _run_hook(str(project), session_id=sid)
+            assert r.returncode == 0
+
+        r4 = _run_hook(str(project), session_id=sid)
+        assert r4.returncode == 0
+        assert "limit" in r4.stdout.lower() or "reflection" in r4.stdout.lower()
+
+    def test_no_newly_extracted_lesson_is_trusted(self, tmp_path):
+        """Even if extract-lessons.py existed and returned lessons, trust stays ephemeral.
+
+        Verified by checking that .forge/lessons.yaml (if written) only contains
+        trust='ephemeral' entries — never 'semi_trusted' or 'trusted'.
+        """
+        project = _scaffold_project(tmp_path)
+        _run_hook(str(project))
+        lessons_yaml = project / ".forge" / "lessons.yaml"
+        if lessons_yaml.exists():
+            import yaml as _yaml
+            lessons = _yaml.safe_load(lessons_yaml.read_text()) or []
+            for lesson in lessons:
+                if not isinstance(lesson, dict):
+                    continue  # skip non-lesson entries from scaffold
+                assert lesson.get("trust") == "ephemeral", (
+                    f"Non-ephemeral lesson found: {lesson}"
+                )

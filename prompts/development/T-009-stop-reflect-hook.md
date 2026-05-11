@@ -1,308 +1,325 @@
-# T-009: stop-reflect.py — The Heart of Forge
+# T-009 — `stop-reflect.py` Hook (v4.1-hardened)
 
-> ⚠️ This is the most complex hook. Read everything below before starting.
-> Don't shortcut. Get this right.
+> **Replaces** the original `prompts/development/T-009-stop-reflect-hook.md`.
+> The four-step Stop pipeline is the single biggest source of *quiet* failure in Forge:
+> a hallucinated lesson here poisons every future session. This prompt bakes in the
+> v4.1 SRS hardening (Proposal/Validator/Executor lite, loop detection, trust levels,
+> replay-determinism guards, atomic writes, latency + cost budgets) before any code.
+>
+> Read this prompt in full. Then read `references/hooks.md`, `build/02-architecture/stop-pipeline.md`,
+> `build/01-srs/srs.md` (REQ-034, REQ-050–052), and the v4.1 SRS sections referenced below.
+> Then start.
+
+---
 
 ## Context
 
-The Stop hook is what makes Forge *Forge*. It's the difference between "a plugin with
-some commands" and "a self-improving orchestration system." Get this wrong and
-nothing else matters.
+`stop-reflect.py` runs on every Claude Code `Stop` event. It is the only hook that **writes
+to long-term memory** — `tasks/lessons.md`, `.forge/lessons.yaml`, `pipeline/state.md`'s
+reflection section, and (asynchronously) `.forge/skill-candidates/*.md`.
 
-Read in this order:
-- `CLAUDE.md` — your operating principles
-- `build/02-architecture/architecture.md` §3.2 (Stop hook flow) and §5.5 (Stop hook spec)
-- `build/02-architecture/adr/004-stop-hook-sequential.md` — **mandatory** before starting
-- `build/03-spec/technical-spec.md` §2.5 (the algorithm)
-- `references/claude-code-hooks.md` — Stop event details, exit code 2 semantics
-- `tasks/lessons.md` — anything from prior hook work
+That makes it the **single highest-leverage failure point** in the plugin. A wrong lesson
+gets injected into every future session by `session-start.py` and silently steers Claude
+in the wrong direction. The damage is invisible until cumulative.
 
-Tasks already done (you depend on their outputs):
-- T-003 produced `_state_lib.py` — import from it; don't shell out
-- T-005, T-006 produced `gate-criteria.md` and `check-gate.py` — invoke check-gate
-- T-019 produced `extract-lessons.py` — invoke it for lesson extraction
-- T-027 (later) produces `mine-skills.py` — for now, stub the skill mining call
+This task implements the hook with **v4.1-grade safety rails** — even though Forge v0.1
+does not implement the full Event Store / Validator / Executor stack, it implements a
+**lite** version of those boundaries here so the riskiest write path is bounded.
 
-## What Makes This Hook Special
+## What v4.1 demands of this hook
 
-It runs four things sequentially:
-1. **Reflection** (always) — call reflector agent, append to state.md
-2. **Lesson extraction** (when corrections flagged) — call extract-lessons.py
-3. **Gate check** (always) — call check-gate.py, possibly exit 2 to block
-4. **Skill mining** (async, fire-and-forget) — spawn mine-skills.py
+The v4.1 SRS introduces five guarantees that this hook MUST honor:
 
-Read ADR-004 for *why* sequential, *why* skill mining is async, and *why* gate check
-exits 2 only on explicit "done" signals.
+| v4.1 requirement | What it means here |
+|---|---|
+| **FR-DET-001/002/003** Proposal → Validator → Executor | Reflector / Lesson Extractor / Skill Miner output **proposals**, never direct writes. A deterministic validator approves or rejects. The executor performs the file write. |
+| **FR-NEG-002 / FR-NEG-004** Trust levels + anti-pattern poisoning prevention | Every newly extracted lesson is born `ephemeral`. Promotion to `semi_trusted` requires N successful uses; promotion to `trusted` requires HITL approval. No LLM-extracted lesson can be `trusted` on creation. |
+| **FR-SEM-004** Loop detection | Track per-session reflection depth. If the Stop hook fires more than `max_reflections_per_session` (default 3), short-circuit with a notice. |
+| **FR-DDB-002** Non-deterministic component recording | The reflector's prose output and the lesson extractor's proposed lessons are non-deterministic. Each MUST be recorded once, with model + prompt-hash + temperature, in `.forge/events.jsonl` so future replays don't re-invoke the model. |
+| **FR-COST-004** Always-on cost cap | Reflector + Extractor + Gate-Checker + Skill-Miner = up to 4 LLM calls per Stop. Track the per-Stop cost and per-day cumulative cost; throttle when approaching the daily cap. |
 
-## Task
+## Deliverable
 
-Implement `hooks/stop-reflect.py` per the spec.
+A `command`-type Stop hook with the following pipeline, in this order, with these guarantees.
 
-**Files to create**:
+```
+Stop event
+  │
+  ▼
+┌────────────────────────────────────────────────────────────────────┐
+│ 0. Pre-flight (deterministic, no LLM, < 50ms)                       │
+│    ├── Read pipeline/state.md frontmatter                           │
+│    ├── Increment session reflection depth in .forge/session-meta    │
+│    ├── If depth > max_reflections_per_session → log + exit 0        │
+│    ├── Detect "done signal" in last user prompt (heuristic)         │
+│    ├── Compute cost-budget remaining for today                      │
+│    └── If cost-budget exhausted → log + exit 0 with notice          │
+├────────────────────────────────────────────────────────────────────┤
+│ 1. Reflector (LLM, sequential)                                      │
+│    ├── Invoke `reflector` subagent with stage + recent transcript   │
+│    ├── Wrap output as ReflectionProposal{stage, score, gaps, prose} │
+│    ├── Validate (schema + non-empty + length cap)                   │
+│    ├── On reject: log validation failure, skip to step 2            │
+│    └── On accept: enqueue for executor                              │
+├────────────────────────────────────────────────────────────────────┤
+│ 2. Lesson Extractor (LLM, sequential, only if corrections flagged)  │
+│    ├── Read .forge/correction-flags.jsonl from this session         │
+│    ├── If empty → skip                                              │
+│    ├── Invoke `lesson-extractor` subagent                           │
+│    ├── Wrap output as List[LessonProposal]                          │
+│    ├── For each lesson: trust = "ephemeral", source = session_id    │
+│    ├── Validate (schema, dedup against existing LKG, conflict check)│
+│    └── Enqueue accepted proposals for executor                      │
+├────────────────────────────────────────────────────────────────────┤
+│ 3. Gate Check (deterministic, no LLM)                               │
+│    ├── If done_signal detected: invoke `scripts/check-gate.py`      │
+│    ├── Wrap output as GateProposal{stage, passed, blockers}         │
+│    ├── If passed → enqueue StageAdvanceProposal                     │
+│    ├── If failed and done_signal → exit 2 with blockers (block stop)│
+│    └── If failed and !done_signal → log nudge, do not block         │
+├────────────────────────────────────────────────────────────────────┤
+│ 4. Skill Miner (LLM, ASYNC, fire-and-forget)                        │
+│    ├── Read .forge/patterns.jsonl pattern frequency                 │
+│    ├── If any pattern hit ≥ 3 → spawn skill-miner in background     │
+│    ├── Output goes to .forge/skill-candidates/, never auto-installed│
+│    └── Hook returns immediately; skill-miner finishes off-thread    │
+├────────────────────────────────────────────────────────────────────┤
+│ 5. Validator (deterministic, all proposals from steps 1-3)          │
+│    ├── Schema check (Pydantic models)                               │
+│    ├── Policy check (does this stage allow this kind of write?)     │
+│    ├── Conflict check (lesson contradicts existing trusted lesson?) │
+│    └── Reject with reason → reason recorded in .forge/events.jsonl  │
+├────────────────────────────────────────────────────────────────────┤
+│ 6. Executor (deterministic, atomic, write-to-temp-then-rename)      │
+│    ├── Append event to .forge/events.jsonl (HMAC-chained, see below)│
+│    ├── Update tasks/lessons.md (human) + .forge/lessons.yaml (machine) │
+│    ├── Update pipeline/state.md reflection section                  │
+│    └── On any IO failure → roll back, log, exit 0 (never crash)     │
+└────────────────────────────────────────────────────────────────────┘
+```
 
-1. **`hooks/stop-reflect.py`** — the hook itself
-   - stdlib only (no pyyaml — but you can call scripts that use it)
-   - Imports `_state_lib` for state.md operations
-   - Calls `scripts/check-gate.py` and `scripts/extract-lessons.py` as subprocesses
-     (they can have deps; the hook stays light)
-   - Spawns `scripts/mine-skills.py` as detached subprocess
-   - Logs all errors to `.forge/errors.log` (never crashes loudly)
-   - Detects `stop_hook_active` and exits early to prevent loops
+### File deliverables
 
-2. **`hooks/_invoke_agent.py`** — helper module for spawning Claude subagents
-   - `invoke_agent(name, context_dict) -> str` — returns agent output
-   - Uses Claude Code's subagent API (whatever that exact interface is — research first)
-   - Has a graceful fallback if subagent invocation fails (return empty string, log)
+```
+hooks/stop-reflect.py            # main hook entry point
+hooks/_invoke_agent.py           # subagent invocation helper (already planned)
+hooks/_proposals.py              # NEW — Pydantic models for the 4 proposal types
+hooks/_validator.py              # NEW — deterministic validator
+hooks/_executor.py               # NEW — atomic writer + event log appender
+hooks/_event_log.py              # NEW — HMAC-chained .forge/events.jsonl writer
+hooks/_session_meta.py           # NEW — per-session reflection depth, cost tracking
+tests/unit/test_stop_reflect.py
+tests/unit/test_proposals.py
+tests/unit/test_validator.py
+tests/unit/test_executor.py
+tests/unit/test_event_log.py
+tests/integration/test_stop_pipeline.py
+```
 
-3. **`tests/unit/test_stop_reflect.py`** — comprehensive tests:
-   - Stop with no Forge project → silent exit 0
-   - Stop in Forge project, gate passes, no done signal → reflects + warns about partial
-   - Stop in Forge project, gate fails, done signal → exit 2 with unmet criteria listed
-   - Stop with correction flags → lesson extraction is called
-   - Stop with `stop_hook_active=true` → immediate exit (loop prevention)
-   - Stop with one step crashing → other steps still run
-   - Skill mining is spawned but doesn't block the hook return
-
-4. **`tests/integration/test_stop_pipeline.py`** — end-to-end test:
-   - Set up a fixture project at Stage 6
-   - Inject a transcript with corrections
-   - Run the hook
-   - Assert: reflection appears in state.md, lesson appears in lessons.md, gate result printed
-
-## Algorithm (Detailed)
+### Proposal schemas (sketch — refine in `hooks/_proposals.py`)
 
 ```python
-#!/usr/bin/env python3
-"""Stop hook: reflect, extract lessons, check gate, mine skills."""
+from pydantic import BaseModel, Field
+from typing import Literal
+from datetime import datetime
 
-import json
-import sys
-import subprocess
-import logging
-from pathlib import Path
-from typing import Optional
+class ReflectionProposal(BaseModel):
+    stage: int
+    score: int = Field(ge=1, le=10)
+    gaps: list[str] = Field(max_length=10)
+    prose: str = Field(max_length=4000)
+    model: str
+    prompt_hash: str
+    temperature: float
+    created_at: datetime
 
-# Add scripts/ to path so we can import _state_lib
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-from _state_lib import read_state, append_to_section, advance_stage
+class LessonProposal(BaseModel):
+    trigger: str = Field(max_length=200)
+    rule: str = Field(max_length=500)
+    why: str = Field(max_length=500)
+    stage_tags: list[int]
+    trust: Literal["ephemeral"] = "ephemeral"   # cannot be set higher on creation
+    source_session: str
+    source_corrections: list[str]               # references to correction-flags
+    model: str
+    prompt_hash: str
+    temperature: float
+    created_at: datetime
 
-logger = logging.getLogger(__name__)
+class GateProposal(BaseModel):
+    stage: int
+    passed: bool
+    blockers: list[str]
+    advance_to: int | None
+    checked_at: datetime
 
-
-def main():
-    try:
-        data = json.load(sys.stdin)
-    except json.JSONDecodeError:
-        log_error("invalid_stdin", "")
-        sys.exit(0)  # don't crash session
-
-    # Loop prevention
-    if data.get("stop_hook_active"):
-        sys.exit(0)
-
-    cwd = Path(data.get("cwd", "."))
-    if not (cwd / "pipeline" / "state.md").exists():
-        sys.exit(0)  # not a Forge project
-
-    state = read_state(cwd)
-    transcript_path = data.get("transcript_path")
-    user_done = detect_done_signal(transcript_path)
-
-    # Step 1: Reflect
-    try:
-        reflection = run_reflector(cwd, state, transcript_path, depth="light")
-        append_to_section(cwd, "Last Reflection", reflection)
-    except Exception as e:
-        log_error("reflection_failed", e)
-
-    # Step 2: Extract lessons (if corrections flagged)
-    correction_flags_path = cwd / ".forge" / "correction-flags.jsonl"
-    if correction_flags_path.exists() and correction_flags_path.stat().st_size > 0:
-        try:
-            extract_lessons_proc = subprocess.run(
-                ["python", str(cwd.parent / "scripts" / "extract-lessons.py"),
-                 "--transcript", transcript_path,
-                 "--since-flag", str(correction_flags_path)],
-                capture_output=True, text=True, timeout=10
-            )
-            if extract_lessons_proc.returncode == 0 and extract_lessons_proc.stdout:
-                count = sum(1 for line in extract_lessons_proc.stdout.splitlines()
-                           if line.startswith("- id:"))
-                if count > 0:
-                    print(f"📚 Captured {count} lesson(s) from corrections.")
-                    # Reset flags after successful extraction
-                    correction_flags_path.write_text("")
-        except subprocess.TimeoutExpired:
-            log_error("extract_lessons_timeout", "")
-        except Exception as e:
-            log_error("extract_lessons_failed", e)
-
-    # Step 3: Gate check
-    try:
-        gate_proc = subprocess.run(
-            ["python", str(Path(__file__).parent.parent / "scripts" / "check-gate.py"),
-             "--stage", str(state["current_stage"])],
-            capture_output=True, text=True, timeout=5
-        )
-        gate_result = json.loads(gate_proc.stdout) if gate_proc.stdout else {}
-
-        unmet_blockers = [
-            c for c in gate_result.get("details", [])
-            if not c["passed"] and c["severity"] == "blocker"
-        ]
-
-        if user_done:
-            if not unmet_blockers:
-                advance_stage(cwd)
-                print(f"✅ Stage {state['current_stage']} gate passed. Advanced.")
-            else:
-                print(f"🚫 Cannot advance from Stage {state['current_stage']}.")
-                print("Unmet blockers:")
-                for c in unmet_blockers:
-                    print(f"  - {c['id']}: {c['description']}")
-                sys.exit(2)  # block stop
-        else:
-            passed = gate_result.get("passed", 0)
-            total = gate_result.get("total", 0)
-            if total > 0:
-                print(f"⚠️ Stage {state['current_stage']}: {passed}/{total} gate criteria met.")
-
-    except subprocess.TimeoutExpired:
-        log_error("gate_check_timeout", "")
-    except Exception as e:
-        log_error("gate_check_failed", e)
-
-    # Step 4: Skill mining (async, fire-and-forget)
-    try:
-        subprocess.Popen(
-            ["python", str(Path(__file__).parent.parent / "scripts" / "mine-skills.py"),
-             "--session", data.get("session_id", "")],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
-        )
-    except Exception as e:
-        log_error("skill_mining_spawn_failed", e)
-        # Don't propagate — this is best-effort
-
-    sys.exit(0)
-
-
-def detect_done_signal(transcript_path: Optional[str]) -> bool:
-    """Detect if user explicitly said this stage is done."""
-    if not transcript_path or not Path(transcript_path).exists():
-        return False
-    # Read last 10 user messages, look for done signals
-    # Patterns: "done", "ship it", "advance", "next stage", "looks good let's move on"
-    # Be conservative — false positive blocks user; false negative is fine
-    ...
-
-
-def run_reflector(cwd: Path, state: dict, transcript_path: str, depth: str) -> str:
-    """Spawn reflector agent, return its output."""
-    # Use the subagent invocation mechanism (see _invoke_agent.py)
-    ...
-
-
-def log_error(kind: str, error: object) -> None:
-    """Log to .forge/errors.log without breaking the session."""
-    ...
-
-
-if __name__ == "__main__":
-    main()
+class StageAdvanceProposal(BaseModel):
+    from_stage: int
+    to_stage: int
+    triggered_by: Literal["done_signal_with_passing_gate"]
+    created_at: datetime
 ```
 
-## Definition of Done
+### Event log format (`.forge/events.jsonl`)
 
-- [ ] `hooks/stop-reflect.py` runs successfully on test fixture (no crashes, exit 0)
-- [ ] Stop in non-Forge project → silent exit (no output, no errors)
-- [ ] Stop with corrections flagged → lesson extraction runs and updates lessons.md
-- [ ] Stop with gate fail + done signal → exit code 2 with unmet criteria printed
-- [ ] Stop with `stop_hook_active=true` → immediate exit (verified by stderr inspection)
-- [ ] Skill mining subprocess is spawned (verified by checking process list briefly)
-- [ ] Hook completes within 10s on a typical project
-- [ ] All errors logged to `.forge/errors.log`, never crash loudly
-- [ ] Unit tests cover all branches; > 90% line coverage
-- [ ] Integration test passes against fixture project
+Every line is a JSON object. Each line's `prev_hash` is the HMAC of the previous line.
+The HMAC root key lives in the OS keyring (use `keyring` package — same as Forge v4.1
+FR-KEY-001 MVP tier).
 
-## Verification
-
-```bash
-# 1. Stop with no Forge project — silent
-mkdir -p /tmp/no-forge && cd /tmp/no-forge
-echo '{"session_id":"test","hook_event_name":"Stop","cwd":"/tmp/no-forge","transcript_path":""}' \
-  | python $OLDPWD/hooks/stop-reflect.py
-# Expect: exit 0, empty stdout
-echo "Exit: $?"
-
-# 2. Stop in Forge project — full pipeline
-cd /tmp && rm -rf forge-test && mkdir forge-test && cd forge-test
-bash $OLDPWD/scripts/init-pipeline.sh
-echo '{"session_id":"test","hook_event_name":"Stop","cwd":"/tmp/forge-test","transcript_path":""}' \
-  | python $OLDPWD/hooks/stop-reflect.py
-# Expect: exit 0, "Stage 0: ..." style output
-cat pipeline/state.md | grep "Last Reflection" -A 3
-
-# 3. Loop prevention
-echo '{"session_id":"test","hook_event_name":"Stop","cwd":"/tmp/forge-test","stop_hook_active":true}' \
-  | python $OLDPWD/hooks/stop-reflect.py
-# Expect: exit 0, no output
-
-# 4. Tests
-cd $OLDPWD
-pytest tests/unit/test_stop_reflect.py tests/integration/test_stop_pipeline.py -v --cov
-
-# 5. Latency check
-cd /tmp/forge-test
-time (echo '{...}' | python $OLDPWD/hooks/stop-reflect.py)
-# Expect: real time < 10s
+```json
+{
+  "id": 1234,
+  "type": "ReflectionRecorded",
+  "session": "abc-123",
+  "stage": 6,
+  "payload": { ... ReflectionProposal as JSON ... },
+  "validator_outcome": "accepted",
+  "occurred_at": "2026-05-10T14:32:00Z",
+  "prev_hash": "f3c1...",
+  "signature": "9a2e..."
+}
 ```
 
-## Commit
+Why an event log even in v0.1 when v4.1 wouldn't ship it until Production tier? Because
+the *write path that has the highest hallucination risk* needs replay forensics from day
+one. If a bad lesson gets in, you need to be able to find it. `events.jsonl` makes every
+write to memory traceable.
 
-```
-feat(T-009): stop-reflect.py — the orchestrating Stop hook
+### Loop detection — `.forge/session-meta/<session_id>.json`
 
-Implements the four-step Stop pipeline:
-1. Reflection (always)
-2. Lesson extraction (when corrections flagged)
-3. Gate check (always; exit 2 on unmet blockers if user signaled done)
-4. Skill mining (async, fire-and-forget)
-
-- hooks/stop-reflect.py — main hook
-- hooks/_invoke_agent.py — subagent invocation helper
-- tests/unit/test_stop_reflect.py — branch coverage
-- tests/integration/test_stop_pipeline.py — end-to-end
-
-Per ADR-004: sequential pipeline, async skill mining only.
-
-Ref: T-009
-REQ: REQ-034, REQ-050, REQ-051, REQ-052
+```json
+{
+  "session_id": "abc-123",
+  "started_at": "2026-05-10T13:15:00Z",
+  "reflection_count": 2,
+  "max_reflections_per_session": 3,
+  "cost_today_usd": 0.12,
+  "cost_cap_today_usd": 1.00
+}
 ```
 
-## Update Trail
+`max_reflections_per_session` defaults to **3** (v4.1 FR-SEM-004 default).
 
-1. progress.md → T-009 done, current → T-010
-2. todo.md → archive T-009, activate T-010
-3. lessons.md → things you learned about Claude Code subagent invocation
-4. decisions.md → any concrete choices about reflector agent prompt structure, lesson extraction
-   thresholds, etc.
+### Cost tracking
 
-## Notes
+After each LLM call, write the token usage to `.forge/cost-ledger.jsonl`. At the start of
+the hook, sum today's entries. If cumulative ≥ cap, exit early with a notice in stderr.
+Default daily cap: **$1.00** for the always-on hooks (matches v4.1 FR-COST-004 5%
+"always-on" envelope at small-project scale; tunable in `.forge/config.yaml`).
 
-- This hook will reveal weaknesses in T-019 (extract-lessons.py) and T-006 (check-gate.py)
-  if their interfaces don't match what this hook needs. If you find a mismatch, **stop and
-  fix the upstream task** rather than working around it. Workarounds compound.
+### Latency budget
 
-- The subagent invocation API is the part with the most unknowns. Spend research time on
-  it before writing code. If it's too complex for v0.1, consider a fallback: have the
-  reflector agent be invoked via prompt-hook type instead of command-hook. Document the
-  decision in decisions.md.
+| Step | Budget | Notes |
+|---|---|---|
+| 0 (pre-flight) | < 50 ms | All filesystem and arithmetic |
+| 1 (reflector) | < 15 s | LLM call; one of these per Stop |
+| 2 (lesson extractor) | < 10 s | LLM call; only if corrections flagged |
+| 3 (gate check) | < 2 s | `check-gate.py`; deterministic |
+| 4 (skill miner) | **async**, no budget | Detached; writes to `skill-candidates/` |
+| 5 (validator) | < 200 ms | Pure Python |
+| 6 (executor) | < 500 ms | Atomic file ops + event log append |
+| **Total p95 (sync)** | **< 30 s** | Steps 0-3 + 5-6 |
 
-- Don't try to perfect the reflector's output format here. The reflector agent itself is
-  T-016. This task just needs to *call* it; the agent's persona handles output quality.
+If the total exceeds 30 s in p95 over the last 7 days, the hook itself emits a warning
+proposal asking for tuning.
 
-- The "done signal" detection (`detect_done_signal`) is heuristic. Start conservative
-  (only obvious phrases like "ship it", "advance to next stage", "we're done with stage N").
+## Test coverage
+
+### Unit tests (`tests/unit/`)
+
+- `test_stop_reflect.py`
+  - Happy path: all 4 steps complete, all proposals accepted, lessons.md updated
+  - Loop guard: 4th invocation in same session → exits 0 with notice
+  - Cost guard: cap exceeded → exits 0 with notice
+  - Done signal + failing gate → exits 2 with blockers
+  - Done signal + passing gate → emits StageAdvanceProposal
+  - No corrections → lesson extractor skipped
+  - Hook crash mid-step → no partial write to lessons.md or state.md
+
+- `test_proposals.py`
+  - Trust = "ephemeral" cannot be overridden on construction
+  - Length caps enforced
+  - Schema rejects malformed proposals
+
+- `test_validator.py`
+  - Conflict detection: new lesson contradicts existing `trusted` lesson → reject
+  - Dedup: near-identical lesson already exists → reject
+  - Stage-policy: a lesson tagged for a stage the agent isn't allowed to write → reject
+
+- `test_executor.py`
+  - Atomic write: process killed mid-write → file is either old or new, never corrupt
+  - Event log: each append produces correct HMAC chain
+  - Roll back: validator-accepted but FS-write-failed → no event log entry, no state change
+
+- `test_event_log.py`
+  - Chain integrity: tamper any line → `verify()` fails
+  - Verify across rotations (v4.1 FR-KEY-002 simplified)
+
+### Integration tests (`tests/integration/`)
+
+- `test_stop_pipeline.py`
+  - Synthetic session with 3 reflections + 2 corrections + a passed gate → run end-to-end → assert lessons.md, state.md, events.jsonl, cost-ledger all consistent
+  - Inject a hallucinated lesson via mocked LLM → assert it lands as `ephemeral`, not used by next session-start
+  - Loop trigger: simulate 4 rapid Stop events → assert 4th is short-circuited
+
+## Update trail (do this at end of task)
+
+1. `build/05-implementation/progress.md` → mark T-009 ✅, set current → T-010
+2. `tasks/todo.md` → archive T-009, activate T-010
+3. `tasks/lessons.md` → record what you learned about Claude Code subagent invocation, hook
+   exit codes, and event-log HMAC chains
+4. `build/05-implementation/decisions.md` → ADR for: proposal schema choices, loop-depth
+   default, cost-cap default, sync-vs-async split, atomic-write strategy
+5. `.forge/events.jsonl` → write a `TaskCompleted{T-009}` event (eat your own dogfood)
+
+## Notes / tradeoffs / fallbacks
+
+- **The subagent invocation API is the part with the most unknowns.** Spend research time on
+  it before writing code. If Claude Code's subagent API is too restrictive for parallel
+  invocation, fall back to **sequential** invocation for steps 1–3 (skill miner stays
+  async). Document the choice in decisions.md.
+
+- **The reflector's output format is not your problem here.** That's T-016 (the reflector
+  agent persona). T-009 only needs to *call* the reflector and wrap its output as a
+  proposal. Resist the urge to perfect the reflector here.
+
+- **The "done signal" detection is heuristic.** Start conservative — only obvious phrases
+  like "ship it", "advance to next stage", "we're done with stage N", "let's move on".
   False positives block the user; false negatives just mean they need to be more explicit.
+  Log every detection (positive or negative) so you can tune the heuristics later.
+
+- **If T-019 (extract-lessons.py) or T-006 (check-gate.py) interfaces don't match what this
+  hook needs, STOP and fix the upstream task** rather than working around it. Workarounds
+  compound silently.
+
+- **Don't ship trust=`semi_trusted` or `trusted` from this hook.** Ever. Even if the LLM is
+  confident. Promotion happens in T-020 (lesson injection / promotion logic) under
+  conditions that aren't available at proposal time.
+
+- **The event log is small in v0.1 — only the writes from this hook.** It is NOT the v4.1
+  Event Store. It's a forensic log scoped to the highest-risk write path. Don't let it
+  grow into a parallel state machine; that's a v0.2+ decision.
+
+- **If you find yourself writing more than ~600 lines for the hook itself, stop and look
+  for what should be in `_executor.py` or `_validator.py` instead.** The hook is glue;
+  the components do the work.
+
+## REQ refs
+
+- v0.1 plugin: REQ-034 (auto-reflection), REQ-050 (lesson extraction), REQ-051 (gate
+  enforcement at Stop), REQ-052 (skill mining)
+- v4.1 SRS upstream: FR-DET-001/002/003, FR-NEG-002/004, FR-SEM-004, FR-DDB-002, FR-COST-004,
+  FR-KEY-001 (MVP)
+
+---
+
+**Done when:**
+
+- [ ] All unit tests pass
+- [ ] Integration test passes including the hallucinated-lesson and loop-trigger cases
+- [ ] Hook exits cleanly on crash (no partial writes)
+- [ ] p95 sync latency < 30 s on the test corpus
+- [ ] Event log verifies via `forge audit verify` (or its v0.1 equivalent)
+- [ ] No newly-extracted lesson is anything other than `ephemeral`
+- [ ] `tasks/lessons.md` and `.forge/lessons.yaml` stay in sync after the hook runs
+- [ ] Update trail (above) completed

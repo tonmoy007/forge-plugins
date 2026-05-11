@@ -6,6 +6,9 @@
 # Frontmatter parsing for state.md and SKILL.md files
 python-frontmatter>=1.0.0
 
+# Proposal schema validation in stop-reflect v4.1 helper modules
+pydantic>=2.0.0
+
 # YAML for gate-criteria.md, profile files, lessons.yaml
 PyYAML>=6.0
 
