@@ -5,8 +5,8 @@
 
 ## Current State
 
-- **Active milestone**: M3 — Skills
-- **Current task**: T-024
+- **Active milestone**: M5 — Adaptive Workflow
+- **Current task**: T-025
 - **Last session ended**: 2026-05-12
 
 ## Task Status
@@ -36,7 +36,7 @@
 | T-021 | 🟢 done | 2026-05-12 | 2026-05-12 | — | sync-lessons.py, 37 tests; session-start auto-syncs on stale md |
 | T-022 | 🟢 done | 2026-05-12 | 2026-05-12 | — | promote-lessons.py, ~/.forge/ scaffold, 39 tests; session-start auto-registers+promotes |
 | T-023 | 🟢 done | 2026-05-12 | 2026-05-12 | — | detect-project-type.py: train.py+ML libs+notebooks+API types; 10 new tests; forge-init SKILL.md updated |
-| T-024 | 🔲 todo | — | — | — | |
+| T-024 | 🟢 done | 2026-05-12 | 2026-05-12 | — | fullstack profile extended (stage_3 + stage_6); all 5 profiles ≥3 stage overrides; YAML valid; 427/427 tests pass |
 | T-025 | 🔲 todo | — | — | — | |
 | T-026 | 🔲 todo | — | — | — | |
 | T-027 | 🔲 todo | — | — | — | |

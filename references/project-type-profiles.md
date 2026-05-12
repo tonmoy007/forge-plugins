@@ -142,6 +142,31 @@ stage_overrides:
       - "Define dark mode tokens"
       - "Define motion/animation tokens"
 
+  stage_3:
+    additional_concerns:
+      - "Rendering strategy (SSR / SSG / ISR / CSR per route)"
+      - "Frontend/backend boundary (BFF vs direct DB access)"
+      - "Session/auth flow (cookie scope, CSRF, token storage)"
+      - "Data fetching pattern (RSC, loaders, client queries)"
+    additional_artifacts:
+      - "pipeline/03-architecture/route-manifest.md"
+
+  stage_6:
+    additional_criteria:
+      - id: G6-FS-001
+        description: No raw CSS values in UI files (design tokens enforced)
+        check: script_returns_zero
+        args: { script: "scripts/token-audit.py" }
+        severity: blocker
+      - id: G6-FS-002
+        description: Client bundle size under route budget
+        check: script_returns_zero
+        args: { script: "scripts/bundle-size-check.py" }
+        severity: warning
+      - id: G6-FS-003
+        description: Server/client component boundary respected (no client-only APIs in RSC)
+        severity: warning
+
   stage_7:
     additional_criteria:
       - id: G7-FS-001

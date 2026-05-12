@@ -4,19 +4,25 @@
 
 ---
 
-## Active Task: T-024
+## Active Task: T-025
 
-**Goal**: Create `references/project-type-profiles.md` — per-type stage emphasis, criteria additions, and prompt overrides for all 5 profiles.
+**Goal**: Wire project profiles into stage skills — each `skills/forge-*/SKILL.md` reads the project profile and adjusts instructions accordingly.
 
 **Context**:
-- Done when: All 5 profiles (ml-pipeline, fullstack, api, cli, library) defined with concrete overrides for at least 3 stages each
-- See `build/04-plan/task-dag.md` T-024.
+- Done when: `/forge:eval` on an ML project includes drift detection criterion in eval matrix
+- See `build/04-plan/task-dag.md` T-025.
 - REQ-IDs: REQ-061, REQ-062
-- Depends on: T-005 (gate-criteria.md)
+- Depends on: T-015 (stage skills), T-024 (profiles reference)
 
 ---
 
 ## Archive
+
+### T-024 — project-type-profiles.md ✅ 2026-05-12
+- `references/project-type-profiles.md` audited and extended
+- Fullstack profile gained stage_3 (rendering/SSR architecture, BFF, auth flow) and stage_6 (design tokens, bundle size, RSC boundary) overrides
+- All 5 required profiles (api, fullstack, ml-pipeline, cli, library) now have ≥3 stage overrides each
+- YAML in every profile block parses cleanly; 427/427 tests pass
 
 ### T-023 — Project type detection in forge-init ✅ 2026-05-12
 - `scripts/detect-project-type.py` rewritten: ML (train.py, *.ipynb, ML libs), API (fastapi/flask/django, routes/ dir), all 5 types
