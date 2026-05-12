@@ -4,19 +4,30 @@
 
 ---
 
-## Active Task: T-028
+## Active Task: T-029
 
-**Goal**: `hooks/stop-reflect.py` (update) — surface mined skill proposals to the user and handle approve/modify/reject. Approved → installed into `skills/`; rejected → signature appended to `.forge/skill-blacklist.txt`; modified → persisted.
+**Goal**: `skills/forge-retro/SKILL.md` — slash command that, after Stage 12, produces a full retrospective: what went well, what didn't, lessons captured (read from tasks/lessons.md), skills proposed (read from `.forge/proposed-skills/`).
 
 **Context**:
-- Done when: user can install proposed skill, modifications are persisted, rejections blacklist pattern
-- See `build/04-plan/task-dag.md` T-028.
-- REQ-IDs: REQ-073, REQ-074
-- Depends on: T-027 (mine-skills.py)
+- Done when: retro covers what went well, what didn't, lessons captured, skills proposed
+- See `build/04-plan/task-dag.md` T-029.
+- REQ-IDs: REQ-054
+- Depends on: T-027 (mine-skills.py — for proposed-skills enumeration)
 
 ---
 
 ## Archive
+
+### T-028 — Skill approval flow ✅ 2026-05-12
+- `scripts/skill-approval.py` — stdlib only, executable; subcommands `list` (JSON), `approve --slug X --plugin-dir Y`, `reject --slug X`
+- `approve` moves `.forge/proposed-skills/<slug>/SKILL.md` → `<plugin-dir>/skills/<slug>/SKILL.md`, strips `status: proposed` from frontmatter, refuses to overwrite existing skills
+- `reject` extracts signature from `## Provenance`, appends to `.forge/skill-blacklist.txt` (creates with header on first use, idempotent on duplicates), removes proposal dir
+- Modification path: user edits proposal in place → approve preserves edits; mine-skills.py `write_proposals` now skips paths that already exist so re-mining doesn't clobber user edits
+- `hooks/stop-reflect.py` adds step 4b: glob `.forge/proposed-skills/*/SKILL.md`, print sorted slugs (truncated at 3) + approve/reject command syntax
+- `tests/unit/test_skill_approval.py` — 22 tests; full approve/modify/reject cycle verified end-to-end
+- `tests/unit/test_mine_skills.py` — +1 edit-preservation test, +adjusted idempotency test
+- `tests/unit/test_stop_reflect.py` — new `TestProposalSurfacing` class (4 tests)
+- 515/515 tests pass; plugin valid
 
 ### T-027 — mine-skills.py ✅ 2026-05-12
 - `scripts/mine-skills.py` — stdlib only, executable; CLI flags `--cwd`, `--session`, `--threshold` (default 3), `--dry-run`, `--plugin-dir`

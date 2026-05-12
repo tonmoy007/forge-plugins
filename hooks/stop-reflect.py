@@ -150,6 +150,34 @@ def _compose_reflection_prose(state: dict, messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
+_MAX_PROPOSALS_SHOWN = 3
+
+
+def _print_pending_proposals(forge_dir: Path) -> None:
+    """Surface mined skill proposals so the user can approve/modify/reject.
+
+    Reads `.forge/proposed-skills/*/SKILL.md` directly (no subprocess) so the
+    hook stays fast and dependency-free. Truncates to the first
+    `_MAX_PROPOSALS_SHOWN` slugs to avoid swamping context.
+    """
+    proposed_root = forge_dir / "proposed-skills"
+    if not proposed_root.exists():
+        return
+    slugs = sorted(p.parent.name for p in proposed_root.glob("*/SKILL.md"))
+    if not slugs:
+        return
+    print(f"📜 {len(slugs)} skill proposal(s) pending review:")
+    for slug in slugs[:_MAX_PROPOSALS_SHOWN]:
+        print(f"  - {slug}")
+    if len(slugs) > _MAX_PROPOSALS_SHOWN:
+        print(f"  … and {len(slugs) - _MAX_PROPOSALS_SHOWN} more")
+    print(
+        "Review `.forge/proposed-skills/<slug>/SKILL.md`, then:"
+        "\n  python3 scripts/skill-approval.py approve --slug <slug>"
+        "\n  python3 scripts/skill-approval.py reject  --slug <slug>"
+    )
+
+
 def _run_gate_check(cwd: Path, stage: int, plugin_dir: Path) -> dict:
     script = plugin_dir / "scripts" / "check-gate.py"
     if not script.exists():
@@ -359,6 +387,9 @@ def main() -> None:
             )
         except Exception as e:
             _log_error(forge_dir, "skill_mining_spawn_failed", str(e))
+
+    # --- Step 4b: Surface pending proposals (T-028 approval flow) ---
+    _print_pending_proposals(forge_dir)
 
     # --- Steps 5+6: Validate → Execute (atomic writes + event log) ---
     if reflection_proposal is not None:

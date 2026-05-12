@@ -272,8 +272,16 @@ def plan_proposals(
 
 
 def write_proposals(proposals: list[Proposal]) -> list[Path]:
+    """Write each proposal's SKILL.md. Skip if the file already exists.
+
+    Skipping preserves any user edits made between mining runs — the T-028
+    approval flow lets users modify proposals in place, and a subsequent
+    mine-skills.py run must not clobber those edits.
+    """
     written: list[Path] = []
     for p in proposals:
+        if p.path.exists():
+            continue
         p.path.parent.mkdir(parents=True, exist_ok=True)
         p.path.write_text(p.content, encoding="utf-8")
         written.append(p.path)

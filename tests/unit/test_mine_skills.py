@@ -409,9 +409,24 @@ def test_idempotent_rerun(tmp_path: Path):
     plugin_dir.mkdir()
     r1 = _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
     r2 = _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
-    assert r1.returncode == r2.returncode == 1
+    # First run writes 1 (exit 1). Second run skips existing (exit 0).
+    assert r1.returncode == 1
+    assert r2.returncode == 0
     drafts = list((tmp_path / ".forge" / "proposed-skills").glob("*/SKILL.md"))
     assert len(drafts) == 1
+
+
+def test_existing_proposal_preserves_user_edits(tmp_path: Path):
+    """T-028 hand-off: user edits the proposal; re-mining must not clobber them."""
+    _write_patterns(tmp_path, [_entry()] * 3)
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
+    draft = next((tmp_path / ".forge" / "proposed-skills").glob("*/SKILL.md"))
+    draft.write_text("EDITED BY USER\n", encoding="utf-8")
+    # Re-run: must skip and not overwrite the edited content
+    _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
+    assert draft.read_text(encoding="utf-8") == "EDITED BY USER\n"
 
 
 def test_malformed_lines_skipped_in_e2e(tmp_path: Path):
