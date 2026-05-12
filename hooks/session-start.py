@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import subprocess
+
 import yaml
 
 # Resolve plugin root and make _state_lib importable by hooks
@@ -46,6 +48,28 @@ _CHARS_PER_TOKEN = 4  # rough approximation; avoids tiktoken dependency
 
 def _token_estimate(text: str) -> int:
     return len(text) // _CHARS_PER_TOKEN
+
+
+def _sync_lessons_if_stale(cwd: Path) -> None:
+    """Regenerate .forge/lessons.yaml if tasks/lessons.md is newer."""
+    lessons_md = cwd / "tasks" / "lessons.md"
+    lessons_yaml = cwd / ".forge" / "lessons.yaml"
+    if not lessons_md.exists():
+        return
+    if lessons_yaml.exists() and lessons_md.stat().st_mtime <= lessons_yaml.stat().st_mtime:
+        return
+    sync_script = _PLUGIN_DIR / "scripts" / "sync-lessons.py"
+    if not sync_script.exists():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, str(sync_script), "--cwd", str(cwd)],
+            timeout=10,
+            check=False,
+            capture_output=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("sync-lessons failed: %s", exc)
 
 
 def _load_lessons(path: Path, stage: int, project_type: str) -> list[dict]:
@@ -164,6 +188,8 @@ def run(cwd: Path) -> Optional[str]:
 
     stage = state.get("current_stage", 0)
     project_type = state.get("project_type", "unknown")
+
+    _sync_lessons_if_stale(cwd)
 
     # Lessons: up to 5 project-level + 3 global
     project_lessons = _load_lessons(

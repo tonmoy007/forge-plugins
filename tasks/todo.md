@@ -4,19 +4,25 @@
 
 ---
 
-## Active Task: T-021
+## Active Task: T-022
 
-**Goal**: Create `scripts/sync-lessons.py` — sync `tasks/lessons.md` ↔ `.forge/lessons.yaml` automatically.
+**Goal**: Create `scripts/promote-lessons.py` + `~/.forge/` template — Tier 3 cross-project memory: lessons used in 3+ projects promoted to global.
 
 **Context**:
-- Done when: Edit lessons.md → next session-start regenerates lessons.yaml
-- See `build/04-plan/task-dag.md` T-021.
-- REQ-IDs: REQ-045
-- Depends on: T-019 (lessons have tags)
+- Done when: Lesson used in 3 projects shows up in 4th project's session-start
+- See `build/04-plan/task-dag.md` T-022.
+- REQ-IDs: REQ-042, REQ-043
+- Depends on: T-019, T-021
 
 ---
 
 ## Archive
+
+### T-021 — .forge/lessons.yaml mirror ✅ 2026-05-12
+- `scripts/sync-lessons.py` — parses tasks/lessons.md, merges with existing lessons.yaml (preserving stage/project_types/frequency/last_used), atomic write
+- `hooks/session-start.py` updated — calls sync-lessons.py when lessons.md is newer than lessons.yaml
+- `tests/unit/test_sync_lessons.py` — 37 tests; done-when + session-start integration verified
+- 378/378 tests pass
 
 ### T-020 — Lesson injection in SessionStart ✅ 2026-05-12
 - `hooks/session-start.py` already had `_load_lessons()` with stage + project_type filtering (built in T-007)
