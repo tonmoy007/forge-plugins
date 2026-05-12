@@ -4,19 +4,28 @@
 
 ---
 
-## Active Task: T-026
+## Active Task: T-027
 
-**Goal**: Pattern tracker in `hooks/post-tool-use.py` — detect repeated tool sequences, log to `.forge/patterns.jsonl` with a stable signature.
+**Goal**: `scripts/mine-skills.py` — aggregate `.forge/patterns.jsonl` records by signature, filter by frequency threshold, and generate SKILL.md drafts for repeated workflows.
 
 **Context**:
-- Done when: same 3-tool sequence appearing 3 times produces 3 entries with the same signature
-- See `build/04-plan/task-dag.md` T-026.
-- REQ-IDs: REQ-070
-- Depends on: T-012 (post-tool-use.py hook)
+- Done when: pattern with frequency=3 produces a SKILL.md draft with `name`, `description`, and `steps`
+- See `build/04-plan/task-dag.md` T-027.
+- REQ-IDs: REQ-071, REQ-072
+- Depends on: T-026 (pattern tracker), T-016 (skill-miner agent)
 
 ---
 
 ## Archive
+
+### T-026 — Pattern tracker (sliding 3-tool window with signature) ✅ 2026-05-12
+- `hooks/post-tool-use.py` — replaced ad-hoc detector with a sliding 3-tool window detector
+  - Every tool call after the 3rd writes one entry to `.forge/patterns.jsonl`
+  - Entry shape: `{ts, kind: "tool_seq_3", tools: [t1,t2,t3], signature: <sha1[:12]>, session}`
+  - Signature is sha1 of `"|".join(tools)` truncated to 12 hex chars — stable across calls
+- `tests/unit/test_post_tool_use.py` — 22 tests; done-when verified (3 occurrences of same 3-tool sequence → 3 entries sharing one signature); signature stability + uniqueness tested
+- Legacy `_detect_pattern` removed; existing 5 pattern-tracking tests updated to new format
+- 455/455 tests pass
 
 ### T-025 — Wire profiles into stage skills ✅ 2026-05-12
 - `scripts/load-profile.py` — CLI: `--cwd PATH [--stage N] [--profiles-file PATH] [--format markdown|json]`; parses `## Profile: <name>` YAML blocks from `references/project-type-profiles.md`; reads `project_type` from `pipeline/state.md`

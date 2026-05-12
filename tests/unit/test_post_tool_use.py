@@ -153,8 +153,22 @@ class TestStage6Tracking:
         assert "build_stage" not in records[0]
 
 
+def _read_patterns(tmp_path: Path) -> list[dict]:
+    patterns_path = tmp_path / ".forge" / "patterns.jsonl"
+    if not patterns_path.exists():
+        return []
+    records = []
+    for line in patterns_path.read_text().splitlines():
+        if line.strip():
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+    return records
+
+
 class TestPatternTracking:
-    def test_three_same_tools_creates_pattern(self, tmp_path):
+    def test_three_tools_creates_window_record(self, tmp_path):
         entries = [
             {"ts": "2026-05-10T00:00:00Z", "session": "s", "tool": "Read",
              "file": "", "success": True},
@@ -163,30 +177,33 @@ class TestPatternTracking:
         ]
         _seed_log(tmp_path, entries)
         _run(tool_name="Read", cwd=str(tmp_path))
-        patterns_path = tmp_path / ".forge" / "patterns.jsonl"
-        assert patterns_path.exists()
-        pattern = json.loads(patterns_path.read_text().strip())
-        assert pattern["kind"] == "tool_seq"
-        assert "Read" in pattern["tools"]
+        records = _read_patterns(tmp_path)
+        assert len(records) == 1
+        r = records[0]
+        assert r["kind"] == "tool_seq_3"
+        assert r["tools"] == ["Read", "Read", "Read"]
+        assert "signature" in r
 
-    def test_alternating_pattern_detected(self, tmp_path):
+    def test_three_different_tools_logs_window(self, tmp_path):
+        # Read → Edit → Bash: every 3-tool window gets logged, including
+        # non-repeating ones, so the miner can decide downstream.
         entries = [
             {"ts": "t", "session": "s", "tool": "Read", "file": "", "success": True},
             {"ts": "t", "session": "s", "tool": "Edit", "file": "", "success": True},
-            {"ts": "t", "session": "s", "tool": "Read", "file": "", "success": True},
         ]
         _seed_log(tmp_path, entries)
-        _run(tool_name="Edit", cwd=str(tmp_path))
-        patterns_path = tmp_path / ".forge" / "patterns.jsonl"
-        assert patterns_path.exists()
+        _run(tool_name="Bash", cwd=str(tmp_path))
+        records = _read_patterns(tmp_path)
+        assert len(records) == 1
+        assert records[0]["tools"] == ["Read", "Edit", "Bash"]
 
-    def test_no_pattern_no_file(self, tmp_path):
+    def test_fewer_than_three_tools_no_pattern_file(self, tmp_path):
         _run(tool_name="Write", cwd=str(tmp_path))
         _run(tool_name="Read", cwd=str(tmp_path))
         patterns_path = tmp_path / ".forge" / "patterns.jsonl"
         assert not patterns_path.exists()
 
-    def test_pattern_includes_session_id(self, tmp_path):
+    def test_window_record_includes_session_id(self, tmp_path):
         entries = [
             {"ts": "t", "session": "my-sess", "tool": "Bash",
              "file": "", "success": True},
@@ -195,19 +212,79 @@ class TestPatternTracking:
         ]
         _seed_log(tmp_path, entries)
         _run(tool_name="Bash", session_id="my-sess", cwd=str(tmp_path))
-        pattern = json.loads(
-            (tmp_path / ".forge" / "patterns.jsonl").read_text().strip()
-        )
-        assert pattern["session"] == "my-sess"
+        records = _read_patterns(tmp_path)
+        assert records[0]["session"] == "my-sess"
 
-    def test_pattern_has_timestamp(self, tmp_path):
+    def test_window_record_has_timestamp(self, tmp_path):
         entries = [
             {"ts": "t", "session": "s", "tool": "Write", "file": "", "success": True},
             {"ts": "t", "session": "s", "tool": "Write", "file": "", "success": True},
         ]
         _seed_log(tmp_path, entries)
         _run(tool_name="Write", cwd=str(tmp_path))
-        pattern = json.loads(
-            (tmp_path / ".forge" / "patterns.jsonl").read_text().strip()
-        )
-        assert "ts" in pattern
+        records = _read_patterns(tmp_path)
+        assert "ts" in records[0]
+
+
+# ---------------------------------------------------------------------------
+# T-026: Signature stability and the done-when criterion
+# ---------------------------------------------------------------------------
+
+class TestSignature:
+    def test_signature_stable_for_same_sequence(self, tmp_path1=None):
+        """Same 3-tool sequence → identical signature each occurrence."""
+        # Import the hook module to call the helper directly.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("post_tool_use", HOOK)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["post_tool_use"] = mod
+        spec.loader.exec_module(mod)
+        sig1 = mod._window_signature(["Read", "Edit", "Bash"])
+        sig2 = mod._window_signature(["Read", "Edit", "Bash"])
+        assert sig1 == sig2
+        assert len(sig1) == 12
+
+    def test_signature_differs_for_different_sequences(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("post_tool_use", HOOK)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["post_tool_use"] = mod
+        spec.loader.exec_module(mod)
+        sig_a = mod._window_signature(["Read", "Edit", "Bash"])
+        sig_b = mod._window_signature(["Read", "Bash", "Edit"])
+        sig_c = mod._window_signature(["Write", "Edit", "Bash"])
+        assert sig_a != sig_b
+        assert sig_a != sig_c
+        assert sig_b != sig_c
+
+    def test_done_when_same_sequence_thrice_same_signature(self, tmp_path):
+        """T-026 done-when: same 3-tool sequence appearing 3 times → 3 entries
+        in patterns.jsonl all sharing the same signature."""
+        # Drive 3 full occurrences of Read → Edit → Bash through the hook.
+        # The first occurrence needs 2 prior tool calls before its 3rd lands a
+        # window, so total 9 tool calls = 3 full sequences after warm-up.
+        sequence = ["Read", "Edit", "Bash"]
+        for _ in range(3):
+            for tool in sequence:
+                _run(tool_name=tool, cwd=str(tmp_path))
+        records = _read_patterns(tmp_path)
+        # Find every Read→Edit→Bash window
+        matching = [r for r in records if r["tools"] == sequence]
+        assert len(matching) >= 3, f"expected ≥3 Read→Edit→Bash windows, got {len(matching)}"
+        sigs = {r["signature"] for r in matching}
+        assert len(sigs) == 1, f"all matching windows should share one signature, got {sigs}"
+
+    def test_signature_field_present_in_every_record(self, tmp_path):
+        entries = [
+            {"ts": "t", "session": "s", "tool": "Read", "file": "", "success": True},
+            {"ts": "t", "session": "s", "tool": "Edit", "file": "", "success": True},
+        ]
+        _seed_log(tmp_path, entries)
+        _run(tool_name="Bash", cwd=str(tmp_path))
+        _run(tool_name="Grep", cwd=str(tmp_path))
+        records = _read_patterns(tmp_path)
+        assert len(records) == 2
+        for r in records:
+            assert "signature" in r
+            assert isinstance(r["signature"], str)
+            assert len(r["signature"]) == 12

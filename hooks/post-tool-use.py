@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: session logging, stage-6 activity tracking, pattern counting.
+"""PostToolUse hook: session logging, stage-6 activity tracking, pattern tracking.
 
 Writes to:
   .forge/session-log.jsonl — every tool call (file, success, stage marker)
-  .forge/patterns.jsonl   — when repeated tool sequences are detected
+  .forge/patterns.jsonl   — sliding 3-tool window with stable signature
+                            (one entry per tool call once ≥3 tools are in the log;
+                            downstream `mine-skills.py` aggregates by signature)
 
 No stdout output. Never blocks. Always exits 0.
 """
@@ -11,14 +13,19 @@ No stdout output. Never blocks. Always exits 0.
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 import _state_lib as lib
+
+_WINDOW_SIZE = 3
+_SIGNATURE_LEN = 12  # hex chars; sha1 truncated for compactness
 
 
 def _now() -> str:
@@ -48,23 +55,37 @@ def _read_last_n(path: Path, n: int) -> list[dict]:
         return []
 
 
-def _detect_pattern(recent: list[dict]) -> bool:
-    """Return True if recent tool calls form a repeated sequence worth noting.
+def _window_signature(tools: list[str]) -> str:
+    """Stable short signature for a tool sequence.
 
-    Detects two patterns:
-      - Same tool 3+ times in a row (e.g., Read→Read→Read)
-      - Alternating 2-tool cycle (e.g., Read→Edit→Read→Edit)
+    Same sequence of tool names → same signature, regardless of session,
+    timestamps, or which files were touched. Used downstream (T-027) to
+    group occurrences and propose skills for frequently repeated patterns.
     """
-    if len(recent) < 3:
-        return False
-    tools = [r.get("tool", "") for r in recent]
-    # Single tool repeated 3+ consecutive times
-    if tools[-3] == tools[-2] == tools[-1]:
-        return True
-    # 2-tool alternating cycle (need 4 entries)
-    if len(tools) >= 4 and tools[-4:-2] == tools[-2:]:
-        return True
-    return False
+    joined = "|".join(tools)
+    return hashlib.sha1(joined.encode("utf-8")).hexdigest()[:_SIGNATURE_LEN]
+
+
+def _build_window_record(
+    recent: list[dict], session_id: str, ts: str
+) -> Optional[dict]:
+    """Build a patterns.jsonl record from the last _WINDOW_SIZE tool entries.
+
+    Returns None if fewer than _WINDOW_SIZE entries are available, or if
+    any of them has no tool name.
+    """
+    if len(recent) < _WINDOW_SIZE:
+        return None
+    window = [r.get("tool", "") for r in recent[-_WINDOW_SIZE:]]
+    if any(not t for t in window):
+        return None
+    return {
+        "ts": ts,
+        "kind": f"tool_seq_{_WINDOW_SIZE}",
+        "tools": window,
+        "signature": _window_signature(window),
+        "session": session_id,
+    }
 
 
 def main() -> None:
@@ -108,19 +129,12 @@ def main() -> None:
     except Exception:  # noqa: BLE001
         pass
 
-    # Step 2: Pattern tracking
+    # Step 2: Pattern tracking — sliding 3-tool window with stable signature
     try:
-        recent = _read_last_n(log_path, 5)
-        if _detect_pattern(recent):
-            _append_jsonl(
-                forge_dir / "patterns.jsonl",
-                {
-                    "ts": _now(),
-                    "kind": "tool_seq",
-                    "tools": [r.get("tool", "") for r in recent],
-                    "session": session_id,
-                },
-            )
+        recent = _read_last_n(log_path, _WINDOW_SIZE)
+        record = _build_window_record(recent, session_id, _now())
+        if record is not None:
+            _append_jsonl(forge_dir / "patterns.jsonl", record)
     except Exception:  # noqa: BLE001
         pass
 
