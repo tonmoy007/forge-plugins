@@ -4,19 +4,26 @@
 
 ---
 
-## Active Task: T-022
+## Active Task: T-023
 
-**Goal**: Create `scripts/promote-lessons.py` + `~/.forge/` template — Tier 3 cross-project memory: lessons used in 3+ projects promoted to global.
+**Goal**: Update `scripts/detect-project-type.py` — detect ML project from `train.py` + `torch` in requirements.txt; update `skills/forge-init/SKILL.md`.
 
 **Context**:
-- Done when: Lesson used in 3 projects shows up in 4th project's session-start
-- See `build/04-plan/task-dag.md` T-022.
-- REQ-IDs: REQ-042, REQ-043
-- Depends on: T-019, T-021
+- Done when: ML project (has `train.py`, `requirements.txt` with torch) → "ml-pipeline" profile assigned
+- See `build/04-plan/task-dag.md` T-023.
+- REQ-IDs: REQ-060
+- Depends on: T-002
 
 ---
 
 ## Archive
+
+### T-022 — Tier 3 cross-project memory ✅ 2026-05-12
+- `scripts/promote-lessons.py` — scans registered projects, clusters lessons by trigger similarity, promotes lessons in 3+ projects to `~/.forge/global-lessons.yaml`
+- `~/.forge/` scaffold: `projects.yaml` (registry) + `global-lessons.yaml` (promoted lessons)
+- `hooks/session-start.py` updated — calls promote-lessons.py to register project + run promotion each session
+- `tests/unit/test_promote_lessons.py` — 39 tests; done-when (3-project → 4th session-start) verified
+- 417/417 tests pass
 
 ### T-021 — .forge/lessons.yaml mirror ✅ 2026-05-12
 - `scripts/sync-lessons.py` — parses tasks/lessons.md, merges with existing lessons.yaml (preserving stage/project_types/frequency/last_used), atomic write

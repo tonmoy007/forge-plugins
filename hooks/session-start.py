@@ -72,6 +72,22 @@ def _sync_lessons_if_stale(cwd: Path) -> None:
         _LOG.warning("sync-lessons failed: %s", exc)
 
 
+def _register_and_promote(cwd: Path) -> None:
+    """Register current project in ~/.forge and run cross-project promotion."""
+    promote_script = _PLUGIN_DIR / "scripts" / "promote-lessons.py"
+    if not promote_script.exists():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, str(promote_script), "--register", str(cwd), "--promote"],
+            timeout=15,
+            check=False,
+            capture_output=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("promote-lessons failed: %s", exc)
+
+
 def _load_lessons(path: Path, stage: int, project_type: str) -> list[dict]:
     """Load and filter lessons from a YAML file. Returns [] on any failure."""
     if not path.exists():
@@ -190,6 +206,7 @@ def run(cwd: Path) -> Optional[str]:
     project_type = state.get("project_type", "unknown")
 
     _sync_lessons_if_stale(cwd)
+    _register_and_promote(cwd)
 
     # Lessons: up to 5 project-level + 3 global
     project_lessons = _load_lessons(
