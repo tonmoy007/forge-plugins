@@ -5,8 +5,8 @@
 
 ## Current State
 
-- **Active milestone**: M6 — Auto-Skill Creation
-- **Current task**: T-029
+- **Active milestone**: M7 — Polish + Documentation
+- **Current task**: T-031 (T-030 blocked on T-032; T-032 needs T-031 first per DAG)
 - **Last session ended**: 2026-05-12
 
 ## Task Status
@@ -41,7 +41,7 @@
 | T-026 | 🟢 done | 2026-05-12 | 2026-05-12 | — | sliding 3-tool window with sha1 signature; 22 tests; done-when 3-occurrence signature stability verified; 455/455 |
 | T-027 | 🟢 done | 2026-05-12 | 2026-05-12 | — | mine-skills.py + 33 tests; freq≥3 → SKILL.md draft with name/description/steps; blacklist + skill-name collision filters; 488/488 tests pass |
 | T-028 | 🟢 done | 2026-05-12 | 2026-05-12 | — | skill-approval.py (list/approve/reject) + 22 tests; stop-reflect.py surfaces proposals; mine-skills.py skips existing to preserve edits; full approve/modify/reject cycle verified end-to-end; 515/515 tests pass |
-| T-029 | 🔲 todo | — | — | — | |
+| T-029 | 🟢 done | 2026-05-12 | 2026-05-12 | — | forge-retro SKILL.md + 16 structural tests; retro covers what went well / didn't / lessons / skills proposed; writes to pipeline/12-release/retro.md; 531/531 tests pass |
 | T-030 | 🔲 todo | — | — | — | |
 | T-031 | 🔲 todo | — | — | — | |
 | T-032 | 🔲 todo | — | — | — | |

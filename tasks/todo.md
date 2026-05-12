@@ -4,19 +4,28 @@
 
 ---
 
-## Active Task: T-029
+## Active Task: T-031
 
-**Goal**: `skills/forge-retro/SKILL.md` — slash command that, after Stage 12, produces a full retrospective: what went well, what didn't, lessons captured (read from tasks/lessons.md), skills proposed (read from `.forge/proposed-skills/`).
+**Goal**: `CONTRIBUTING.md` + `docs/agent-authoring.md` — guides explaining how to extend Forge: add new agents, stages, or project-type profiles.
 
 **Context**:
-- Done when: retro covers what went well, what didn't, lessons captured, skills proposed
-- See `build/04-plan/task-dag.md` T-029.
-- REQ-IDs: REQ-054
-- Depends on: T-027 (mine-skills.py — for proposed-skills enumeration)
+- Done when: someone can add a new stage by following the guide
+- See `build/04-plan/task-dag.md` T-031.
+- REQ-IDs: — (no SRS REQ; foundational for community contribution)
+- Depends on: T-014 (agent personas — done)
+- Note: T-030 (README.md) is blocked on T-032 (integration test) per the DAG; T-032 in turn requires T-031. So sequence is T-031 → T-032 → T-030 → T-033.
 
 ---
 
 ## Archive
+
+### T-029 — forge-retro skill ✅ 2026-05-12
+- `skills/forge-retro/SKILL.md` — pre-flight, 8 workflow steps, verification block
+- Workflow refreshes `mine-skills.py`, reads pipeline/state.md, tasks/todo.md, tasks/lessons.md, `.forge/sessions/*.md`, and `skill-approval.py list` output
+- Output document `pipeline/12-release/retro.md` covers all four done-when categories with explicit cited-source requirements: What Went Well, What Didn't Go Well, Lessons Captured, Skill Proposals (+ Action Items)
+- Approve/reject command syntax embedded in the Skill Proposals section so the retro is actionable
+- `tests/unit/test_forge_retro.py` — 16 tests asserting frontmatter contract + done-when categories + Stage 12 trigger + output path + skill-approval.py integration
+- 531/531 tests pass; plugin valid
 
 ### T-028 — Skill approval flow ✅ 2026-05-12
 - `scripts/skill-approval.py` — stdlib only, executable; subcommands `list` (JSON), `approve --slug X --plugin-dir Y`, `reject --slug X`
