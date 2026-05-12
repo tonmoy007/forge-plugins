@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M7 — Polish + Documentation
-- **Current task**: T-032 (T-031 done; T-030 still blocked on T-032 per DAG)
+- **Current task**: T-030 (T-032 done; README now unblocked)
 - **Last session ended**: 2026-05-12
 
 ## Task Status
@@ -44,7 +44,7 @@
 | T-029 | 🟢 done | 2026-05-12 | 2026-05-12 | — | forge-retro SKILL.md + 16 structural tests; retro covers what went well / didn't / lessons / skills proposed; writes to pipeline/12-release/retro.md; 531/531 tests pass |
 | T-030 | 🔲 todo | — | — | — | |
 | T-031 | 🟢 done | 2026-05-12 | 2026-05-12 | — | CONTRIBUTING.md rewritten; docs/agent-authoring.md created — walkthroughs for adding agents, stages, profiles; 531/531 tests pass |
-| T-032 | 🔲 todo | — | — | — | |
+| T-032 | 🟢 done | 2026-05-12 | 2026-05-12 | — | full-pipeline.sh + 29 fixture artifacts (12 stages); check_dir_nonempty.py; gate checks + traceability chain; test isolation fix for TestLessonsFiltering; 532/532 tests pass |
 | T-033 | 🔲 todo | — | — | — | |
 
 ## Status Legend

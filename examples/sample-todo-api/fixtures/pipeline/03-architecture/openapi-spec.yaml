@@ -1,0 +1,153 @@
+openapi: "3.1.0"
+info:
+  title: Todo API
+  version: "1.0.1"
+  description: JWT-authenticated REST API for personal todo management.
+
+servers:
+  - url: https://api.example.com/v1
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Credentials"
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "409": { description: Email already registered }
+
+  /auth/login:
+    post:
+      summary: Obtain token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Credentials"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "401": { description: Invalid credentials }
+        "429": { description: Rate limit exceeded }
+
+  /auth/refresh:
+    post:
+      summary: Rotate refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "401": { description: Invalid or expired refresh token }
+
+  /todos:
+    get:
+      summary: List todos
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, done] } }
+        - { name: due_date_from, in: query, schema: { type: string, format: date } }
+        - { name: due_date_to, in: query, schema: { type: string, format: date } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK }
+    post:
+      summary: Create todo
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TodoCreate"
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Todo" } } } }
+
+  /todos/{id}:
+    get:
+      summary: Get todo
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+    patch:
+      summary: Update todo
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TodoUpdate"
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+    delete:
+      summary: Delete todo
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "204": { description: No content }
+        "404": { description: Not found }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, enum: [bearer] }
+
+    TodoCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 500 }
+        description: { type: string, nullable: true }
+        due_date: { type: string, format: date, nullable: true }
+
+    TodoUpdate:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 500 }
+        description: { type: string, nullable: true }
+        due_date: { type: string, format: date, nullable: true }
+        status: { type: string, enum: [open, done] }
+
+    Todo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        due_date: { type: string, format: date, nullable: true }
+        status: { type: string, enum: [open, done] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }

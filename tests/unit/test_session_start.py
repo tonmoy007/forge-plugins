@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,13 +15,14 @@ PLUGIN_DIR = str(Path(__file__).parent.parent.parent)
 PYTHON = sys.executable
 
 
-def _run(cwd: str) -> subprocess.CompletedProcess:
+def _run(cwd: str, env: dict | None = None) -> subprocess.CompletedProcess:
     payload = json.dumps({"cwd": cwd, "hook_event_name": "SessionStart"})
     return subprocess.run(
         [PYTHON, HOOK],
         input=payload,
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -120,7 +122,7 @@ class TestLessonsFiltering:
     def test_no_lessons_shows_zero(self, tmp_path):
         _make_state(tmp_path, stage=6, project_type="fullstack")
         _make_lessons(tmp_path, [])
-        r = _run(str(tmp_path))
+        r = _run(str(tmp_path), env={**os.environ, "HOME": str(tmp_path)})
         assert "Active lessons (0)" in r.stdout
 
     def test_matching_lesson_included(self, tmp_path):
@@ -136,7 +138,7 @@ class TestLessonsFiltering:
             "last_used": "2026-05-01",
             "tags": ["design"],
         }])
-        r = _run(str(tmp_path))
+        r = _run(str(tmp_path), env={**os.environ, "HOME": str(tmp_path)})
         assert "Active lessons (1)" in r.stdout
         assert "design token" in r.stdout.lower()
 
@@ -173,7 +175,7 @@ class TestLessonsFiltering:
             for i in range(50)
         ]
         _make_lessons(tmp_path, lessons)
-        r = _run(str(tmp_path))
+        r = _run(str(tmp_path), env={**os.environ, "HOME": str(tmp_path)})
         # Should show at most 5 project lessons
         import re
         m = re.search(r"Active lessons \((\d+)\)", r.stdout)
