@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M7 — Polish + Documentation
-- **Current task**: T-030 (T-032 done; README now unblocked)
+- **Current task**: T-033 (T-030 done; packaging next)
 - **Last session ended**: 2026-05-12
 
 ## Task Status
@@ -42,7 +42,7 @@
 | T-027 | 🟢 done | 2026-05-12 | 2026-05-12 | — | mine-skills.py + 33 tests; freq≥3 → SKILL.md draft with name/description/steps; blacklist + skill-name collision filters; 488/488 tests pass |
 | T-028 | 🟢 done | 2026-05-12 | 2026-05-12 | — | skill-approval.py (list/approve/reject) + 22 tests; stop-reflect.py surfaces proposals; mine-skills.py skips existing to preserve edits; full approve/modify/reject cycle verified end-to-end; 515/515 tests pass |
 | T-029 | 🟢 done | 2026-05-12 | 2026-05-12 | — | forge-retro SKILL.md + 16 structural tests; retro covers what went well / didn't / lessons / skills proposed; writes to pipeline/12-release/retro.md; 531/531 tests pass |
-| T-030 | 🔲 todo | — | — | — | |
+| T-030 | 🟢 done | 2026-05-12 | 2026-05-12 | — | user-facing README; install, quickstart, 12-stage table, hooks, profiles, config, tests |
 | T-031 | 🟢 done | 2026-05-12 | 2026-05-12 | — | CONTRIBUTING.md rewritten; docs/agent-authoring.md created — walkthroughs for adding agents, stages, profiles; 531/531 tests pass |
 | T-032 | 🟢 done | 2026-05-12 | 2026-05-12 | — | full-pipeline.sh + 29 fixture artifacts (12 stages); check_dir_nonempty.py; gate checks + traceability chain; test isolation fix for TestLessonsFiltering; 532/532 tests pass |
 | T-033 | 🔲 todo | — | — | — | |

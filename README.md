@@ -1,121 +1,250 @@
 # Forge — SDLC Orchestrator for Claude Code
 
-> A Claude Code plugin that turns Claude into a full-lifecycle software development engine
-> with specialized agents, persistent memory, auto-reflection, and adaptive workflows.
+> Turn Claude Code into a full-lifecycle software development engine: 12-stage pipeline,
+> specialized agents, persistent memory, auto-reflection, and adaptive workflows.
 
-**Status**: 🚧 Active development — M1–M3 complete, M4 (Memory + Lessons) in progress.
+[![Tests](https://img.shields.io/badge/tests-532%20passing-brightgreen)]()
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
+[![Claude Code](https://img.shields.io/badge/claude--code-%3E%3D2.1.0-blueviolet)]()
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)]()
 
 ---
 
-## What This Repository Is
+## What Forge Does
 
-This is **the development repository for the Forge plugin**, not the plugin itself.
+Forge gives Claude Code a structured 12-stage pipeline — from requirements through release —
+with gate enforcement, specialized agents per stage, and a memory system that learns from every
+session.
 
-The plugin is being built by Claude Code, following the same 12-stage pipeline that Forge itself
-will eventually orchestrate. We're eating our own dogfood: this repo contains a `build/` directory
-with SRS, architecture, spec, and task DAG that drives Claude's work, just like a Forge-managed
-project would.
+**Without Forge**: Claude is a smart assistant that forgets everything between sessions.
 
-## What Forge Does (When Built)
+**With Forge**: Claude becomes a disciplined engineering partner that remembers decisions,
+enforces quality gates, surfaces lessons from past mistakes, and adapts its workflow to your
+project type.
 
-When installed in Claude Code, Forge:
+---
 
-1. **Orchestrates** a 12-stage SDLC pipeline (SRS → Product → Architecture → Spec → Plan → Build → Eval → Deploy → Monitor → Feedback → Resolve → Release)
-2. **Specializes** 16 agents — 12 stage-specific personas + 4 cross-stage helpers (reflector, lesson-extractor, skill-miner, gate-checker)
-3. **Remembers** across sessions via 3-tier memory (session context → project files → cross-project)
-4. **Reflects** on every `Stop` event — evaluates output against gate criteria, extracts lessons
-5. **Adapts** to project type (API, full-stack, ML, CLI, library) with custom workflow profiles
-6. **Creates skills** automatically when it detects patterns repeated 3+ times
-7. **Enforces gates** via hooks — design system tokens, traceability, exit criteria
-8. **Documents** every decision automatically — no silent edits, no lost context
+## Prerequisites
 
-## Repository Structure
+- **Claude Code** ≥ 2.1.0
+- **Python** ≥ 3.11 (on PATH)
+- **pyyaml**: `pip install pyyaml`
 
-```
-forge/
-├── README.md                  # this file
-├── CLAUDE.md                  # instructions for Claude when working in this repo
-├── DEVELOPMENT.md             # how to develop the plugin (workflows for humans)
-├── ROADMAP.md                 # milestone tracker
-│
-├── .claude-plugin/            # ← THE PLUGIN (output)
-│   └── plugin.json
-├── skills/                    # ← /forge:* slash commands
-├── agents/                    # ← specialized subagents
-├── hooks/                     # ← lifecycle hook scripts
-├── scripts/                   # ← deterministic helpers
-├── references/                # ← on-demand docs for skills
-├── assets/                    # ← banners, templates
-│
-├── build/                     # ← the build pipeline ARTIFACTS
-│   ├── 01-srs/                # what the plugin must do
-│   ├── 02-architecture/       # how it fits together
-│   ├── 03-spec/               # implementation-ready specs
-│   ├── 04-plan/               # task DAG + risk register
-│   ├── 05-implementation/     # progress tracker, decisions log
-│   └── 06-evaluation/         # eval reports, test results
-│
-├── prompts/                   # ← prompts to give Claude for development
-│   ├── development/           #    one prompt per task in the DAG
-│   ├── agents/                #    prompts for working on agent personas
-│   └── sessions/              #    session bootstrap prompts
-│
-├── tests/                     # ← test the plugin itself
-├── examples/                  # ← sample projects to test the plugin against
-└── docs/                      # ← user-facing documentation (when ready)
-```
+---
 
-## Quickstart for Developers (Humans)
-
-### Option A: Develop with Claude Code
+## Install
 
 ```bash
-git clone <repo-url> forge
-cd forge
-claude              # start a Claude Code session in this dir
+claude plugin install https://github.com/<user>/forge
 ```
 
-Then either:
+That's it. Forge activates automatically in any project where you've run `/forge:init`.
 
-- **Ask Claude to start work**: `Read CLAUDE.md, then read build/04-plan/task-dag.md and start the first unblocked task.`
-- **Use a specific prompt**: paste contents of `prompts/development/T-001-scaffold.md` into Claude.
+---
 
-### Option B: Develop manually
+## Quickstart (< 5 minutes)
 
-Work through `build/04-plan/task-dag.md` task by task. Each task has a corresponding
-prompt file in `prompts/development/` showing how Claude should approach it.
+### 1. Initialize Forge in your project
 
-## How Claude Works in This Repo
+```
+/forge:init
+```
 
-When Claude reads `CLAUDE.md` (which it does automatically), it learns:
+Forge detects your project type (API, full-stack, ML pipeline, CLI, library), scaffolds
+`pipeline/` in your project root, and writes `pipeline/state.md` — the single source of
+truth for where you are in the pipeline.
 
-1. **Where it is in the build** (read `build/05-implementation/progress.md`)
-2. **What's next** (read `build/04-plan/task-dag.md` for the first unblocked task)
-3. **Lessons from prior sessions** (read `tasks/lessons.md`)
-4. **Plugin development conventions** (read `DEVELOPMENT.md`)
+### 2. Describe your project to get requirements
 
-Then it picks up the work — exactly the experience the finished plugin will provide for end users.
+```
+/forge:srs
+```
 
-## Current Phase
+Claude interviews you about your project and produces a requirements document
+(`pipeline/01-srs/srs.md`) with REQ-IDs you'll trace through every subsequent stage.
 
-| Milestone | Status | Tasks | Description |
-|-----------|--------|-------|-------------|
-| M1: Core Skeleton | 🟢 Done | T-001–006 | Plugin scaffold + state manager + status command |
-| M2: Hook System | 🟢 Done | T-007–013 | 7 hooks across 6 lifecycle events |
-| M3: Specialized Agents | 🟢 Done | T-014–018 | 12 stage + 4 cross-stage agents; context-pruner; forge-resume |
-| M4: Memory + Lessons | 🟡 In progress | T-019–022 | Lesson extraction done; injection + cross-project memory pending |
-| M5: Adaptive Workflow | 🔲 Not started | T-023–025 | Project type detection + profiles |
-| M6: Auto-Skill Creation | 🔲 Not started | T-026–029 | Pattern mining → skill generation |
-| M7: Polish + Docs | 🔲 Not started | T-030–033 | README, contribution guide, e2e test |
+### 3. Continue through the pipeline
 
-**Tests passing**: 338 &nbsp;·&nbsp; **Tasks complete**: 19 / 33
+Each `/forge:*` command runs the next stage. You never need to remember where you are —
+Forge tells you at every session start.
 
-See `ROADMAP.md` for the full task list with dependencies.
+---
+
+## The 12-Stage Pipeline
+
+| Command | Stage | Output |
+|---------|-------|--------|
+| `/forge:srs` | 1 — Requirements | SRS with REQ-IDs |
+| `/forge:product` | 2 — Product & UX | PRD, design system, user flows |
+| `/forge:arch` | 3 — Architecture | Architecture doc, ADRs, data model |
+| `/forge:spec` | 4 — Technical Spec | Tech spec, interface spec, test strategy |
+| `/forge:plan` | 5 — Planning | Task DAG, milestones, risk register |
+| `/forge:build` | 6 — Implementation | Code, decisions log, progress tracker |
+| `/forge:eval` | 7 — Evaluation | Test results, security review, eval report |
+| `/forge:deploy` | 8 — Deployment | Deploy plan, deploy log |
+| `/forge:monitor` | 9 — Monitoring | Observability config, incident log |
+| `/forge:feedback` | 10 — Feedback | Feedback log, triage |
+| `/forge:resolve` | 11 — Resolution | Hotfixes, backlog updates |
+| `/forge:release` | 12 — Release | Release notes, release checklist |
+
+### Utility Commands
+
+| Command | What it does |
+|---------|-------------|
+| `/forge:status` | Show current stage, task, blockers, and recent history |
+| `/forge:resume` | Restore context after a session restart |
+| `/forge:retro` | Run a cycle-completion retrospective after Stage 12 |
+
+---
+
+## Gate Enforcement
+
+Every stage has **exit criteria**. Forge will not let you advance until gates pass:
+
+- Stage 1 requires REQ-IDs in the SRS and an "Open Questions" section
+- Stage 2 requires design tokens (`--color-`, `--font-`, `--space-` CSS variables) and WCAG accessibility notes
+- Stage 3 requires at least one ADR in `pipeline/03-architecture/adr/`
+- Stage 6 checks that all tasks are done before calling the build complete
+- ...and so on through Stage 12
+
+Gates are defined in `references/gate-criteria.md` and enforced by `scripts/check-gate.py`.
+Blockers stop advancement; warnings are surfaced but don't block.
+
+---
+
+## Adaptive Project Profiles
+
+Forge detects your project type at init and customizes the pipeline:
+
+| Type | How it adapts |
+|------|--------------|
+| `api` | Adds OpenAPI spec step; emphasizes auth and rate-limiting gates |
+| `fullstack` | Adds design system enforcement; CSS token gate in Stage 2 |
+| `ml-pipeline` | Adds data contract step; GPU memory and drift detection lessons |
+| `cli` | Skips UX flows; emphasizes help text and exit-code documentation |
+| `library` | Emphasizes API stability and semver constraints |
+
+Run `/forge:init` — Forge detects the type automatically, or you can override it.
+
+---
+
+## Memory and Lessons
+
+Forge maintains three tiers of memory:
+
+1. **Session context** — injected at every `SessionStart` via the hook; current stage, active task, blockers, relevant lessons
+2. **Project memory** — `pipeline/` files accumulate decisions, reflections, and stage history across sessions
+3. **Cross-project lessons** — `~/.forge/global-lessons.yaml` promotes high-frequency patterns across all your Forge projects
+
+Lessons are extracted automatically after each stage completion. When a pattern appears
+3+ times, Forge proposes a new skill you can approve, modify, or reject.
+
+---
+
+## How Hooks Work
+
+Forge installs 7 lifecycle hooks that run silently alongside your Claude Code session:
+
+| Hook | Fires | What it does |
+|------|-------|-------------|
+| `session-start.py` | Every session open | Injects current stage, task, blockers, top lessons (≤ 2 000 tokens) |
+| `prompt-submit.py` | Every user message | Detects stage intent; flags corrections for lesson extraction |
+| `pre-tool-write.py` | Before Write/Edit | Checks design token compliance, traceability, naming conventions |
+| `post-tool-use.py` | After Write/Edit/Bash | Logs tool use; appends to `patterns.jsonl` for skill mining |
+| `stop-reflect.py` | End of Claude turn | Evaluates output against gate criteria; surfaces skill proposals |
+| `subagent-stop.py` | End of subagent turn | Captures subagent reflections |
+| `session-end.py` | Session close | Writes session summary to `.forge/sessions/`; syncs lessons |
+
+Hooks never block your work unless a blocker gate fires (exit code 2).
+
+---
+
+## Project Structure (After Init)
+
+```
+your-project/
+├── pipeline/
+│   ├── state.md              ← single source of truth (stage, task, blockers)
+│   ├── 01-srs/               ← requirements
+│   ├── 02-product-ux/        ← PRD, design system
+│   ├── 03-architecture/      ← architecture docs, ADRs
+│   ├── 04-spec/              ← technical and interface specs
+│   ├── 05-plan/              ← task DAG, milestones
+│   ├── 06-implementation/    ← progress tracker, decisions log
+│   ├── 07-evaluation/        ← test results, eval report
+│   ├── 08-deploy/            ← deploy plan and log
+│   ├── 09-monitor/           ← observability config, incident log
+│   ├── 10-feedback/          ← feedback log, triage
+│   ├── 11-resolve/           ← hotfixes, backlog updates
+│   └── 12-release/           ← release notes, checklist, retrospective
+└── .forge/
+    └── lessons.yaml          ← project-local lessons
+```
+
+---
+
+## Configuration
+
+No config file needed for basic use. Advanced options via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FORGE_PROJECT_TYPE` | auto-detected | Override project type detection |
+| `FORGE_MAX_LESSON_TOKENS` | `500` | Max tokens for lesson injection |
+| `FORGE_LESSON_CAP` | `5` | Max lessons shown at session start |
+
+---
+
+## Testing Forge
+
+The integration test runs the full pipeline against a sample Todo API project:
+
+```bash
+bash tests/integration/full-pipeline.sh
+# PASS: full-pipeline integration test
+#   29 artifacts present
+#   12/12 stage gate checks passed
+#   traceability chain intact (REQ → spec, FEAT → arch, T-IDs in plan)
+```
+
+Unit tests:
+
+```bash
+python3 -m pytest tests/ -q
+# 532 passed
+```
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and
+[docs/agent-authoring.md](docs/agent-authoring.md) for step-by-step guides on:
+
+- Adding a new agent persona
+- Adding a pipeline stage
+- Adding a project-type profile override
+
+---
+
+## Milestones
+
+| Milestone | Status | Description |
+|-----------|--------|-------------|
+| M1: Core Skeleton | 🟢 Done | Plugin scaffold, state manager, `/forge:status` |
+| M2: Hook System | 🟢 Done | 7 hooks across 6 lifecycle events |
+| M3: Specialized Agents | 🟢 Done | 12 stage + 4 cross-stage agents |
+| M4: Memory + Lessons | 🟢 Done | Lesson extraction, injection, cross-project memory |
+| M5: Adaptive Workflow | 🟢 Done | Project type detection + 5 profiles |
+| M6: Auto-Skill Creation | 🟢 Done | Pattern mining → skill proposals → approval flow |
+| M7: Polish + Docs | 🟡 In progress | README, e2e test, packaging |
+
+---
 
 ## License
 
-MIT (TBD — verify before publishing).
+MIT
 
 ## Author
 
-Saddam · built with Claude Code
+Saddam · built with [Claude Code](https://claude.ai/code)
