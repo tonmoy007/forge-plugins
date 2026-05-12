@@ -6,8 +6,8 @@
 ## Current State
 
 - **Active milestone**: M3 — Skills
-- **Current task**: T-020
-- **Last session ended**: 2026-05-11
+- **Current task**: T-021
+- **Last session ended**: 2026-05-12
 
 ## Task Status
 
@@ -32,7 +32,7 @@
 | T-017 | 🟢 done | 2026-05-11 | 2026-05-11 | — | context-pruner.py, 35 tests, stage 6 exclusions verified |
 | T-018 | 🟢 done | 2026-05-11 | 2026-05-11 | — | forge-resume SKILL.md; uses context-pruner + state-manager |
 | T-019 | 🟢 done | 2026-05-11 | 2026-05-11 | — | extract-lessons.py, 43 tests, done-when criterion verified |
-| T-020 | 🔲 todo | — | — | — | |
+| T-020 | 🟢 done | 2026-05-12 | 2026-05-12 | — | 3 new tests: ml/gpu done-when, project-type exclusion, frequency sort |
 | T-021 | 🔲 todo | — | — | — | |
 | T-022 | 🔲 todo | — | — | — | |
 | T-023 | 🔲 todo | — | — | — | |

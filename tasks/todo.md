@@ -4,19 +4,26 @@
 
 ---
 
-## Active Task: T-020
+## Active Task: T-021
 
-**Goal**: Update `hooks/session-start.py` — filter lessons by stage tags + project type, include top N relevant ones.
+**Goal**: Create `scripts/sync-lessons.py` — sync `tasks/lessons.md` ↔ `.forge/lessons.yaml` automatically.
 
 **Context**:
-- Done when: Stage 6 ML project session shows GPU lessons, not docs lessons.
-- See `build/04-plan/task-dag.md` T-020.
-- REQ-IDs: REQ-044
-- Depends on: T-007 (session-start.py exists), T-019 (lessons have tags)
+- Done when: Edit lessons.md → next session-start regenerates lessons.yaml
+- See `build/04-plan/task-dag.md` T-021.
+- REQ-IDs: REQ-045
+- Depends on: T-019 (lessons have tags)
 
 ---
 
 ## Archive
+
+### T-020 — Lesson injection in SessionStart ✅ 2026-05-12
+- `hooks/session-start.py` already had `_load_lessons()` with stage + project_type filtering (built in T-007)
+- Added 3 new tests: done-when (ML/GPU), project-type exclusion, frequency-sort order
+- 341/341 tests pass
+
+
 
 ### T-019 — extract-lessons.py ✅ 2026-05-11
 - `scripts/extract-lessons.py` — CLI: `--input`, `--output`, `--dry-run`, `--since`, `--llm`

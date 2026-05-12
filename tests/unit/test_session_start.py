@@ -180,6 +180,86 @@ class TestLessonsFiltering:
         assert m is not None
         assert int(m.group(1)) <= 5
 
+    def test_ml_project_shows_gpu_lesson_not_docs_lesson(self, tmp_path):
+        # done-when criterion for T-020: stage 6 ML project sees GPU lessons,
+        # not documentation-only lessons
+        _make_state(tmp_path, stage=6, project_type="ml-pipeline")
+        _make_lessons(tmp_path, [
+            {
+                "id": "L-gpu",
+                "stage": [6],
+                "project_types": ["ml-pipeline"],
+                "trigger": "GPU out-of-memory error during training",
+                "rule": "always set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True",
+                "why": "prevents fragmentation OOM",
+                "frequency": 4,
+                "last_used": "2026-05-10",
+                "tags": ["gpu", "ml"],
+            },
+            {
+                "id": "L-docs",
+                "stage": [1],
+                "project_types": ["documentation"],
+                "trigger": "writing docs for a docs-only project",
+                "rule": "use mkdocs not sphinx",
+                "why": "team convention",
+                "frequency": 2,
+                "last_used": "2026-05-01",
+                "tags": ["docs"],
+            },
+        ])
+        r = _run(str(tmp_path))
+        assert "GPU out-of-memory" in r.stdout
+        assert "mkdocs" not in r.stdout
+
+    def test_non_matching_project_type_excluded(self, tmp_path):
+        _make_state(tmp_path, stage=6, project_type="fullstack")
+        _make_lessons(tmp_path, [{
+            "id": "L-001",
+            "stage": [],
+            "project_types": ["ml-pipeline"],  # only for ML projects
+            "trigger": "ml-only lesson trigger",
+            "rule": "use GPU",
+            "why": "ML needs GPU",
+            "frequency": 5,
+            "last_used": "2026-05-01",
+            "tags": ["ml"],
+        }])
+        r = _run(str(tmp_path))
+        assert "ml-only lesson trigger" not in r.stdout
+
+    def test_lessons_sorted_by_frequency_descending(self, tmp_path):
+        _make_state(tmp_path, stage=6, project_type="fullstack")
+        _make_lessons(tmp_path, [
+            {
+                "id": "L-low",
+                "stage": [],
+                "project_types": [],
+                "trigger": "low-frequency trigger",
+                "rule": "rare rule",
+                "why": "why",
+                "frequency": 1,
+                "last_used": "2026-05-01",
+                "tags": [],
+            },
+            {
+                "id": "L-high",
+                "stage": [],
+                "project_types": [],
+                "trigger": "high-frequency trigger",
+                "rule": "common rule",
+                "why": "why",
+                "frequency": 10,
+                "last_used": "2026-05-01",
+                "tags": [],
+            },
+        ])
+        r = _run(str(tmp_path))
+        high_pos = r.stdout.find("high-frequency")
+        low_pos = r.stdout.find("low-frequency")
+        assert high_pos != -1 and low_pos != -1
+        assert high_pos < low_pos
+
 
 class TestTokenBudget:
     def test_output_under_2000_tokens(self, tmp_path):
