@@ -4,20 +4,26 @@
 
 ---
 
-## Active Task: T-031
+## Active Task: T-032
 
-**Goal**: `CONTRIBUTING.md` + `docs/agent-authoring.md` — guides explaining how to extend Forge: add new agents, stages, or project-type profiles.
+**Goal**: End-to-end integration test — full pipeline run on `examples/sample-todo-api/`. All 12 stages produce artifacts.
 
 **Context**:
-- Done when: someone can add a new stage by following the guide
-- See `build/04-plan/task-dag.md` T-031.
-- REQ-IDs: — (no SRS REQ; foundational for community contribution)
-- Depends on: T-014 (agent personas — done)
-- Note: T-030 (README.md) is blocked on T-032 (integration test) per the DAG; T-032 in turn requires T-031. So sequence is T-031 → T-032 → T-030 → T-033.
+- Done when: `tests/integration/full-pipeline.sh` exits 0 with all artifacts present and traceability chain holds
+- See `build/04-plan/task-dag.md` T-032.
+- REQ-IDs: NFR-011, NFR-012
+- Depends on: All previous tasks (T-031 now done)
+- Note: T-030 (README.md) and T-033 (package/publish) both block on this.
 
 ---
 
 ## Archive
+
+### T-031 — CONTRIBUTING.md + agent authoring guide ✅ 2026-05-12
+- `CONTRIBUTING.md` — rewritten from stub; covers setup, repo map, dev workflow, three extension paths, testing conventions, commit format, PR checklist
+- `docs/agent-authoring.md` — three complete walkthroughs: adding an agent persona (with full example of security-reviewer), adding a stage (with full example of forge-ux-research including SKILL.md template, gate criteria, profile wiring, and structural test pattern), adding a project-type profile override (with example data-contract gate for API profile)
+- Each section ends with a verification checklist; quick-reference table at end
+- 531/531 tests pass; plugin valid
 
 ### T-029 — forge-retro skill ✅ 2026-05-12
 - `skills/forge-retro/SKILL.md` — pre-flight, 8 workflow steps, verification block
