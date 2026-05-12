@@ -86,3 +86,90 @@ def test_go_mod_with_cmd_dir_returns_cli():
         os.makedirs(os.path.join(tmpdir, "cmd"))
         result = detect(tmpdir)
         assert result["type"] == "cli"
+
+
+# ---------------------------------------------------------------------------
+# T-023: ML detection enhancements
+# ---------------------------------------------------------------------------
+
+def test_train_py_and_torch_returns_ml_pipeline():
+    # done-when criterion: train.py + torch in requirements.txt → ml-pipeline
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "train.py"), "w").write("import torch\n")
+        open(os.path.join(tmpdir, "requirements.txt"), "w").write("torch==2.1.0\nnumpy\n")
+        result = detect(tmpdir)
+        assert result["type"] == "ml-pipeline"
+        assert result["confidence"] >= 0.9
+
+
+def test_train_py_and_torch_high_confidence():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "train.py"), "w").write("# training script\n")
+        open(os.path.join(tmpdir, "requirements.txt"), "w").write("torch>=2.0\n")
+        result = detect(tmpdir)
+        assert result["confidence"] == 0.95
+
+
+def test_train_py_alone_returns_ml_pipeline():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "train.py"), "w").write("# training\n")
+        result = detect(tmpdir)
+        assert result["type"] == "ml-pipeline"
+        assert result["confidence"] >= 0.75
+
+
+def test_jupyter_notebook_returns_ml_pipeline():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "analysis.ipynb"), "w").write("{}")
+        result = detect(tmpdir)
+        assert result["type"] == "ml-pipeline"
+
+
+def test_sklearn_in_requirements_returns_ml_pipeline():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "requirements.txt"), "w").write("scikit-learn>=1.0\npandas\n")
+        result = detect(tmpdir)
+        assert result["type"] == "ml-pipeline"
+
+
+def test_train_py_indicator_in_result():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "train.py"), "w").write("")
+        open(os.path.join(tmpdir, "requirements.txt"), "w").write("torch\n")
+        result = detect(tmpdir)
+        combined = " ".join(result["indicators"]).lower()
+        assert "train.py" in combined
+
+
+# ---------------------------------------------------------------------------
+# T-023: API type detection
+# ---------------------------------------------------------------------------
+
+def test_fastapi_in_requirements_returns_api():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "requirements.txt"), "w").write("fastapi\nuvicorn\n")
+        result = detect(tmpdir)
+        assert result["type"] == "api"
+        assert result["confidence"] >= 0.85
+
+
+def test_flask_in_requirements_returns_api():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "requirements.txt"), "w").write("flask>=2.0\n")
+        result = detect(tmpdir)
+        assert result["type"] == "api"
+
+
+def test_django_in_requirements_returns_api():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        open(os.path.join(tmpdir, "requirements.txt"), "w").write("django>=4.0\n")
+        result = detect(tmpdir)
+        assert result["type"] == "api"
+
+
+def test_routes_dir_with_app_py_returns_api():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.makedirs(os.path.join(tmpdir, "routes"))
+        open(os.path.join(tmpdir, "app.py"), "w").write("from flask import Flask\n")
+        result = detect(tmpdir)
+        assert result["type"] == "api"

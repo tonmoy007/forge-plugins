@@ -17,9 +17,14 @@ Use this skill whenever the user wants to:
 ## Steps
 
 1. Run `bash ${CLAUDE_PLUGIN_DIR}/scripts/init-pipeline.sh` to create the pipeline directory structure
-2. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/detect-project-type.py` to identify the project type
+2. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/detect-project-type.py --cwd .` to identify the project type
+   - Detected types: `ml-pipeline`, `fullstack`, `api`, `cli`, `library`, `unknown`
+   - ML signals: `train.py`, Jupyter notebooks (`.ipynb`), ML libraries (torch, tensorflow, sklearn…)
+   - API signals: API framework in requirements (fastapi, flask, django…), `routes/` or `api/` directory
+   - If confidence < 0.7, ask the user: *"I detected [type] (confidence [N]%) — does that sound right?"*
 3. Update `pipeline/state.md` — replace `project_type: unknown` with the detected type
-4. Print a welcome message listing what was created
+   - The assigned profile influences which lessons are surfaced and which gate criteria are highlighted in future sessions
+4. Print a welcome message listing what was created and the detected project type
 5. Suggest the next command: `/forge:srs` to begin Stage 1 (Requirements), or `/forge:resume` if this project already has a pipeline in progress
 
 ## Verification

@@ -4,19 +4,24 @@
 
 ---
 
-## Active Task: T-023
+## Active Task: T-024
 
-**Goal**: Update `scripts/detect-project-type.py` — detect ML project from `train.py` + `torch` in requirements.txt; update `skills/forge-init/SKILL.md`.
+**Goal**: Create `references/project-type-profiles.md` — per-type stage emphasis, criteria additions, and prompt overrides for all 5 profiles.
 
 **Context**:
-- Done when: ML project (has `train.py`, `requirements.txt` with torch) → "ml-pipeline" profile assigned
-- See `build/04-plan/task-dag.md` T-023.
-- REQ-IDs: REQ-060
-- Depends on: T-002
+- Done when: All 5 profiles (ml-pipeline, fullstack, api, cli, library) defined with concrete overrides for at least 3 stages each
+- See `build/04-plan/task-dag.md` T-024.
+- REQ-IDs: REQ-061, REQ-062
+- Depends on: T-005 (gate-criteria.md)
 
 ---
 
 ## Archive
+
+### T-023 — Project type detection in forge-init ✅ 2026-05-12
+- `scripts/detect-project-type.py` rewritten: ML (train.py, *.ipynb, ML libs), API (fastapi/flask/django, routes/ dir), all 5 types
+- `skills/forge-init/SKILL.md` updated: profile assignment step, low-confidence prompt, profile influence on lessons/gates
+- 10 new tests; 427/427 suite pass
 
 ### T-022 — Tier 3 cross-project memory ✅ 2026-05-12
 - `scripts/promote-lessons.py` — scans registered projects, clusters lessons by trigger similarity, promotes lessons in 3+ projects to `~/.forge/global-lessons.yaml`
