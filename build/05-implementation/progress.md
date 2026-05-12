@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M6 — Auto-Skill Creation
-- **Current task**: T-027
+- **Current task**: T-028
 - **Last session ended**: 2026-05-12
 
 ## Task Status
@@ -39,7 +39,7 @@
 | T-024 | 🟢 done | 2026-05-12 | 2026-05-12 | — | fullstack profile extended (stage_3 + stage_6); all 5 profiles ≥3 stage overrides; YAML valid; 427/427 tests pass |
 | T-025 | 🟢 done | 2026-05-12 | 2026-05-12 | — | load-profile.py + 24 tests; 12 stage skills wired to call it; ML stage 7 surfaces G7-ML-005 drift; 451/451 tests pass |
 | T-026 | 🟢 done | 2026-05-12 | 2026-05-12 | — | sliding 3-tool window with sha1 signature; 22 tests; done-when 3-occurrence signature stability verified; 455/455 |
-| T-027 | 🔲 todo | — | — | — | |
+| T-027 | 🟢 done | 2026-05-12 | 2026-05-12 | — | mine-skills.py + 33 tests; freq≥3 → SKILL.md draft with name/description/steps; blacklist + skill-name collision filters; 488/488 tests pass |
 | T-028 | 🔲 todo | — | — | — | |
 | T-029 | 🔲 todo | — | — | — | |
 | T-030 | 🔲 todo | — | — | — | |

@@ -4,19 +4,28 @@
 
 ---
 
-## Active Task: T-027
+## Active Task: T-028
 
-**Goal**: `scripts/mine-skills.py` — aggregate `.forge/patterns.jsonl` records by signature, filter by frequency threshold, and generate SKILL.md drafts for repeated workflows.
+**Goal**: `hooks/stop-reflect.py` (update) — surface mined skill proposals to the user and handle approve/modify/reject. Approved → installed into `skills/`; rejected → signature appended to `.forge/skill-blacklist.txt`; modified → persisted.
 
 **Context**:
-- Done when: pattern with frequency=3 produces a SKILL.md draft with `name`, `description`, and `steps`
-- See `build/04-plan/task-dag.md` T-027.
-- REQ-IDs: REQ-071, REQ-072
-- Depends on: T-026 (pattern tracker), T-016 (skill-miner agent)
+- Done when: user can install proposed skill, modifications are persisted, rejections blacklist pattern
+- See `build/04-plan/task-dag.md` T-028.
+- REQ-IDs: REQ-073, REQ-074
+- Depends on: T-027 (mine-skills.py)
 
 ---
 
 ## Archive
+
+### T-027 — mine-skills.py ✅ 2026-05-12
+- `scripts/mine-skills.py` — stdlib only, executable; CLI flags `--cwd`, `--session`, `--threshold` (default 3), `--dry-run`, `--plugin-dir`
+- Algorithm: parse `.forge/patterns.jsonl` → aggregate by `signature` → filter ≥ threshold → drop blacklisted sigs + skill-name collisions → render deterministic SKILL.md draft to `.forge/proposed-skills/<slug>/SKILL.md`
+- Draft frontmatter has `name`, `description`, `status: proposed`; body has `## When to Use`, `## Steps`, `## Verification`, `## Provenance` (signature, first_seen, last_seen, occurrences, sessions)
+- Slug derivation: MCP-prefixed tools normalized to last `__`-segment, joined as `forge-<t1>-<t2>-<t3>`
+- Exit code = number of proposals (capped 100), stdout prints each written path
+- `tests/unit/test_mine_skills.py` — 33 tests; done-when verified end-to-end + smoke test
+- 488/488 tests pass; plugin valid
 
 ### T-026 — Pattern tracker (sliding 3-tool window with signature) ✅ 2026-05-12
 - `hooks/post-tool-use.py` — replaced ad-hoc detector with a sliding 3-tool window detector
