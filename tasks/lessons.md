@@ -49,6 +49,12 @@
 - **Why**: `\s*` is greedy but can match 0; when the lookahead fails at `\s*=N`, the engine retries with `\s*=N-1`, shifting the lookahead position before the space — where the keyword no longer appears.
 - **Tags**: [python, regex, hooks, pre-tool-write]
 
+### 2026-05-12 — `@dataclass` on importlib-loaded modules needs `sys.modules` registration
+- **Trigger**: Loading a hyphenated script via `importlib.util.spec_from_file_location(...)` + `module_from_spec(...)` + `exec_module(...)` when the script defines `@dataclass` classes with `field(default_factory=...)`
+- **Rule**: Insert `sys.modules[spec.name] = module` *before* calling `spec.loader.exec_module(module)`. Without it, `@dataclass` introspection fails with `AttributeError: 'NoneType' object has no attribute '__dict__'` because `sys.modules.get(cls.__module__)` returns `None`.
+- **Why**: Python 3.12 `dataclasses._is_type` resolves the defining module via `sys.modules.get(cls.__module__).__dict__`. A module created with `module_from_spec` is not auto-registered, so the lookup returns `None` and crashes at *import* time (not at test time), breaking collection entirely.
+- **Tags**: [python, testing, importlib, dataclasses]
+
 ### 2026-05-07 — Hyphenated script filenames can't be imported directly
 - **Trigger**: Writing tests for any script in `scripts/` with a hyphen in its filename (e.g. `validate-plugin.py`, `check-gate.py`)
 - **Rule**: Use `importlib.util.spec_from_file_location` to import by file path, not by module name. Never name test imports after the hyphenated filename.
