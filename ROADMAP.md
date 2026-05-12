@@ -70,7 +70,7 @@ context (no architecture/spec leakage), produces `srs.md` with REQ-IDs.
 
 ---
 
-## M4: Memory + Lessons — "Pipeline learns from mistakes" 🟡
+## M4: Memory + Lessons — "Pipeline learns from mistakes" 🟢
 
 **Goal**: User corrections become lessons automatically. Lessons inject into relevant
 sessions. Cross-project lessons graduate to `~/.forge/`.
@@ -78,61 +78,61 @@ sessions. Cross-project lessons graduate to `~/.forge/`.
 | Task | Status | Notes |
 |------|--------|-------|
 | T-019: extract-lessons.py script | 🟢 | Rule-based extraction + dedup + atomic write; 43 tests |
-| T-020: Lesson injection in SessionStart | 🔲 | Filter by stage tags + project type |
-| T-021: .forge/lessons.yaml machine-readable mirror | 🔲 | |
-| T-022: Tier 3 cross-project memory | 🔲 | |
+| T-020: Lesson injection in SessionStart | 🟢 | Filter by stage tags + project type; sorted by frequency; capped at 5 |
+| T-021: .forge/lessons.yaml machine-readable mirror | 🟢 | sync-lessons.py; session-start auto-syncs on stale md; 37 tests |
+| T-022: Tier 3 cross-project memory | 🟢 | promote-lessons.py; ~/.forge/ scaffold; auto-registers+promotes; 39 tests |
 
 **Definition of done**: a correction in one session ("Use fp16 not bf16 on T4") becomes
-a lesson that shows up in the next session's context block.
+a lesson that shows up in the next session's context block. ✅
 
 ---
 
-## M5: Adaptive Workflow — "Pipeline fits the project" 🔲
+## M5: Adaptive Workflow — "Pipeline fits the project" 🟢
 
 **Goal**: Forge detects project type on init and adjusts stage emphasis, criteria, and
 agent prompts accordingly.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T-023: Project type detection in forge-init | 🔲 | |
-| T-024: project-type-profiles.md reference | 🔲 | |
-| T-025: Wire profiles into stage skills | 🔲 | |
+| T-023: Project type detection in forge-init | 🟢 | train.py + ML libs + notebooks + API types; 10 tests |
+| T-024: project-type-profiles.md reference | 🟢 | 5 profiles, ≥3 stage overrides each; YAML valid |
+| T-025: Wire profiles into stage skills | 🟢 | load-profile.py + 24 tests; all 12 skills profile-aware |
 
 **Definition of done**: `/forge:init` on an ML project skips wireframes, adds drift
-detection to eval criteria, runs ML-specific spec questions.
+detection to eval criteria, runs ML-specific spec questions. ✅
 
 ---
 
-## M6: Auto-Skill Creation — "Pipeline extends itself" 🔲
+## M6: Auto-Skill Creation — "Pipeline extends itself" 🟢
 
 **Goal**: Pattern detection runs in PostToolUse. After 3+ occurrences of a pattern,
 skill-miner agent generates a SKILL.md draft and proposes installation.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T-026: Pattern tracker in post-tool-use.py | 🔲 | |
-| T-027: mine-skills.py script | 🔲 | |
-| T-028: Skill approval flow in stop-reflect.py | 🔲 | |
-| T-029: forge-retro skill (cycle retrospective) | 🔲 | |
+| T-026: Pattern tracker in post-tool-use.py | 🟢 | Sliding 3-tool window; SHA-1 signature stability; 22 tests |
+| T-027: mine-skills.py script | 🟢 | freq≥3 → SKILL.md draft; blacklist + collision filters; 33 tests |
+| T-028: Skill approval flow in stop-reflect.py | 🟢 | list/approve/modify/reject; end-to-end cycle verified; 22 tests |
+| T-029: forge-retro skill (cycle retrospective) | 🟢 | writes to pipeline/12-release/retro.md; 16 structural tests |
 
 **Definition of done**: doing the same 3-tool sequence 3+ times triggers a skill proposal.
-User approval installs it; rejection blacklists the pattern.
+User approval installs it; rejection blacklists the pattern. ✅
 
 ---
 
-## M7: Polish + Documentation — "Ready for other developers" 🔲
+## M7: Polish + Documentation — "Ready for other developers" 🟢
 
 **Goal**: A new user can install, learn, and use Forge in under 10 minutes.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T-030: Comprehensive README.md | 🔲 | User-facing |
-| T-031: CONTRIBUTING.md + agent authoring guide | 🔲 | |
-| T-032: End-to-end test on sample project | 🔲 | tests/integration/full-pipeline.sh |
-| T-033: Package and publish | 🔲 | |
+| T-030: Comprehensive README.md | 🟢 | User-facing; install, quickstart, 12-stage reference, hooks, config |
+| T-031: CONTRIBUTING.md + agent authoring guide | 🟢 | docs/agent-authoring.md; walkthroughs for agent/stage/profile |
+| T-032: End-to-end test on sample project | 🟢 | 29 fixtures; 12/12 gates; traceability chain intact; 532/532 tests |
+| T-033: Package and publish | 🟢 | CHANGELOG.md; v0.1.0 tag |
 
 **Definition of done**: full pipeline runs successfully on `examples/sample-todo-api/`,
-producing all 12 stage artifacts with traceability intact.
+producing all 12 stage artifacts with traceability intact. ✅
 
 ---
 

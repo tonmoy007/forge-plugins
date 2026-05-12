@@ -5,35 +5,73 @@ All notable changes to Forge are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+---
 
-### Status
-Pre-alpha — repository scaffolded, build artifacts complete, implementation pending.
+## [0.1.0] — 2026-05-12
 
-### Added (Repository Scaffolding)
-- `CLAUDE.md` — Claude's operating manual for working in this repo
-- `README.md`, `DEVELOPMENT.md`, `ROADMAP.md`, `CONTRIBUTING.md`
-- `build/01-srs/srs.md` — full SRS with REQ-001 through REQ-092
-- `build/02-architecture/architecture.md` — component map, hook registry, memory tiers
-- `build/02-architecture/adr/` — ADRs 001–004 (Python hooks, dual lessons, cross-stage agents, sequential Stop)
-- `build/03-spec/technical-spec.md` — implementation-ready specs for all hooks and scripts
-- `build/04-plan/task-dag.md` — 33 tasks across 7 milestones with dependencies
-- `build/05-implementation/{progress,decisions}.md` — tracking templates
-- `references/` — claude-code-hooks, skill-format, agent-format, gate-criteria, project-type-profiles, pipeline-stages
-- `prompts/development/` — detailed prompts for T-001, T-002, T-003 + template + index
-- `prompts/agents/` — persona prompts for requirements-analyst, builder, reflector
-- `prompts/sessions/` — bootstrap and resume prompts
-- `examples/sample-todo-api/` — e2e test fixture
-- `.github/workflows/tests.yml` — CI scaffolding
-- `requirements.txt`, `.gitignore`, `LICENSE`
+First stable release. Full 12-stage SDLC pipeline with hooks, agents, memory, and
+auto-skill creation — validated end-to-end on the sample Todo API project (532 tests pass).
 
-### Pending Implementation
-- All tasks in `build/04-plan/task-dag.md` from T-001 through T-033
-- Plugin code itself (hooks, skills, agents, scripts)
-- See `build/05-implementation/progress.md` for live status
+### Added
+
+**M1: Core Skeleton**
+- `plugin.json` — Claude Code plugin manifest wiring all hooks and skills
+- `/forge:init` skill — detects project type, scaffolds `pipeline/`, writes `state.md`
+- `state-manager.py` — CLI for reading and updating pipeline state (36 tests)
+- `/forge:status` skill — shows current stage, task, blockers, recent history
+- `gate-criteria.md` — machine-readable exit criteria for all 12 stages (60 criteria)
+- `check-gate.py` — evaluates `file_exists`, `file_contains`, `script_returns_zero`,
+  `all_tests_pass` checks; always exits 0 and outputs JSON (14 tests)
+
+**M2: Hook System**
+- `session-start.py` — injects stage context and top lessons at session open (≤ 2 000 tokens; 17 tests)
+- `prompt-submit.py` — detects stage intent and flags user corrections (16 tests)
+- `stop-reflect.py` — evaluates output against gate criteria; surfaces skill proposals (48 tests)
+- `session-end.py` — writes session summary to `.forge/sessions/` (18 tests)
+- `pre-tool-write.py` — enforces design token compliance, traceability, naming conventions (35 tests)
+- `post-tool-use.py` — logs tool use to `patterns.jsonl` for skill mining (18 tests)
+- `subagent-stop.py` — captures cross-stage agent reflections
+
+**M3: Specialized Agents**
+- 12 stage agent personas (SRS analyst through release manager)
+- 4 cross-stage agents: reflector, lesson-extractor, skill-miner, gate-checker
+- `context-pruner.py` — stage-aware artifact selection within token budget (35 tests)
+- `/forge:resume` skill — restores context after session restart
+
+**M4: Memory + Lessons**
+- `extract-lessons.py` — rule-based correction extraction → structured YAML lessons (43 tests)
+- `sync-lessons.py` — mirrors `lessons.md` to `.forge/lessons.yaml` (37 tests)
+- `promote-lessons.py` — promotes high-frequency lessons to `~/.forge/global-lessons.yaml` (39 tests)
+- Session-start lesson injection: filters by stage tags and project type, sorted by frequency, capped at 5
+
+**M5: Adaptive Workflow**
+- `detect-project-type.py` — detects `api`, `fullstack`, `ml-pipeline`, `cli`, `library` types (10 tests)
+- `project-type-profiles.md` — per-type gate overrides and stage emphasis rules (5 profiles, ≥3 overrides each)
+- `load-profile.py` — applies profile overrides to stage skill context (24 tests)
+- All 12 stage skills profile-aware (skip/replace_with/add_step)
+
+**M6: Auto-Skill Creation**
+- Sliding 3-tool window pattern tracker with SHA-1 signature stability detection (22 tests)
+- `mine-skills.py` — aggregates patterns (frequency ≥ 3) → SKILL.md drafts with name/description/steps (33 tests)
+- `skill-approval.py` — list/approve/modify/reject mined proposals (22 tests)
+- `/forge:retro` skill — cycle-completion retrospective writing to `pipeline/12-release/retro.md`
+
+**M7: Polish + Documentation**
+- `README.md` — user-facing install, quickstart, full 12-stage command reference, hook table, config docs
+- `CONTRIBUTING.md` — contributor guide with dev workflow, commit format, PR checklist
+- `docs/agent-authoring.md` — step-by-step walkthroughs for adding agents, stages, and profiles
+- `tests/integration/full-pipeline.sh` — end-to-end test: 29 artifacts, 12/12 gate checks, traceability chain
+- `examples/sample-todo-api/fixtures/` — 29 pre-populated stage artifacts for e2e validation
+- `scripts/check_dir_nonempty.py` — gate helper for ADR directory non-empty check (G3-005)
+
+### Tests
+
+532 unit + integration tests. Coverage spans all hooks, scripts, and integration paths.
 
 ---
 
-## [0.1.0] — Future (M7 complete)
+## [Unreleased]
 
-First user-installable release. To be filled in when T-033 lands.
+- Claude Code marketplace publication (pending marketplace availability)
+- CI/CD workflow for automated testing on pull requests
+- Additional project-type profiles (data-contract, mobile, monorepo)

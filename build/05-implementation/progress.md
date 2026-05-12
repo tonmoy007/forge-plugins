@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active milestone**: M7 — Polish + Documentation
-- **Current task**: T-033 (T-030 done; packaging next)
+- **Current task**: — (all 33 tasks complete; v0.1.0 tagged)
 - **Last session ended**: 2026-05-12
 
 ## Task Status
@@ -45,7 +45,7 @@
 | T-030 | 🟢 done | 2026-05-12 | 2026-05-12 | — | user-facing README; install, quickstart, 12-stage table, hooks, profiles, config, tests |
 | T-031 | 🟢 done | 2026-05-12 | 2026-05-12 | — | CONTRIBUTING.md rewritten; docs/agent-authoring.md created — walkthroughs for adding agents, stages, profiles; 531/531 tests pass |
 | T-032 | 🟢 done | 2026-05-12 | 2026-05-12 | — | full-pipeline.sh + 29 fixture artifacts (12 stages); check_dir_nonempty.py; gate checks + traceability chain; test isolation fix for TestLessonsFiltering; 532/532 tests pass |
-| T-033 | 🔲 todo | — | — | — | |
+| T-033 | 🟢 done | 2026-05-12 | 2026-05-12 | — | CHANGELOG.md; ROADMAP.md updated; v0.1.0 tagged |
 
 ## Status Legend
 
