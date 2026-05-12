@@ -19,13 +19,14 @@ allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 1. Read `pipeline/state.md` — confirm Forge project.
 2. Confirm `pipeline/10-feedback/triage-report.md` exists. If not: "Complete Stage 10 first (`/forge:feedback`)."
 3. Read the triage report and surface the critical/high items to the user before starting.
+4. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 11` to surface any project-type resolution overrides (e.g., library projects: every fix must consider semver impact and backward compatibility).
 
 ## Steps
 
 1. Read `agents/resolver.md` to load the Resolver persona.
 2. Adopt that persona — you are now the Resolver.
 3. Read `pipeline/10-feedback/triage-report.md`. Start with the highest severity item.
-4. Follow the Resolver workflow: reproduce → root cause → targeted fix → regression test → commit.
+4. Follow the Resolver workflow: reproduce → root cause → targeted fix → regression test → commit. Apply profile-specific constraints (e.g., for library projects, classify each fix as patch/minor/major and document any breaking-change migration).
 5. Update `pipeline/11-resolution/resolution-log.md` with each resolved item.
 6. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 11` after first resolution.
 

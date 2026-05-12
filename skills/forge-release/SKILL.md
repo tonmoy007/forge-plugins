@@ -20,14 +20,15 @@ allowed-tools: [Read, Write, Bash]
 2. Confirm `pipeline/07-evaluation/eval-report.md` exists and shows overall pass.
    If not: "A passing evaluation (Stage 7) is required before cutting a release."
 3. Check that no critical or high-severity items from triage remain unresolved.
+4. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 12` to load project-type release criteria. For library projects this surfaces G12-LIB-001 (Keep a Changelog format), G12-LIB-002 (semver enforced — breaking changes → major bump), and G12-LIB-003 (migration guide for breaking changes) — all must be addressed in the release artifacts.
 
 ## Steps
 
 1. Read `agents/release-manager.md` to load the Release Manager persona.
 2. Adopt that persona — you are now the Release Manager.
 3. Run `git log` via Bash to enumerate commits since the last release tag.
-4. Follow the Release Manager workflow: classify changes, determine version bump, write changelog and release notes.
-5. Write `pipeline/12-release/CHANGELOG.md` and `pipeline/12-release/release-notes.md`.
+4. Follow the Release Manager workflow: classify changes, determine version bump, write changelog and release notes. Address every profile `additional_criteria` from pre-flight as a deliverable.
+5. Write `pipeline/12-release/CHANGELOG.md` and `pipeline/12-release/release-notes.md` (plus a migration guide when the profile requires it).
 6. Bump version fields in the project's version files (package.json, pyproject.toml, etc.).
 7. Write `pipeline/12-release/post-release-checklist.md`.
 8. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 12` to mark Stage 12 active.

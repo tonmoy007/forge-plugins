@@ -5,8 +5,8 @@
 
 ## Current State
 
-- **Active milestone**: M5 — Adaptive Workflow
-- **Current task**: T-025
+- **Active milestone**: M6 — Auto-Skill Creation
+- **Current task**: T-026
 - **Last session ended**: 2026-05-12
 
 ## Task Status
@@ -37,7 +37,7 @@
 | T-022 | 🟢 done | 2026-05-12 | 2026-05-12 | — | promote-lessons.py, ~/.forge/ scaffold, 39 tests; session-start auto-registers+promotes |
 | T-023 | 🟢 done | 2026-05-12 | 2026-05-12 | — | detect-project-type.py: train.py+ML libs+notebooks+API types; 10 new tests; forge-init SKILL.md updated |
 | T-024 | 🟢 done | 2026-05-12 | 2026-05-12 | — | fullstack profile extended (stage_3 + stage_6); all 5 profiles ≥3 stage overrides; YAML valid; 427/427 tests pass |
-| T-025 | 🔲 todo | — | — | — | |
+| T-025 | 🟢 done | 2026-05-12 | 2026-05-12 | — | load-profile.py + 24 tests; 12 stage skills wired to call it; ML stage 7 surfaces G7-ML-005 drift; 451/451 tests pass |
 | T-026 | 🔲 todo | — | — | — | |
 | T-027 | 🔲 todo | — | — | — | |
 | T-028 | 🔲 todo | — | — | — | |

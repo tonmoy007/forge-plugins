@@ -20,16 +20,17 @@ allowed-tools: [Read, Write, Bash]
 2. Confirm `pipeline/07-evaluation/eval-report.md` exists and shows overall pass.
    If eval-report is missing or shows failures: "Stage 7 evaluation must pass before deploying."
 3. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/check-gate.py --stage 7` to check gate status.
+4. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 8` to load project-type overrides. **If the profile sets `skip: true` (CLI, library) the conventional service-deploy is replaced by `package-publish` — produce a package-spec artifact instead of a deployment runbook.**
 
 ## Steps
 
 1. Read `agents/devops.md` to load the DevOps persona.
 2. Adopt that persona — you are now the DevOps Engineer.
 3. Read `pipeline/03-architecture/architecture.md` for topology and `pipeline/04-technical-spec/technical-spec.md` for config needs.
-4. Follow the DevOps workflow: pre-deployment checklist, ordered steps, health checks, rollback plan.
-5. Write `pipeline/08-deployment/deployment-plan.md` and `pipeline/08-deployment/runbook.md`.
-6. Execute deployment steps (with user confirmation for destructive operations).
-7. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 8` after successful deploy.
+4. Follow the DevOps workflow: pre-deployment checklist, ordered steps, health checks, rollback plan. If the profile specifies `replace_with: package-publish`, follow that flow instead (build artifacts, registry credentials, version verification, publish, post-publish smoke).
+5. Write `pipeline/08-deployment/deployment-plan.md` and `pipeline/08-deployment/runbook.md` — or `pipeline/08-deployment/package-spec.md` when `replace_with: package-publish`.
+6. Execute deployment (or publish) steps (with user confirmation for destructive operations).
+7. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 8` after successful deploy/publish.
 
 ## Verification
 

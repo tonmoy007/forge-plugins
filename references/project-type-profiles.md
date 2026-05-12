@@ -231,6 +231,9 @@ stage_overrides:
       - id: G7-ML-004
         description: Reproducibility test passes (same seed → same output)
         severity: warning
+      - id: G7-ML-005
+        description: Drift detection strategy documented (training/serving skew, input drift, performance drift)
+        severity: blocker
 
   stage_9:
     additional_criteria:

@@ -21,13 +21,14 @@ allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 3. Read `build/05-implementation/progress.md` (or create it) to identify the current task.
 4. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/check-gate.py --stage 5` to confirm Stage 5 gate passes.
    If gate fails, show what's missing and pause.
+5. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 6` to load project-type overrides — these add build-stage criteria (e.g., fullstack: design tokens enforced, bundle budget, RSC boundary) that the Builder must respect.
 
 ## Steps
 
 1. Read `agents/builder.md` to load the Builder persona.
 2. Adopt that persona — you are now the Builder.
 3. Read the current task from the task DAG and the corresponding spec section.
-4. Follow the Builder workflow: read before editing, implement, test, verify, commit.
+4. Follow the Builder workflow: read before editing, implement, test, verify, commit. Treat any `additional_criteria` from the profile as additional pre-commit checks (run them or document why they're deferred).
 5. Mark the task complete in `build/05-implementation/progress.md`.
 6. If this is the first task: run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 6`.
 

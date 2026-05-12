@@ -4,19 +4,26 @@
 
 ---
 
-## Active Task: T-025
+## Active Task: T-026
 
-**Goal**: Wire project profiles into stage skills — each `skills/forge-*/SKILL.md` reads the project profile and adjusts instructions accordingly.
+**Goal**: Pattern tracker in `hooks/post-tool-use.py` — detect repeated tool sequences, log to `.forge/patterns.jsonl` with a stable signature.
 
 **Context**:
-- Done when: `/forge:eval` on an ML project includes drift detection criterion in eval matrix
-- See `build/04-plan/task-dag.md` T-025.
-- REQ-IDs: REQ-061, REQ-062
-- Depends on: T-015 (stage skills), T-024 (profiles reference)
+- Done when: same 3-tool sequence appearing 3 times produces 3 entries with the same signature
+- See `build/04-plan/task-dag.md` T-026.
+- REQ-IDs: REQ-070
+- Depends on: T-012 (post-tool-use.py hook)
 
 ---
 
 ## Archive
+
+### T-025 — Wire profiles into stage skills ✅ 2026-05-12
+- `scripts/load-profile.py` — CLI: `--cwd PATH [--stage N] [--profiles-file PATH] [--format markdown|json]`; parses `## Profile: <name>` YAML blocks from `references/project-type-profiles.md`; reads `project_type` from `pipeline/state.md`
+- `references/project-type-profiles.md` — added G7-ML-005 "Drift detection strategy documented" to ml-pipeline stage_7
+- All 12 stage skills (forge-srs … forge-release) now call `load-profile.py` in pre-flight with their stage number; workflow step instructs the agent to apply overrides (skip flags, replace_with, additional_artifacts/concerns/criteria, stage_emphasis)
+- `tests/unit/test_load_profile.py` — 24 tests; done-when verified (ML stage 7 surfaces drift detection); all 5 required profiles parse with ≥3 stage overrides
+- 451/451 tests pass; plugin metadata still valid
 
 ### T-024 — project-type-profiles.md ✅ 2026-05-12
 - `references/project-type-profiles.md` audited and extended

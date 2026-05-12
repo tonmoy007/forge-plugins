@@ -18,6 +18,7 @@ allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
 
 1. Read `pipeline/state.md` to confirm this is a Forge project.
 2. Note the current stage. If stage > 1, inform the user this stage appears done and ask if they want to revise it.
+3. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 1` to load any project-type overrides for this stage. Apply the emphasis hints, skip flags, additional artifacts, concerns, and criteria when following the persona workflow below.
 
 ## Steps
 
@@ -27,7 +28,7 @@ allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
    - What the system does
    - Who uses it
    - Key constraints (technology, timeline, compliance)
-4. Follow the Requirements Analyst workflow: clarify, categorize, assign REQ-IDs, write acceptance criteria.
+4. Follow the Requirements Analyst workflow: clarify, categorize, assign REQ-IDs, write acceptance criteria. Honor any profile overrides loaded in pre-flight (extra concerns, skipped steps, additional NFR categories).
 5. Write `pipeline/01-srs/srs.md` per the Output Contract in the persona file.
 6. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 1` to mark Stage 1 active.
 
