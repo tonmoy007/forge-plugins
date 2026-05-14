@@ -100,6 +100,21 @@
 - **Why**: Easy to assume directory name → command name. They're independent. A skill in `skills/forge-init/` with frontmatter `name: init` becomes `/<plugin>:init`, not `/<plugin>:forge-init`.
 - **Tags**: [claude-code, plugin, skills, slash-commands, naming]
 
+### 2026-05-14 — mine-skills.py: sliding-window aggregator amplifies same-tool bursts
+- **Trigger**: Auto-generated skill proposals contain repeated identical tools (e.g. `Bash → Bash → Bash`) from a single session
+- **Root cause**: post-tool-use.py records 3-tool sliding windows. A 5-Bash burst produces 3 overlapping windows with identical signature, hitting count=3 threshold from one session in under 10 seconds.
+- **Rule**: Add `_is_substantive()` filter in `plan_proposals()` requiring (a) ≥2 distinct tool types in the sequence, (b) ≥2 distinct sessions (relaxed when `--session` filter is active — the filter itself limits the aggregate), (c) first→last span ≥60s. Threshold alone is insufficient.
+- **NOT a rule**: Don't filter on "parameterizable steps" — patterns.jsonl doesn't record params today. Add that in a future task when T-026 logs them.
+- **Tags**: [skill-miner, mining, noise, sliding-window, filters]
+
+### 2026-05-14 — argparse: subparser default overwrites parent value; use SUPPRESS on subparsers
+- **Trigger**: Hook or AI caller invokes `script.py --flag value subcommand` and the value is silently overwritten by the subparser's default, making `--flag` appear ignored
+- **Root cause**: argparse dispatches to subparsers by writing their defaults into the *same* namespace. If the subparser has `default=X` for a flag, it overwrites whatever the main parser set, even when the flag was not present in the subparser's remaining args.
+- **Rule**: For shared flags like `--cwd`, define them on the main parser with the real default (`default=os.getcwd()`). Define them on a `sub_common = ArgumentParser(add_help=False)` parent with `default=argparse.SUPPRESS`. Pass `parents=[sub_common]` to every subparser. With SUPPRESS, argparse does not write the attribute when the flag is absent, so the main parser's value survives. If the flag IS provided after the subcommand, the subparser writes it and wins.
+- **Where**: `scripts/state-manager.py` initial fix; apply pattern to any future multi-subcommand scripts.
+- **Why**: AI callers construct commands in semantic order ("do X with Y in Z"), not argparse-position order. Tolerance for `--flag` after the subcommand is required for AI-callable CLIs.
+- **Tags**: [python, argparse, cli, ai-callable, robustness, suppress, v0.1.1]
+
 ---
 
 ## Patterns by Category

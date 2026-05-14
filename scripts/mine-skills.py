@@ -25,6 +25,7 @@ REQ-074 (rejected pattern blacklist).
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import logging
 import re
@@ -239,22 +240,58 @@ class Proposal:
     content: str
 
 
+def _is_substantive(c: Candidate, require_cross_session: bool = True) -> bool:
+    """Return False for noise patterns the bare frequency threshold cannot filter.
+
+    Three criteria must all pass:
+    1. ≥2 distinct tool types — same-tool repetition is not a workflow.
+    2. ≥2 distinct sessions — habitual cross-session use, not a within-task burst.
+       Relaxed (require_cross_session=False) when the caller scopes to one session
+       via --session, since the session filter itself limits the aggregate to one.
+    3. ≥60s between first and last occurrence — separates workflows from rapid
+       sliding-window duplication (a 5-Bash burst produces 3 overlapping 3-windows
+       all sharing the same signature, hitting count=3 from one session in seconds).
+    """
+    if len(set(c.tools)) < 2:
+        return False
+    if require_cross_session and len(c.sessions) < 2:
+        return False
+    if c.first_seen and c.last_seen:
+        try:
+            fmt = "%Y-%m-%dT%H:%M:%SZ"
+            delta = (
+                datetime.datetime.strptime(c.last_seen, fmt)
+                - datetime.datetime.strptime(c.first_seen, fmt)
+            )
+            if delta.total_seconds() < 60:
+                return False
+        except ValueError:
+            pass  # malformed timestamp — don't filter on time
+    return True
+
+
 def plan_proposals(
     candidates: dict[str, Candidate],
     threshold: int,
     blacklist: set[str],
     existing_names: set[str],
     proposed_root: Path,
+    session_filter: Optional[str] = None,
 ) -> list[Proposal]:
-    """Apply threshold + blacklist + name-collision filters; return ordered list."""
+    """Apply threshold + blacklist + substance + name-collision filters; return ordered list."""
     plans: list[Proposal] = []
     used_slugs: set[str] = set()
+    # When the caller scopes to a single session, the aggregate can only contain one session
+    # by definition — relax the cross-session substantive check in that case.
+    cross_session_required = session_filter is None
     # Stable order: by signature lexicographic so re-runs match
     for sig in sorted(candidates):
         c = candidates[sig]
         if c.count < threshold:
             continue
         if sig in blacklist:
+            continue
+        if not _is_substantive(c, require_cross_session=cross_session_required):
             continue
         slug = slug_from_tools(c.tools)
         if slug in existing_names or slug in used_slugs:
@@ -345,6 +382,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         blacklist=blacklist,
         existing_names=existing_names,
         proposed_root=proposed_root,
+        session_filter=args.session,
     )
 
     if args.dry_run:

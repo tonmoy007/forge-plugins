@@ -196,8 +196,31 @@ def _candidate(sig: str, tools: list[str], count: int) -> mine_skills.Candidate:
     return mine_skills.Candidate(
         signature=sig, tools=tools, count=count,
         first_seen="2026-05-12T18:00:00Z", last_seen="2026-05-12T18:05:00Z",
-        sessions=["s1"],
+        sessions=["s1", "s2"],  # ≥2 sessions required by _is_substantive filter
     )
+
+
+def _multi_entries(
+    sig: str = "abc123abc123",
+    tools: list[str] | None = None,
+    n: int = 3,
+) -> list[dict]:
+    """Generate n entries across distinct sessions with timestamps 1h apart.
+
+    Produces candidates that pass all three _is_substantive filters:
+    distinct tools, ≥2 sessions, and ≥60s span.
+    """
+    tools = tools or ["Read", "Edit", "Bash"]
+    return [
+        {
+            "ts": f"2026-05-12T{10 + i:02d}:00:00Z",
+            "session": f"s{i + 1}",
+            "kind": "tool_seq_3",
+            "tools": tools,
+            "signature": sig,
+        }
+        for i in range(n)
+    ]
 
 
 def test_plan_proposals_default_threshold(tmp_path: Path):
@@ -266,7 +289,7 @@ def test_render_skill_md_contains_required_fields():
 
 def test_done_when_three_occurrences_produces_draft(tmp_path: Path):
     """T-027 done-when: frequency=3 → SKILL.md draft with name, description, steps."""
-    _write_patterns(tmp_path, [_entry(sig="aaaaaaaa1111")] * 3)
+    _write_patterns(tmp_path, _multi_entries(sig="aaaaaaaa1111"))
     plugin_dir = tmp_path / "plugin"
     plugin_dir.mkdir()
     result = _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
@@ -289,7 +312,7 @@ def test_frequency_two_no_proposal(tmp_path: Path):
 
 
 def test_custom_threshold_two_promotes(tmp_path: Path):
-    _write_patterns(tmp_path, [_entry()] * 2)
+    _write_patterns(tmp_path, _multi_entries(n=2))
     plugin_dir = tmp_path / "plugin"
     plugin_dir.mkdir()
     result = _run_cli(
@@ -319,8 +342,8 @@ def test_missing_patterns_file_exits_zero(tmp_path: Path):
 def test_two_distinct_signatures_both_qualify(tmp_path: Path):
     _write_patterns(
         tmp_path,
-        [_entry(sig="aaa", tools=["Read", "Edit", "Bash"])] * 3
-        + [_entry(sig="bbb", tools=["Glob", "Grep", "Read"])] * 3,
+        _multi_entries(sig="aaa", tools=["Read", "Edit", "Bash"])
+        + _multi_entries(sig="bbb", tools=["Glob", "Grep", "Read"]),
     )
     plugin_dir = tmp_path / "plugin"
     plugin_dir.mkdir()
@@ -357,7 +380,7 @@ def test_existing_skill_collision_skipped(tmp_path: Path):
 
 
 def test_dry_run_prints_but_writes_nothing(tmp_path: Path):
-    _write_patterns(tmp_path, [_entry()] * 3)
+    _write_patterns(tmp_path, _multi_entries())
     plugin_dir = tmp_path / "plugin"
     plugin_dir.mkdir()
     result = _run_cli(
@@ -372,9 +395,9 @@ def test_session_filter_narrows_count(tmp_path: Path):
     _write_patterns(
         tmp_path,
         [
-            _entry(session="s1"),
-            _entry(session="s2"),
-            _entry(session="s2"),
+            _entry(session="s1", ts="2026-05-12T10:00:00Z"),
+            _entry(session="s2", ts="2026-05-12T11:00:00Z"),
+            _entry(session="s2", ts="2026-05-12T13:00:00Z"),  # 2h span → passes 60s filter
         ],
     )
     plugin_dir = tmp_path / "plugin"
@@ -384,7 +407,7 @@ def test_session_filter_narrows_count(tmp_path: Path):
         "--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir), "--session", "s1"
     )
     assert result_s1.returncode == 0
-    # Threshold 2 in s2 promotes
+    # Threshold 2 in s2 promotes; --session relaxes the cross-session substantive check
     result_s2 = _run_cli(
         "--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir),
         "--session", "s2", "--threshold", "2",
@@ -393,7 +416,7 @@ def test_session_filter_narrows_count(tmp_path: Path):
 
 
 def test_stdout_lists_written_paths(tmp_path: Path):
-    _write_patterns(tmp_path, [_entry()] * 3)
+    _write_patterns(tmp_path, _multi_entries())
     plugin_dir = tmp_path / "plugin"
     plugin_dir.mkdir()
     result = _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
@@ -404,7 +427,7 @@ def test_stdout_lists_written_paths(tmp_path: Path):
 
 
 def test_idempotent_rerun(tmp_path: Path):
-    _write_patterns(tmp_path, [_entry()] * 3)
+    _write_patterns(tmp_path, _multi_entries())
     plugin_dir = tmp_path / "plugin"
     plugin_dir.mkdir()
     r1 = _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
@@ -418,7 +441,7 @@ def test_idempotent_rerun(tmp_path: Path):
 
 def test_existing_proposal_preserves_user_edits(tmp_path: Path):
     """T-028 hand-off: user edits the proposal; re-mining must not clobber them."""
-    _write_patterns(tmp_path, [_entry()] * 3)
+    _write_patterns(tmp_path, _multi_entries())
     plugin_dir = tmp_path / "plugin"
     plugin_dir.mkdir()
     _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
@@ -430,13 +453,14 @@ def test_existing_proposal_preserves_user_edits(tmp_path: Path):
 
 
 def test_malformed_lines_skipped_in_e2e(tmp_path: Path):
+    entries = _multi_entries()
     (tmp_path / ".forge").mkdir()
     (tmp_path / ".forge" / "patterns.jsonl").write_text(
         "this is not json\n"
-        + json.dumps(_entry()) + "\n"
-        + json.dumps(_entry()) + "\n"
+        + json.dumps(entries[0]) + "\n"
+        + json.dumps(entries[1]) + "\n"
         + "{partial json\n"
-        + json.dumps(_entry()) + "\n",
+        + json.dumps(entries[2]) + "\n",
         encoding="utf-8",
     )
     plugin_dir = tmp_path / "plugin"
@@ -449,7 +473,7 @@ def test_malformed_lines_skipped_in_e2e(tmp_path: Path):
 def test_mcp_tool_names_slug_correctly(tmp_path: Path):
     _write_patterns(
         tmp_path,
-        [_entry(sig="mcpsig", tools=["Read", "mcp__plugin_x__do_thing", "Bash"])] * 3,
+        _multi_entries(sig="mcpsig", tools=["Read", "mcp__plugin_x__do_thing", "Bash"]),
     )
     plugin_dir = tmp_path / "plugin"
     plugin_dir.mkdir()
@@ -458,3 +482,119 @@ def test_mcp_tool_names_slug_correctly(tmp_path: Path):
     drafts = list((tmp_path / ".forge" / "proposed-skills").glob("*/SKILL.md"))
     assert len(drafts) == 1
     assert drafts[0].parent.name == "forge-read-do-thing-bash"
+
+
+# ---------------------------------------------------------------------------
+# _is_substantive — noise filter unit tests
+# ---------------------------------------------------------------------------
+
+
+def _noise_candidate(
+    tools: list[str],
+    sessions: list[str],
+    first_seen: str,
+    last_seen: str,
+) -> mine_skills.Candidate:
+    return mine_skills.Candidate(
+        signature="test-sig",
+        tools=tools,
+        count=3,
+        first_seen=first_seen,
+        last_seen=last_seen,
+        sessions=sessions,
+    )
+
+
+def test_is_substantive_rejects_same_tool_repeated():
+    c = _noise_candidate(
+        tools=["Bash", "Bash", "Bash"],
+        sessions=["s1", "s2"],
+        first_seen="2026-05-14T10:00:00Z",
+        last_seen="2026-05-14T12:00:00Z",
+    )
+    assert mine_skills._is_substantive(c) is False
+
+
+def test_is_substantive_rejects_single_session():
+    c = _noise_candidate(
+        tools=["Read", "Edit", "Bash"],
+        sessions=["s1"],
+        first_seen="2026-05-14T10:00:00Z",
+        last_seen="2026-05-14T12:00:00Z",
+    )
+    assert mine_skills._is_substantive(c) is False
+
+
+def test_is_substantive_rejects_burst_under_60s():
+    c = _noise_candidate(
+        tools=["Read", "Edit", "Bash"],
+        sessions=["s1", "s2"],
+        first_seen="2026-05-14T11:18:40Z",
+        last_seen="2026-05-14T11:18:48Z",  # 8 seconds
+    )
+    assert mine_skills._is_substantive(c) is False
+
+
+def test_is_substantive_rejects_exact_60s_boundary():
+    c = _noise_candidate(
+        tools=["Read", "Edit", "Bash"],
+        sessions=["s1", "s2"],
+        first_seen="2026-05-14T11:00:00Z",
+        last_seen="2026-05-14T11:01:00Z",  # exactly 60s — must be < 60 to pass, i.e. 60 fails
+    )
+    # 60.0 is not < 60, so this passes the time filter
+    assert mine_skills._is_substantive(c) is True
+
+
+def test_is_substantive_accepts_real_workflow():
+    c = _noise_candidate(
+        tools=["Read", "Edit", "Bash"],
+        sessions=["s1", "s2", "s3"],
+        first_seen="2026-05-12T10:00:00Z",
+        last_seen="2026-05-14T15:00:00Z",
+    )
+    assert mine_skills._is_substantive(c) is True
+
+
+def test_is_substantive_tolerates_malformed_timestamps():
+    """Malformed timestamps skip the time filter — don't reject on bad data."""
+    c = _noise_candidate(
+        tools=["Read", "Edit", "Bash"],
+        sessions=["s1", "s2"],
+        first_seen="not-a-timestamp",
+        last_seen="also-bad",
+    )
+    assert mine_skills._is_substantive(c) is True
+
+
+def test_is_substantive_empty_sessions_rejects():
+    c = _noise_candidate(
+        tools=["Read", "Edit", "Bash"],
+        sessions=[],
+        first_seen="2026-05-14T10:00:00Z",
+        last_seen="2026-05-14T12:00:00Z",
+    )
+    assert mine_skills._is_substantive(c) is False
+
+
+def test_noise_proposal_not_emitted_end_to_end(tmp_path: Path):
+    """The forge-bash-bash-bash noise pattern must not produce a proposal."""
+    forge = tmp_path / ".forge"
+    forge.mkdir()
+    # Simulate what post-tool-use.py writes for a Bash burst
+    entries = [
+        {"ts": "2026-05-14T11:18:40Z", "session": "s1", "tools": ["Bash", "Bash", "Bash"],
+         "signature": "3287e5ddb4be"},
+        {"ts": "2026-05-14T11:18:44Z", "session": "s1", "tools": ["Bash", "Bash", "Bash"],
+         "signature": "3287e5ddb4be"},
+        {"ts": "2026-05-14T11:18:48Z", "session": "s1", "tools": ["Bash", "Bash", "Bash"],
+         "signature": "3287e5ddb4be"},
+    ]
+    (forge / "patterns.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    result = _run_cli("--cwd", str(tmp_path), "--plugin-dir", str(plugin_dir))
+    assert result.returncode == 0, f"Expected no proposals, got: {result.stdout}"
+    assert not (forge / "proposed-skills").exists()

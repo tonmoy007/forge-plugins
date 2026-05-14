@@ -75,6 +75,19 @@ def cmd_history_add(args: argparse.Namespace, cwd: str) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # AI callers use semantic order ("do X with Y in Z"), not argparse-position order, so --cwd
+    # must be accepted both before and after the subcommand.  We achieve this with a sub_common
+    # parent whose --cwd uses SUPPRESS as the default: when --cwd is absent from the subparser
+    # args, argparse leaves namespace.cwd untouched (preserving the main parser's parsed value).
+    # If --cwd IS provided after the subcommand, the subparser writes it and wins.
+    sub_common = argparse.ArgumentParser(add_help=False)
+    sub_common.add_argument(
+        "--cwd",
+        default=argparse.SUPPRESS,
+        metavar="PATH",
+        help="project root containing pipeline/state.md",
+    )
+
     parser = argparse.ArgumentParser(
         prog="state-manager.py",
         description="Read and write pipeline/state.md",
@@ -87,20 +100,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_read = sub.add_parser("read", help="print state frontmatter as JSON")
+    p_read = sub.add_parser("read", parents=[sub_common], help="print state frontmatter as JSON")
     p_read.add_argument("--field", metavar="FIELD", help="print just this field's value")
 
-    p_adv = sub.add_parser("advance", help="increment current_stage")
+    p_adv = sub.add_parser("advance", parents=[sub_common], help="increment current_stage")
     p_adv.add_argument("--to", type=int, metavar="N", help="jump to stage N instead of +1")
 
-    p_set = sub.add_parser("set", help="set a single frontmatter field")
+    p_set = sub.add_parser("set", parents=[sub_common], help="set a single frontmatter field")
     p_set.add_argument("--field", required=True, metavar="FIELD")
     p_set.add_argument("--value", required=True, metavar="VALUE")
 
-    p_ref = sub.add_parser("reflect", help="append text to Last Reflection section")
+    p_ref = sub.add_parser("reflect", parents=[sub_common], help="append text to Last Reflection section")
     p_ref.add_argument("text", help="reflection content")
 
-    p_hist = sub.add_parser("history-add", help="append a row to Stage History table")
+    p_hist = sub.add_parser("history-add", parents=[sub_common], help="append a row to Stage History table")
     p_hist.add_argument("--stage", required=True, type=int, metavar="N")
     p_hist.add_argument("--result", required=True, metavar="RESULT")
     p_hist.add_argument("--note", default="", metavar="NOTE")

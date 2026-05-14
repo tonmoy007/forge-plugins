@@ -166,3 +166,33 @@ class TestHistoryAddCommand:
         run(["--cwd", str(tmp_path), "history-add", "--stage", "2", "--result", "passed", "--note", "b"])
         text = (tmp_path / "pipeline" / "state.md").read_text()
         assert text.count("passed") >= 2
+
+
+class TestCwdPositioning:
+    """--cwd must be accepted in any argument position (AI callers use semantic order)."""
+
+    def test_cwd_before_subcommand(self, tmp_path):
+        _make_state(tmp_path)
+        r = run(["--cwd", str(tmp_path), "read"])
+        assert r.returncode == 0
+        assert "current_stage" in r.stdout
+
+    def test_cwd_after_subcommand(self, tmp_path):
+        _make_state(tmp_path)
+        r = run(["read", "--cwd", str(tmp_path)])
+        assert r.returncode == 0
+        assert "current_stage" in r.stdout
+
+    def test_cwd_after_subcommand_with_its_own_flag(self, tmp_path):
+        _make_state(tmp_path)
+        r = run(["advance", "--to", "3", "--cwd", str(tmp_path)])
+        assert r.returncode == 0
+        data = json.loads(r.stdout)
+        assert data["current_stage"] == 3
+
+    def test_cwd_after_subcommand_set(self, tmp_path):
+        _make_state(tmp_path)
+        r = run(["set", "--field", "current_task", "--value", "T-042", "--cwd", str(tmp_path)])
+        assert r.returncode == 0
+        r2 = run(["read", "--field", "current_task", "--cwd", str(tmp_path)])
+        assert r2.stdout.strip() == "T-042"
