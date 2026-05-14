@@ -6,7 +6,7 @@
   "description": "Full lifecycle SDLC orchestrator with specialized agents, memory, and auto-reflection",
   "author": {
     "name": "Saddam",
-    "url": "https://github.com/<user>/forge"
+    "url": "https://github.com/tonmoy007/forge-plugins"
   },
   "license": "MIT",
   "claude_code_version": ">=2.1.0",

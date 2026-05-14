@@ -1,0 +1,17 @@
+{
+  "name": "forge-plugins",
+  "owner": {
+    "name": "Saddam",
+    "url": "https://github.com/tonmoy007"
+  },
+  "plugins": [
+    {
+      "name": "forge",
+      "source": ".",
+      "description": "SDLC orchestrator for Claude Code — 12-stage pipeline, specialized agents, persistent memory, auto-reflection",
+      "version": "0.1.0",
+      "homepage": "https://github.com/tonmoy007/forge-plugins",
+      "license": "MIT"
+    }
+  ]
+}
