@@ -61,6 +61,45 @@
 - **Why**: Python module names cannot contain hyphens; `from validate_plugin import ...` fails when the file is `validate-plugin.py`.
 - **Tags**: [testing, python, imports]
 
+### 2026-05-14 — Claude Code plugin install needs a marketplace.json, not just plugin.json
+- **Trigger**: Publishing a Claude Code plugin to a GitHub repo for external install
+- **Rule**: The repo needs both `.claude-plugin/plugin.json` (plugin manifest) AND `.claude-plugin/marketplace.json` (registry that points to the plugin via `"source": "."`). Install is a two-step flow: `/plugin marketplace add owner/repo` then `/plugin install <name>@<marketplace>`. There is no single-command install from a raw GitHub URL.
+- **Why**: Claude Code separates "marketplace" (registry) from "plugin" (thing installed). Locally, the plugin works via `plugin.json` alone because Claude Code is reading the directory directly. From a remote repo, the marketplace.json is what tells Claude Code which plugins the repo offers.
+- **Tags**: [claude-code, plugin, marketplace, install, distribution]
+
+### 2026-05-14 — Claude Code marketplace.json `source` must be an object or a path to a plugin directory, never `"."` or repo-root
+- **Trigger**: Publishing a single-plugin marketplace from a GitHub repo
+- **Rule**: Use `"source": {"source": "github", "repo": "owner/repo"}` if the plugin occupies the whole repo, OR `"source": "./plugins/<name>"` if the plugin lives in a subdirectory. Never `"source": "."` — that fails with "source type your version does not support" on most Claude Code versions.
+- **Why**: The `source` field expects either an explicit source-object (github/url/git-subdir) or a relative path pointing to the plugin's own directory (one containing `.claude-plugin/plugin.json`). The shorthand `"."` resolves to the marketplace directory itself, not a plugin directory.
+- **Validation**: Run `/plugin validate .` from the marketplace directory before pushing — it catches schema errors locally.
+- **Tags**: [claude-code, plugin, marketplace, schema, distribution]
+
+### 2026-05-14 — Claude Code plugin.json: auto-discover by default; explicit arrays are paths, not globs
+- **Trigger**: Setting up `.claude-plugin/plugin.json` for a plugin with agents/skills/commands at standard locations
+- **Rule**: Omit `agents`/`skills`/`commands`/`hooks` fields entirely — Claude Code auto-discovers from `./agents/*.md`, `./skills/*/SKILL.md`, `./commands/*.md`, `./hooks/hooks.json`. Only declare them if files live in non-standard locations.
+- **If declared**: `agents` is an array of file paths (each agent = one .md file). `skills` is an array of directory paths (each skill = one folder with SKILL.md inside). No globs. No object forms. The asymmetry is real — agents are files, skills are directories.
+- **Why**: The validator rejects globs, single strings, and object forms with the unhelpful message `"Invalid input"`. Auto-discovery sidesteps all of this and reduces maintenance burden — adding a new agent doesn't require a plugin.json edit.
+- **Tags**: [claude-code, plugin, manifest, schema, auto-discovery]
+
+### 2026-05-14 — Claude Code plugin.json: omit declarations, use CLAUDE_PLUGIN_ROOT, drop unsupported fields
+- **Trigger**: Authoring `.claude-plugin/plugin.json` for first publish
+- **Rules**:
+  - Omit `agents`/`skills`/`commands` fields — auto-discovery from standard locations is the supported path. Globs (`"agents/*"`) explicitly fail validation with "Invalid input".
+  - Use `${CLAUDE_PLUGIN_ROOT}` for plugin-relative paths in hook commands. `${CLAUDE_PLUGIN_DIR}` doesn't exist and expands to empty string.
+  - Hook command objects accept `type`, `command`, `timeout` — not `async`. Implement async by detaching a subprocess inside the script.
+  - Skip fields not in the documented schema: `displayName`, `claude_code_version`, `engines`, `async`. They're either ignored or trigger warnings; document those constraints in README instead.
+  - Schema URL: `https://json.schemastore.org/claude-code-plugin-manifest.json` (real). `https://claude.ai/schemas/plugin.v1.json` doesn't exist.
+- **Why**: The validator rejects unknown shapes with unhelpful messages. Auto-discovery + minimal declared fields = fewer ways to break.
+- **Validation**: `/plugin validate .` catches these before push.
+- **Tags**: [claude-code, plugin, manifest, schema, hooks, env-vars]
+
+### 2026-05-14 — Slash command name = plugin name + skill `name:` frontmatter, not directory name
+- **Trigger**: Plugin installs successfully but `/<expected-command>` returns "Unknown command"
+- **Rule**: Slash commands from plugin skills follow `/<plugin-name>:<skill-name>`, where `plugin-name` is from `plugin.json` and `skill-name` is from the `name:` field in `SKILL.md` frontmatter. The skill directory name is NOT the command — only the frontmatter `name:` matters.
+- **Diagnosis**: Run `/help` to see what commands actually registered. If your expected command isn't there, check (a) `plugin.json` "name" matches expected prefix, (b) `SKILL.md` has YAML frontmatter with `name:` field matching expected suffix.
+- **Why**: Easy to assume directory name → command name. They're independent. A skill in `skills/forge-init/` with frontmatter `name: init` becomes `/<plugin>:init`, not `/<plugin>:forge-init`.
+- **Tags**: [claude-code, plugin, skills, slash-commands, naming]
+
 ---
 
 ## Patterns by Category

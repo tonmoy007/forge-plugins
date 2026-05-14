@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] — 2026-05-14
+
+Patch release: corrected plugin manifest, added marketplace support, updated install docs.
+
+### Added
+- `.claude-plugin/marketplace.json` — registry file enabling two-step install:
+  `/plugin marketplace add tonmoy007/forge-plugins` then `/plugin install forge@forge-plugins`
+- `README.md` Install section updated with correct marketplace commands
+
+### Changed
+- `.claude-plugin/plugin.json` — fixed `$schema` URL to schemastore, renamed plugin
+  `sdlc-orchestrator` → `forge`, removed invalid fields (`displayName`, `claude_code_version`,
+  `engines`), removed unsupported glob declarations for skills/agents (auto-discovery used
+  instead), fixed hook env var `CLAUDE_PLUGIN_DIR` → `CLAUDE_PLUGIN_ROOT`
+
+### Removed
+- `docs/superpowers/specs/2026-05-11-extract-lessons-design.md` — vendored Superpowers spec
+  removed; plugin now uses the installed Superpowers plugin directly
+
+---
+
 ## [0.1.0] — 2026-05-12
 
 First stable release. Full 12-stage SDLC pipeline with hooks, agents, memory, and

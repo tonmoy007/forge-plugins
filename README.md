@@ -34,8 +34,11 @@ project type.
 
 ## Install
 
-```bash
-claude plugin install https://github.com/<user>/forge
+In Claude Code, run these two commands:
+
+```
+/plugin marketplace add tonmoy007/forge-plugins
+/plugin install forge@forge-plugins
 ```
 
 That's it. Forge activates automatically in any project where you've run `/forge:init`.
