@@ -1,5 +1,7 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "forge-plugins",
+  "description": "SDLC orchestrator for Claude Code",
   "owner": {
     "name": "Saddam",
     "url": "https://github.com/tonmoy007"
@@ -7,11 +9,14 @@
   "plugins": [
     {
       "name": "forge",
-      "source": ".",
-      "description": "SDLC orchestrator for Claude Code — 12-stage pipeline, specialized agents, persistent memory, auto-reflection",
+      "source": {
+        "source": "github",
+        "repo": "tonmoy007/forge-plugins"
+      },
+      "description": "12-stage SDLC pipeline, specialized agents, persistent memory, auto-reflection",
       "version": "0.1.0",
-      "homepage": "https://github.com/tonmoy007/forge-plugins",
-      "license": "MIT"
+      "license": "MIT",
+      "category": "development"
     }
   ]
 }
