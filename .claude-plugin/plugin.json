@@ -1,7 +1,6 @@
 {
-  "$schema": "https://claude.ai/schemas/plugin.v1.json",
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "sdlc-orchestrator",
-  "displayName": "Forge",
   "version": "0.1.0",
   "description": "Full lifecycle SDLC orchestrator with specialized agents, memory, and auto-reflection",
   "author": {
@@ -9,72 +8,98 @@
     "url": "https://github.com/tonmoy007/forge-plugins"
   },
   "license": "MIT",
-  "claude_code_version": ">=2.1.0",
-  "engines": {
-    "python": ">=3.11"
-  },
-
-  "skills": ["skills/*"],
-  "agents": ["agents/*"],
-
+  "homepage": "https://github.com/tonmoy007/forge-plugins",
+  "repository": "https://github.com/tonmoy007/forge-plugins",
+  "keywords": [
+    "sdlc",
+    "orchestration",
+    "agents",
+    "pipeline"
+  ],
   "hooks": {
-    "SessionStart": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_DIR}/hooks/session-start.py",
-        "timeout": 5
-      }]
-    }],
-    "UserPromptSubmit": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_DIR}/hooks/prompt-submit.py",
-        "timeout": 3
-      }]
-    }],
-    "PreToolUse": [{
-      "matcher": "Write|Edit|MultiEdit",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_DIR}/hooks/pre-tool-write.py",
-        "timeout": 3
-      }]
-    }],
-    "PostToolUse": [{
-      "matcher": "Write|Edit|MultiEdit|Bash",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_DIR}/hooks/post-tool-use.py",
-        "timeout": 5,
-        "async": true
-      }]
-    }],
-    "Stop": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_DIR}/hooks/stop-reflect.py",
-        "timeout": 15
-      }]
-    }],
-    "SubagentStop": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_DIR}/hooks/subagent-stop.py",
-        "timeout": 5
-      }]
-    }],
-    "SessionEnd": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_DIR}/hooks/session-end.py",
-        "timeout": 10,
-        "async": true
-      }]
-    }]
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-submit.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-write.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop-reflect.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session-end.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }
