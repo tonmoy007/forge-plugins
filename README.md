@@ -240,7 +240,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and
 | M4: Memory + Lessons | 🟢 Done | Lesson extraction, injection, cross-project memory |
 | M5: Adaptive Workflow | 🟢 Done | Project type detection + 5 profiles |
 | M6: Auto-Skill Creation | 🟢 Done | Pattern mining → skill proposals → approval flow |
-| M7: Polish + Docs | 🟡 In progress | README, e2e test, packaging |
+| M7: Polish + Docs | 🟢 Done | README, e2e test, packaging |
 
 ---
 
