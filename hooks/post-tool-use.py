@@ -19,10 +19,10 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional
-
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 import _state_lib as lib
+from _hook_runner import run_hook
 
 _WINDOW_SIZE = 3
 _SIGNATURE_LEN = 12  # hex chars; sha1 truncated for compactness
@@ -142,4 +142,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_hook(main, hook_name="post-tool-use")

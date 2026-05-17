@@ -17,6 +17,7 @@ from pathlib import Path
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 import _state_lib as lib
+from _hook_runner import run_hook
 
 # /forge:<command> → stage number (aliases keep backward compat; last alias wins _STAGE_NAMES)
 _COMMAND_TO_STAGE: dict[str, int] = {
@@ -143,4 +144,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_hook(main, hook_name="prompt-submit")

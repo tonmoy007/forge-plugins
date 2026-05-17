@@ -3,6 +3,13 @@
 
 Reads JSON from stdin, prints a context block (≤ 2000 tokens) to stdout.
 Exits 0 silently if cwd is not a Forge project.
+
+Wrapped by _hook_runner.run_hook() to ensure:
+  - Any uncaught exception is logged to .forge/hook-errors.log, exit 0
+  - 30s timeout (override via FORGE_HOOK_TIMEOUT_SESSION_START)
+  - Non-blocking semantics enforced
+
+Ref: T-007 (original), T-100 (resilience wrap)
 """
 
 from __future__ import annotations
@@ -19,10 +26,11 @@ import subprocess
 
 import yaml
 
-# Resolve plugin root and make _state_lib importable by hooks
+# Resolve plugin root and make _state_lib + _hook_runner importable
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
-import _state_lib as lib
+import _state_lib as lib  # noqa: E402
+from _hook_runner import run_hook  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
 
@@ -249,4 +257,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_hook(main, hook_name="session-start")

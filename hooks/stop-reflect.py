@@ -27,6 +27,7 @@ sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 import _state_lib as lib
+from _hook_runner import run_hook
 import _event_log as event_log
 import _executor as executor
 import _session_meta as session_meta_mod
@@ -418,4 +419,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    run_hook(main, hook_name="stop-reflect")
