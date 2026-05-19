@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.3] — 2026-05-19
+
+First-run hardening release. Theme: make the first ten minutes — install, init,
+first gate failure, recovery, uninstall — hard to mess up, and make a Forge bug
+never break the user's Claude Code session.
+
+### Added
+
+- **Hook resilience wrapper** (`scripts/_hook_runner.py`, T-100) — all 7 lifecycle
+  hooks wrapped: top-level exception barrier (logs JSONL to
+  `.forge/hook-errors.log`, exits 0), per-hook `SIGALRM` timeout, blocking hooks
+  never block on internal failure, non-blocking hooks suppress accidental exit 2.
+  POSIX-only (documented).
+- **`/forge:doctor`** (`scripts/doctor.py` + skill, T-101) — 13 deterministic
+  checks across environment/plugin/project/global, each failing check carries a
+  literal fix command. `--json`/`--quiet`/`--cwd`.
+- **`/forge:uninstall`** (`scripts/uninstall.py` + skill, T-102) — filesystem
+  state removal with mandatory `--dry-run` preview, `--keep-artifacts`,
+  `--include-global` (separate confirmation), idempotent re-runs.
+- **`/forge:init --dry-run` and `--manifest-only`** (T-103) — preview-only mode
+  that writes nothing; JSON manifest drives the post-init `.gitignore` prompt.
+- **Gate result formatter** (`scripts/format-gate-result.py`, T-104) — renders
+  `check-gate.py` JSON as readable text grouped by severity with per-criterion
+  fix hints (longest-prefix lookup over all 12 stages + profile families).
+- **`/forge:force-advance`** (`scripts/force-advance.py` + skill, T-105) —
+  override a blocking gate; `--reason` (≥10 chars) required and recorded as a
+  `force-advance` lesson with the overridden blocker IDs. Override is
+  per-advancement, not per-criterion.
+- **`/forge:why`** (`scripts/why.py` + skill, T-106) — explains a gate ID,
+  lesson tag, stage number, or the current blocker(s). Deterministic lookup.
+- **`script` project profile** (T-107) — 6th profile for sub-500-LOC projects
+  (4 active stages). `suggest_only` flag: `script` is never auto-assigned, only
+  prompted. New `check-script-runnable.py` / `check-script-has-tests.py` gate
+  scripts (G6-SCRIPT-001 / G7-SCRIPT-001).
+- **First-run round-trip integration test**
+  (`tests/integration/test_v013_first_run.sh`, T-108) — exercises doctor → init
+  dry-run → init → gate failure → why → force-advance → uninstall →
+  idempotent re-run. Passes on a clean checkout.
+- **`docs/gate-philosophy.md`** — when to resolve a blocker vs. override it.
+- ~158 new unit tests (hook_runner 25, doctor 35, uninstall 21,
+  format-gate-result 17, force-advance 17, why 26, plus detect-project-type
+  additions). Total unit suite: **690 passing**.
+
+### Changed
+
+- `README.md` now leads with discipline + traceability (gates and REQ-ID chains)
+  instead of memory; test badge updated to 690.
+- `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` version
+  bumped to `0.1.3`.
+
+### Known limitations
+
+- POSIX-only (hook resilience uses `SIGALRM`); Windows deferred to v0.2.
+- Hook-error log has a per-record cap but no rotation yet (deferred to v0.2).
+- Animated traceability walkthrough in the README is still pending (text
+  diagram in place).
+
+---
+
 ## [0.1.2] — 2026-05-14
 
 Patch release: skill-miner noise filter and `--cwd` positional fix for AI-callable CLIs.
