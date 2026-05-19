@@ -18,14 +18,21 @@
 | T-100 | Hook resilience wrapper            | M    | ✅ done |
 | T-101 | `/forge:doctor`                    | M    | ✅ done |
 | T-102 | `/forge:uninstall`                 | M    | ✅ done |
-| T-103 | `/forge:init --dry-run` + manifest | S    | 🟡 partial |
+| T-103 | `/forge:init --dry-run` + manifest | S    | ✅ done |
 | T-104 | Gate result formatter              | S    | ✅ done |
 | T-105 | `/forge:force-advance`             | S    | ✅ done |
 | T-106 | `/forge:why`                       | S    | ✅ done |
-| T-107 | `script` project profile           | S    | 🟡 partial |
-| T-108 | First-run round-trip test          | S    | ⬜ todo |
-| T-109 | README rewrite                     | S    | ⬜ todo |
-| T-110 | CHANGELOG + version bump           | S    | ⬜ todo |
+| T-107 | `script` project profile           | S    | ✅ done |
+| T-108 | First-run round-trip test          | S    | ✅ done |
+| T-109 | README rewrite                     | S    | 🟡 partial¹ |
+| T-110 | CHANGELOG + version bump           | S    | ✅ done² |
+
+¹ Intro now leads with discipline + traceability; a text traceability diagram is
+in place. The animated walkthrough / screenshot is deferred (cannot be produced
+in an AI session).
+² CHANGELOG entry written and `plugin.json` / `marketplace.json` bumped to
+`0.1.3`. The git tag and GitHub release are intentionally **not** cut yet — they
+remain blocked on the external-user dogfood (R-V13-1 / srs-v0.1.3 §9 item 4).
 
 **Estimated remaining**: ~3 days of focused work + 1 day for external-user dogfood
 (non-negotiable per srs-v0.1.3 §9 item 4).

@@ -5,8 +5,10 @@
 > "where are we" — keep in sync with `build/04-plan/task-dag-v0.1.3.md`.
 
 **Last updated**: 2026-05-19
-**Current state**: Implementation largely complete; release tasks (T-108/109/110)
-and external dogfood outstanding.
+**Current state**: All engineering tasks (T-100..T-108, T-110) complete. T-109
+partial (text traceability diagram in README; animated walkthrough deferred).
+Sole remaining release blocker: external-user dogfood (R-V13-1) — cannot be
+satisfied by an AI session; requires a non-author human.
 
 ---
 
