@@ -33,12 +33,13 @@ features, and enumerates the genuine differentiators (gated sequencing, REQ-ID
 traceability, structured cross-project lessons, skill mining). A text
 traceability diagram is in place. The **only** outstanding T-109 item is the
 animated GIF / screenshot from the done-when list — a binary asset that cannot
-be produced in an AI session. It must be recorded during the same external
-dogfood run that R-V13-1 already blocks the release on, so it adds no new
-critical-path work. T-109 stays 🟡 solely for that asset.
+be produced in an AI session. **Deferred to v0.1.4** alongside the real-user
+dogfood it would be captured during (owner decision 2026-05-19, D-V13-11).
+T-109 stays 🟡 solely for that asset; the text rewrite is complete and shipped.
 ² CHANGELOG entry written and `plugin.json` / `marketplace.json` bumped to
-`0.1.3`. The git tag and GitHub release are intentionally **not** cut yet — they
-remain blocked on the external-user dogfood (R-V13-1 / srs-v0.1.3 §9 item 4).
+`0.1.3`. v0.1.3 tag + GitHub release **cut** on engineering + integration
+evidence; external-user dogfood explicitly waived for v0.1.3 and moved to
+v0.1.4 as a non-waivable gate (D-V13-11 / srs-v0.1.3 §9 item 4).
 
 **Estimated remaining**: ~3 days of focused work + 1 day for external-user dogfood
 (non-negotiable per srs-v0.1.3 §9 item 4).
@@ -258,8 +259,8 @@ release works end-to-end with one round-trip test, and ship.
 - **Done when**:
   - All other v0.1.3 tasks marked ✅.
   - CHANGELOG follows the existing v0.1.0/v0.1.1/v0.1.2 format.
-  - At least one external user has run the round-trip (srs-v0.1.3 §9 item 4) and notes are committed to `build/05-implementation/dogfood-notes-v0.1.3.md`.
-- **Depends on**: T-100..T-109 all ✅; plus external-user dogfood ✅
+  - ~~At least one external user has run the round-trip~~ — **waived for v0.1.3, moved to v0.1.4** (D-V13-11 / srs-v0.1.3 §9 item 4).
+- **Depends on**: T-100..T-108 ✅, T-109 text ✅ (GIF → v0.1.4). External-user dogfood deferred to v0.1.4.
 - **REQ-IDs**: — (release ceremony)
 
 ---
@@ -298,7 +299,7 @@ T-109 (README — runs in parallel) ──┤
 
 | ID | Risk | Impact | Likelihood | Mitigation |
 |----|------|--------|------------|------------|
-| R-V13-1 | No external user found before release | **High** | **High** | Hold release until at least one non-author has run install → init → first-gate-failure → recovery. This is the single most important release criterion (srs-v0.1.3 §9.4). Block T-110 on this. |
+| R-V13-1 | No external user found before release | **High** | **High** | **Accepted for v0.1.3** (owner decision, D-V13-11): ship without dogfood; risk unmitigated but bounded by the resilience/diagnostic surface (`/forge:doctor`, `/forge:why`, crash isolation). Carried forward as **R-V14-1**, a non-waivable v0.1.4 gate. No longer blocks T-110. |
 | R-V13-2 | SIGALRM in hook_runner interferes with subprocess timeouts inside hooks | Low | Low | subprocess uses different mechanism (waitpid/selectors); SIGALRM still fires correctly and interrupts the outer hook, abandoning the subprocess. Tested in T-100. |
 | R-V13-3 | `--dry-run` mode confuses users who expect init to actually run | Medium | Medium | Plan output ends with explicit "Re-run without --dry-run to apply." Skill instructs Claude to present this line verbatim. |
 | R-V13-4 | `/forge:force-advance` becomes the easy way out, defeats gate purpose | Medium | Medium | Every override records a lesson surfaced in `/forge:retro` (Stage 12). High-frequency forced advancements on the same gate are a signal to revisit the gate criterion. Documented in `docs/gate-philosophy.md` (T-109). |
@@ -330,18 +331,18 @@ get pulled in:
 
 Before tagging v0.1.3:
 
-- [ ] All 11 tasks marked ✅
-- [ ] `tests/integration/test_v013_first_run.sh` passes on a clean checkout
-- [ ] Total test count ≥ 615 (532 baseline + ≥ 83 new from T-100/101/102/104, plus T-105/106/107/108 tests when added)
-- [ ] **At least one external user has completed the round-trip** (R-V13-1)
-- [ ] Dogfood notes captured in `build/05-implementation/dogfood-notes-v0.1.3.md`
-- [ ] README.md leads with discipline + traceability
-- [ ] `docs/gate-philosophy.md` exists and is referenced from README
-- [ ] CHANGELOG.md has v0.1.3 entry
-- [ ] `.claude-plugin/plugin.json` version is `0.1.3`
-- [ ] `marketplace.json` (if applicable) updated
+- [x] T-100..T-108 + T-110 ✅; T-109 text ✅ (GIF → v0.1.4)
+- [x] `tests/integration/test_v013_first_run.sh` passes on a clean checkout
+- [x] Total test count ≥ 615 (692 unit + integration)
+- [~] ~~At least one external user has completed the round-trip~~ — **waived for v0.1.3, moved to v0.1.4** (R-V14-1, D-V13-11)
+- [~] Dogfood notes — deferred to v0.1.4 (`dogfood-notes-v0.1.4.md`)
+- [x] README.md leads with discipline + traceability
+- [x] `docs/gate-philosophy.md` exists and is referenced from README
+- [x] CHANGELOG.md has v0.1.3 entry
+- [x] `.claude-plugin/plugin.json` version is `0.1.3`
+- [x] `marketplace.json` updated to `0.1.3`
 - [ ] Git tag `v0.1.3` created and pushed
 - [ ] GitHub release notes published
 
-The external-user item is the easiest to skip and the hardest to recover from
-if skipped. Don't.
+The external-user item was deferred by **explicit owner decision** (D-V13-11),
+not skipped. v0.1.4 carries it as a hard gate with no waiver path.

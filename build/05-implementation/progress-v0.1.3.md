@@ -5,15 +5,14 @@
 > "where are we" — keep in sync with `build/04-plan/task-dag-v0.1.3.md`.
 
 **Last updated**: 2026-05-19
-**Current state**: All engineering complete (T-100..T-108, T-110). T-109 text
-rewrite complete; only its GIF/screenshot asset remains (deferred to the
-dogfood run). Plus three post-DAG correctness fixes landed (validate-plugin,
-env-var rename, README reframe). **Sole remaining release blocker**:
-external-user dogfood (R-V13-1) — requires a non-author human; cannot be
-satisfied in an AI session.
+**Current state**: **RELEASED.** All engineering complete (T-100..T-108,
+T-110). T-109 text rewrite complete; GIF/screenshot deferred to v0.1.4. Three
+post-DAG correctness fixes landed (validate-plugin, env-var rename, README
+reframe). External-user dogfood (R-V13-1) **explicitly waived for v0.1.3 by
+owner decision (D-V13-11)** and moved to v0.1.4 as a non-waivable gate
+(R-V14-1).
 
-`main` and `develop` are in sync, **14 commits ahead of origin (unpushed)**,
-no `v0.1.3` tag cut yet (intentionally — gated on dogfood).
+v0.1.3 tagged and pushed (`main` + `develop` + tag `v0.1.3`).
 
 ---
 
@@ -74,31 +73,27 @@ srs-v0.1.3 §9 target was ≥ 615 — met.
 
 ---
 
-## Remaining Work
+## Deferred to v0.1.4
 
-- **T-109 GIF/screenshot** — the only outstanding T-109 done-when item. A
-  binary visual asset; capture it during the R-V13-1 dogfood run so it adds no
-  new critical-path work.
+- **External-user dogfood** (R-V13-1 → R-V14-1) — non-waivable v0.1.4 gate.
+  Notes will go to `build/05-implementation/dogfood-notes-v0.1.4.md`.
+- **README traceability GIF/screenshot** — captured during the v0.1.4 dogfood.
 
-## Release Blockers (srs-v0.1.3 §9)
+## Release Criteria (srs-v0.1.3 §9, as amended by D-V13-11)
 
-1. ⬜ External-user dogfood (R-V13-1) — **the single most important criterion**;
-   notes go to `build/05-implementation/dogfood-notes-v0.1.3.md`.
+1. 🔀 External-user dogfood — **waived for v0.1.3, moved to v0.1.4** (D-V13-11).
 2. ✅ `test_v013_first_run.sh` passes on a clean checkout (T-108).
 3. ✅ README leads with discipline + traceability, not memory (T-109 text).
 4. ✅ CHANGELOG entry + `plugin.json` → `0.1.3` (T-110).
-5. ✅ Test count ≥ 615 (currently 692 unit + integration).
+5. ✅ Test count ≥ 615 (692 unit + integration).
 
-Blockers 2–5 are cleared. Only the dogfood (and the screenshot captured during
-it) stands between this and a `v0.1.3` tag.
+All non-waived criteria cleared; v0.1.3 released.
 
 ---
 
 ## Next Session Starts Here
 
-1. Decide on push: `main`/`develop` are 14 commits ahead of origin, unpushed.
-   Project convention wants a `develop → main` PR before `main` ships.
-2. Run / arrange the external-user dogfood (R-V13-1); capture notes in
-   `build/05-implementation/dogfood-notes-v0.1.3.md` and grab the README
-   screenshot during it.
-3. After dogfood passes: cut the `v0.1.3` tag and GitHub release (T-110 close).
+1. v0.1.3 is shipped. Begin v0.1.4 planning — its acceptance MUST include the
+   external-user dogfood as a hard gate with no waiver path (R-V14-1).
+2. Recruit a non-author to run install → init → gate failure → recovery;
+   capture `build/05-implementation/dogfood-notes-v0.1.4.md` + the README GIF.

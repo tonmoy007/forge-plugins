@@ -62,7 +62,12 @@ never break the user's Claude Code session.
 - POSIX-only (hook resilience uses `SIGALRM`); Windows deferred to v0.2.
 - Hook-error log has a per-record cap but no rotation yet (deferred to v0.2).
 - Animated traceability walkthrough in the README is still pending (text
-  diagram in place).
+  diagram in place); deferred to v0.1.4.
+- **No external-user dogfood gate for this release.** v0.1.3 ships on
+  engineering + integration evidence by explicit decision; real-user testing
+  is a non-waivable acceptance gate in v0.1.4. Recovery surface for early
+  external users: `/forge:doctor`, `/forge:why`, `/forge:force-advance`, and
+  hook crash isolation.
 
 ---
 

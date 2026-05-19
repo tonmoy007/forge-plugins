@@ -590,9 +590,10 @@ All of the following must be true before tagging v0.1.3:
 1. All AC-* criteria above pass.
 2. `tests/integration/test_v013_first_run.sh` passes on a clean checkout.
 3. Total test count ≥ 615 (532 baseline + ≥ 83 new across hook_runner, doctor, uninstall, format-gate-result).
-4. At least one external user (not the author) has run `/plugin install` → `/forge:init` → encountered a gate failure → recovered. Notes from that session are captured in `build/05-implementation/dogfood-notes-v0.1.3.md`. **This is the single most important release criterion** — see the critique in v0.1.2 retro.
+4. ~~At least one external user (not the author) has run `/plugin install` → `/forge:init` → encountered a gate failure → recovered.~~ **WAIVED for v0.1.3 by explicit owner decision (2026-05-19).** Real-user dogfood and the README traceability screenshot are moved to **v0.1.4** (tracked as REQ-TEST-002 / R-V14-1). v0.1.3 ships on engineering + integration evidence alone. Rationale and accepted risk recorded in `build/05-implementation/decisions-v0.1.3.md` (D-V13-11). This is a conscious deviation, not an oversight — the v0.1.2 retro critique still stands and is the reason v0.1.4 carries it as a hard, non-waivable gate.
 5. README.md leads with discipline + traceability (not memory).
 6. CHANGELOG.md has an entry for v0.1.3.
 7. `.claude-plugin/plugin.json` version bumped to `0.1.3`.
 
-Item 4 is the hardest and the easiest to skip. Don't skip it.
+Item 4 was the hardest and was, by explicit decision, deferred — not silently
+skipped. v0.1.4's acceptance MUST include it with no waiver path.

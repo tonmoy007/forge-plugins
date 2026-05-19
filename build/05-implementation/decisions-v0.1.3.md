@@ -129,3 +129,28 @@ every later claim. Forge's defensible differentiators are gated sequencing,
 end-to-end traceability, structured (tagged/filterable/profile-tied)
 cross-project lessons, and skill mining — not memory. The milestones table
 duplicated `task-dag-v0.1.3.md` and had gone stale.
+
+## D-V13-11 — Ship v0.1.3 without external-user dogfood; move it to v0.1.4
+
+**Decision** (explicit owner call, 2026-05-19): Tag and push v0.1.3 now on
+engineering + integration evidence alone. The external-user dogfood (srs-v0.1.3
+§9 item 4 / R-V13-1) and the README traceability screenshot it would have
+produced are deferred to **v0.1.4**, where real-user testing becomes a hard,
+non-waivable acceptance gate (REQ-TEST-002 / R-V14-1).
+
+**Why**: The owner judged that getting v0.1.3 (hook crash-isolation, the
+self-service commands, the manifest/env-var correctness fixes) into users'
+hands now outweighs holding the release for a dogfood that has no scheduled
+participant. Shipping the resilience + diagnostic surface area is itself what
+makes a future dogfood safe and informative.
+
+**Accepted risk**: This is exactly the failure mode the v0.1.2 retro warned
+about (R-V13-1, R-V13-7: "external user finds a class of bug the unit suite
+can't"). v0.1.3 goes out with that risk unmitigated. Mitigation is structural,
+not waived: `/forge:doctor`, `/forge:why`, `/forge:force-advance`, and crash
+isolation mean a first external user who hits a bug can diagnose and recover
+rather than be stuck — and v0.1.4 carries dogfood as a gate with **no waiver
+path** so this deferral cannot become a habit.
+
+**Not a precedent**: The waiver applies to v0.1.3 only. The SRS §9 item and the
+v0.1.4 plan both state the dogfood is non-waivable going forward.
