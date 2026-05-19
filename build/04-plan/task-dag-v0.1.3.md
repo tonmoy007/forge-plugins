@@ -27,9 +27,15 @@
 | T-109 | README rewrite                     | S    | 🟡 partial¹ |
 | T-110 | CHANGELOG + version bump           | S    | ✅ done² |
 
-¹ Intro now leads with discipline + traceability; a text traceability diagram is
-in place. The animated walkthrough / screenshot is deferred (cannot be produced
-in an AI session).
+¹ **Text rewrite is complete.** Intro leads with sequencing/discipline (not
+memory), explicitly does *not* position Forge against Claude Code's memory
+features, and enumerates the genuine differentiators (gated sequencing, REQ-ID
+traceability, structured cross-project lessons, skill mining). A text
+traceability diagram is in place. The **only** outstanding T-109 item is the
+animated GIF / screenshot from the done-when list — a binary asset that cannot
+be produced in an AI session. It must be recorded during the same external
+dogfood run that R-V13-1 already blocks the release on, so it adds no new
+critical-path work. T-109 stays 🟡 solely for that asset.
 ² CHANGELOG entry written and `plugin.json` / `marketplace.json` bumped to
 `0.1.3`. The git tag and GitHub release are intentionally **not** cut yet — they
 remain blocked on the external-user dogfood (R-V13-1 / srs-v0.1.3 §9 item 4).

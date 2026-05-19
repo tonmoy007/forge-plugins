@@ -1,8 +1,9 @@
 # Forge — SDLC Orchestrator for Claude Code
 
-> Turn Claude Code into a disciplined engineering partner: a 12-stage pipeline with
-> enforced quality gates and end-to-end REQ-ID traceability, specialized agents per
-> stage, and lessons that compound across sessions.
+> Forge turns Claude Code from a smart coding assistant into a disciplined
+> engineering partner. Memory isn't the problem Claude Code solves poorly —
+> **sequencing is**. Forge enforces it: gated stages, REQ-ID traceability,
+> and structured lesson capture across projects.
 
 [![Tests](https://img.shields.io/badge/tests-690%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
@@ -13,18 +14,33 @@
 
 ## What Forge Does
 
-Forge imposes a structured 12-stage pipeline on Claude Code — from requirements through
-release — where **every stage has a gate that must pass before the next begins**, and
-**every line of work traces back to a numbered requirement** (`REQ-NNN → gate → code →
-test`). Specialized agents own each stage; lessons learned in one session inform the next.
+Claude Code already has memory — `CLAUDE.md`, persistent project context, subagents,
+Agent Teams. Forge does not try to out-remember it. What Claude Code does *not* enforce
+is **process**: that requirements come before design, design before code, and that
+nothing advances until the previous stage actually passed. That is the gap Forge fills.
 
-**Without Forge**: Claude is a capable assistant with no enforced process — requirements
-drift, decisions go unrecorded, and quality is whatever the prompt happened to ask for.
+Forge imposes a structured 12-stage pipeline — from requirements through release — where
+**every stage has a gate that must pass before the next begins**, and **every line of
+work traces back to a numbered requirement** (`REQ-NNN → gate → code → test`).
+
+**Without Forge**: a capable assistant with no enforced sequencing — requirements drift,
+design is skipped under deadline pressure, and "done" means whatever the last prompt
+asked for.
 
 **With Forge**: work proceeds only through gates you can inspect and, when justified,
-explicitly override (`/forge:force-advance` records why). Nothing advances silently,
-nothing is untraceable, and recurring mistakes become surfaced lessons instead of
-repeated ones.
+explicitly override (`/forge:force-advance` records *why*). Nothing advances silently,
+nothing is untraceable.
+
+What is genuinely Forge's, not Anthropic's:
+
+- **Gated sequencing** — stages block until their criteria pass; overrides are explicit
+  and audited, not silent.
+- **REQ-ID traceability** — every artifact, gate, and test links back to a requirement
+  ID, end to end.
+- **Structured cross-project lessons** — not free-text memory: tagged, filterable,
+  tied to project profiles, and promoted across repos.
+- **Automatic skill mining** — repeated workflows are detected and proposed as new
+  `/forge:*` commands.
 
 > Traceability in practice — each artifact references the requirement it satisfies:
 >
@@ -35,7 +51,8 @@ repeated ones.
 >             └─ Test  tests/unit/test_force_advance.py  (17 cases)
 > ```
 >
-> _(Animated walkthrough pending — see `docs/gate-philosophy.md` for the gate model.)_
+> See [`docs/gate-philosophy.md`](docs/gate-philosophy.md) for when a gate should be
+> resolved versus overridden.
 
 ---
 
