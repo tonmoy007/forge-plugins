@@ -79,3 +79,53 @@ changes are applied as additive steps rather than a drop-in replacement.
 
 **Why**: Avoids clobbering existing init behaviors / local author changes
 (R-V13-8). Requires reading current SKILL.md state before each edit.
+
+---
+
+## Post-DAG correctness decisions
+
+These were not planned v0.1.3 tasks; they surfaced while finishing the release
+and were fixed in-stream because they block a credible ship.
+
+## D-V13-8 — Manifest requires only `name`; CC version is a runtime check
+
+**Decision**: `validate-plugin.py` requires `["name", "version"]` — `name`
+because it is the *only* schema-required field, `version` as a Forge
+release-discipline rule (every release pins an explicit semver). It does **not**
+require `claude_code_version`; that field does not exist in the Claude Code
+plugin manifest schema and was removed from `plugin.json` in v0.1.1.
+
+**Why**: A minimum Claude Code version is unrepresentable in the manifest.
+Enforce it where it actually works — at runtime in `doctor.py`
+(`claude --version` ≥ 2.1.0) — not via a non-existent manifest field.
+Verified against the official schema + plugins reference. Every artifact
+validator now also gets a test that runs it against the real in-repo artifact
+(the failure mode here was the validator drifting from the shipped manifest
+while synthetic fixtures masked it).
+
+## D-V13-9 — `${CLAUDE_PLUGIN_ROOT}` is the only correct path variable
+
+**Decision**: All active skill/doc/script references use
+`${CLAUDE_PLUGIN_ROOT}`. References to the old `${CLAUDE_PLUGIN_DIR}` are
+preserved **only** where they are intentionally historical: the CHANGELOG entry
+documenting the v0.1.1 rename and the lesson explaining the bug.
+
+**Why**: `CLAUDE_PLUGIN_DIR` is not a real env var; it expands to empty and
+silently breaks every plugin-relative path. v0.1.1 fixed only `plugin.json`;
+28 other files still carried it. Bulk renames must explicitly exclude
+historical/teaching references — clobbering them produces nonsense like
+`ROOT → ROOT`.
+
+## D-V13-10 — README positions against sequencing, not memory
+
+**Decision**: The README leads with enforced sequencing/discipline and REQ-ID
+traceability. It explicitly acknowledges that Claude Code already ships memory
+(`CLAUDE.md`, project context, subagents, Agent Teams) and does **not** claim
+Forge fixes memory loss. The stale "Milestones" table was removed.
+
+**Why**: The target audience already uses Claude Code's memory features; a
+"Claude forgets everything" framing overclaims and taxes the credibility of
+every later claim. Forge's defensible differentiators are gated sequencing,
+end-to-end traceability, structured (tagged/filterable/profile-tied)
+cross-project lessons, and skill mining — not memory. The milestones table
+duplicated `task-dag-v0.1.3.md` and had gone stale.

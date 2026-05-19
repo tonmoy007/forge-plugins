@@ -5,10 +5,15 @@
 > "where are we" — keep in sync with `build/04-plan/task-dag-v0.1.3.md`.
 
 **Last updated**: 2026-05-19
-**Current state**: All engineering tasks (T-100..T-108, T-110) complete. T-109
-partial (text traceability diagram in README; animated walkthrough deferred).
-Sole remaining release blocker: external-user dogfood (R-V13-1) — cannot be
-satisfied by an AI session; requires a non-author human.
+**Current state**: All engineering complete (T-100..T-108, T-110). T-109 text
+rewrite complete; only its GIF/screenshot asset remains (deferred to the
+dogfood run). Plus three post-DAG correctness fixes landed (validate-plugin,
+env-var rename, README reframe). **Sole remaining release blocker**:
+external-user dogfood (R-V13-1) — requires a non-author human; cannot be
+satisfied in an AI session.
+
+`main` and `develop` are in sync, **14 commits ahead of origin (unpushed)**,
+no `v0.1.3` tag cut yet (intentionally — gated on dogfood).
 
 ---
 
@@ -19,69 +24,81 @@ satisfied by an AI session; requires a non-author human.
 | T-100 | Hook resilience wrapper            | ✅ done    | 25 (`test_hook_runner.py`) |
 | T-101 | `/forge:doctor`                    | ✅ done    | 35 (`test_doctor.py`) |
 | T-102 | `/forge:uninstall`                 | ✅ done    | 21 (`test_uninstall.py`) |
-| T-103 | `/forge:init --dry-run` + manifest | 🟡 partial | covered by existing init tests |
+| T-103 | `/forge:init --dry-run` + manifest | ✅ done    | covered by init tests; smoke-verified |
 | T-104 | Gate result formatter              | ✅ done    | 17 (`test_format_gate_result.py`) |
 | T-105 | `/forge:force-advance`             | ✅ done    | 17 (`test_force_advance.py`) |
 | T-106 | `/forge:why`                       | ✅ done    | 26 (`test_why.py`) |
-| T-107 | `script` project profile           | 🟡 partial | 36 (`test_detect_project_type.py`) |
-| T-108 | First-run round-trip test          | ⬜ todo    | — |
-| T-109 | README rewrite                     | ⬜ todo    | — |
-| T-110 | CHANGELOG + version bump           | ⬜ todo    | — |
+| T-107 | `script` project profile           | ✅ done    | 36 (`test_detect_project_type.py`) |
+| T-108 | First-run round-trip test          | ✅ done    | `test_v013_first_run.sh` (exit 0) |
+| T-109 | README rewrite                     | 🟡 partial | text done; GIF/screenshot deferred |
+| T-110 | CHANGELOG + version bump           | ✅ done    | n/a (release ceremony, tag pending) |
 
-**Test suite**: 690 unit tests pass (baseline 532 + 158 new for v0.1.3).
+**Test suite**: 692 unit tests pass + the v0.1.3 integration test.
 srs-v0.1.3 §9 target was ≥ 615 — met.
 
 ---
 
 ## What's Done
 
-- **T-100** — `scripts/_hook_runner.py` created; all 7 hooks wrapped with
-  `run_hook(main, hook_name=...)` (commit `cbfd8d0`). Exception isolation,
-  SIGALRM timeout, blocking-hook safety, exit-2 suppression all tested.
-- **T-101** — `scripts/doctor.py` + `skills/forge-doctor/SKILL.md`. 13
-  deterministic checks across environment/plugin/project/global.
-- **T-102** — `scripts/uninstall.py` + `skills/forge-uninstall/SKILL.md`.
-  Mandatory dry-run, idempotent, separate global confirmation.
-- **T-104** — `scripts/format-gate-result.py`. Three input modes, longest-prefix
-  fix-hint lookup, severity grouping.
-- **T-105** — `scripts/force-advance.py` + `skills/forge-force-advance/SKILL.md`.
-  `--reason` required (≥ 10 chars), records `force-advance` lesson, advances stage.
-- **T-106** — `scripts/why.py` + `skills/forge-why/SKILL.md`. Resolves gate IDs,
-  lesson tags, stage numbers, and bare invocation against active blockers.
+- **T-100..T-106** — hook resilience wrapper, `/forge:doctor`,
+  `/forge:uninstall`, gate result formatter, `/forge:force-advance`,
+  `/forge:why`. Scripts + skills + unit tests, all committed.
+- **T-103** — `init-pipeline.sh` `--dry-run` / `--manifest-only`;
+  `forge-init` SKILL.md gitignore step + Verification section. Smoke-verified:
+  dry-run writes nothing, manifest is valid JSON.
+- **T-107** — `script` profile + `suggest_only` (never auto-assigned);
+  `detect-project-type.py` indicators; `check-script-runnable.py` /
+  `check-script-has-tests.py`. Verified: `script` is suggested, not assigned.
+- **T-108** — `tests/integration/test_v013_first_run.sh` + fixture. Exercises
+  doctor → init dry-run → init → gate failure → why → force-advance → why
+  (tag) → uninstall dry-run → uninstall → idempotent re-run. Exits 0 on a
+  clean checkout. (Caught a real test-helper variable-shadowing bug during
+  authoring; fixed.)
+- **T-109 (text)** — README leads with sequencing/discipline, explicitly
+  acknowledges Claude Code's own memory, and enumerates the genuine
+  differentiators. `docs/gate-philosophy.md` written. Milestones table removed
+  from README (stale, redundant with the DAG).
+- **T-110** — `plugin.json` + `marketplace.json` → `0.1.3`; CHANGELOG v0.1.3
+  entry. Git tag / GitHub release intentionally **not** cut (gated on dogfood).
 
-## In Progress
+### Post-DAG correctness fixes (not original v0.1.3 tasks)
 
-- **T-103 (partial)** — `scripts/init-pipeline.sh` rewritten for `--dry-run` /
-  `--manifest-only`. `skills/forge-init/SKILL.md` modified (uncommitted) for the
-  gitignore-prompt step; needs final review against AC-UX-003a/b.
-- **T-107 (partial)** — `scripts/detect-project-type.py` updated (uncommitted);
-  `scripts/check-script-runnable.py` and `scripts/check-script-has-tests.py`
-  created. Profile reference (`references/project-type-profiles.md`) updated.
-  Remaining: confirm `suggest_only` end-to-end through the init SKILL prompt.
-
-## Not Started
-
-- **T-108** — `tests/integration/test_v013_first_run.sh` does not exist yet.
-  Blocked-by-design on T-103/T-107 finalization.
-- **T-109** — README rewrite + `docs/gate-philosophy.md`.
-- **T-110** — version bump (`plugin.json` still `0.1.2`), CHANGELOG, tag.
+- **`validate-plugin.py`** — removed the bogus `claude_code_version` required
+  field (not in the official manifest schema; removed from `plugin.json` back
+  in v0.1.1). Validator now passes on the real manifest; regression tests added
+  (incl. one that validates the actual in-repo manifest).
+- **`${CLAUDE_PLUGIN_DIR}` → `${CLAUDE_PLUGIN_ROOT}`** across 28 skill/doc/
+  script files. `CLAUDE_PLUGIN_DIR` is not a real env var (expands to empty).
+  CHANGELOG and lessons references to the old name intentionally preserved.
+- **README reframe** — see T-109 above.
 
 ---
+
+## Remaining Work
+
+- **T-109 GIF/screenshot** — the only outstanding T-109 done-when item. A
+  binary visual asset; capture it during the R-V13-1 dogfood run so it adds no
+  new critical-path work.
 
 ## Release Blockers (srs-v0.1.3 §9)
 
 1. ⬜ External-user dogfood (R-V13-1) — **the single most important criterion**;
    notes go to `build/05-implementation/dogfood-notes-v0.1.3.md`.
-2. ⬜ `test_v013_first_run.sh` passing on clean checkout (T-108).
-3. ⬜ README leads with discipline + traceability (T-109).
-4. ⬜ CHANGELOG entry + `plugin.json` → `0.1.3` (T-110).
-5. ✅ Test count ≥ 615 (currently 690).
+2. ✅ `test_v013_first_run.sh` passes on a clean checkout (T-108).
+3. ✅ README leads with discipline + traceability, not memory (T-109 text).
+4. ✅ CHANGELOG entry + `plugin.json` → `0.1.3` (T-110).
+5. ✅ Test count ≥ 615 (currently 692 unit + integration).
+
+Blockers 2–5 are cleared. Only the dogfood (and the screenshot captured during
+it) stands between this and a `v0.1.3` tag.
 
 ---
 
 ## Next Session Starts Here
 
-1. Finalize T-103 SKILL.md gitignore step; verify AC-UX-003a/b.
-2. Finalize T-107 `suggest_only` prompt path; verify AC-PROF-002b.
-3. Commit the currently-uncommitted v0.1.3 work (scripts, skills, tests, build docs).
-4. Write T-108 integration test once T-103/T-107 are locked.
+1. Decide on push: `main`/`develop` are 14 commits ahead of origin, unpushed.
+   Project convention wants a `develop → main` PR before `main` ships.
+2. Run / arrange the external-user dogfood (R-V13-1); capture notes in
+   `build/05-implementation/dogfood-notes-v0.1.3.md` and grab the README
+   screenshot during it.
+3. After dogfood passes: cut the `v0.1.3` tag and GitHub release (T-110 close).
