@@ -1,9 +1,10 @@
 # Forge — SDLC Orchestrator for Claude Code
 
-> Turn Claude Code into a full-lifecycle software development engine: 12-stage pipeline,
-> specialized agents, persistent memory, auto-reflection, and adaptive workflows.
+> Turn Claude Code into a disciplined engineering partner: a 12-stage pipeline with
+> enforced quality gates and end-to-end REQ-ID traceability, specialized agents per
+> stage, and lessons that compound across sessions.
 
-[![Tests](https://img.shields.io/badge/tests-532%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-690%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![Claude Code](https://img.shields.io/badge/claude--code-%3E%3D2.1.0-blueviolet)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)]()
@@ -12,15 +13,29 @@
 
 ## What Forge Does
 
-Forge gives Claude Code a structured 12-stage pipeline — from requirements through release —
-with gate enforcement, specialized agents per stage, and a memory system that learns from every
-session.
+Forge imposes a structured 12-stage pipeline on Claude Code — from requirements through
+release — where **every stage has a gate that must pass before the next begins**, and
+**every line of work traces back to a numbered requirement** (`REQ-NNN → gate → code →
+test`). Specialized agents own each stage; lessons learned in one session inform the next.
 
-**Without Forge**: Claude is a smart assistant that forgets everything between sessions.
+**Without Forge**: Claude is a capable assistant with no enforced process — requirements
+drift, decisions go unrecorded, and quality is whatever the prompt happened to ask for.
 
-**With Forge**: Claude becomes a disciplined engineering partner that remembers decisions,
-enforces quality gates, surfaces lessons from past mistakes, and adapts its workflow to your
-project type.
+**With Forge**: work proceeds only through gates you can inspect and, when justified,
+explicitly override (`/forge:force-advance` records why). Nothing advances silently,
+nothing is untraceable, and recurring mistakes become surfaced lessons instead of
+repeated ones.
+
+> Traceability in practice — each artifact references the requirement it satisfies:
+>
+> ```
+> SRS            REQ-GATE-003  "force-advance override records a lesson"
+>   └─ Gate      G7-001        eval asserts the requirement is met
+>        └─ Code  scripts/force-advance.py
+>             └─ Test  tests/unit/test_force_advance.py  (17 cases)
+> ```
+>
+> _(Animated walkthrough pending — see `docs/gate-philosophy.md` for the gate model.)_
 
 ---
 
