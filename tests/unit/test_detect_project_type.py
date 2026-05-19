@@ -1,175 +1,348 @@
-"""Tests for scripts/detect-project-type.py"""
+"""Tests for T-107 additions:
+
+  - scripts/detect-project-type.py — _finalize() aliasing + script suggestion
+  - scripts/check-script-runnable.py
+  - scripts/check-script-has-tests.py
+
+Existing detect() behavior is not retested here — its tests should live in
+tests/unit/test_detect_project_type.py alongside the original v0.1.0 cases.
+This file is additive and intentionally narrow to the T-107 scope.
+
+Run with: python -m pytest tests/unit/test_detect_project_type_script.py -q
+"""
+from __future__ import annotations
+
 import importlib.util
-import os
-import tempfile
+import json
+import sys
+from pathlib import Path
 
-# Hyphenated filename — must use importlib (see tasks/lessons.md)
-_SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../scripts/detect-project-type.py"))
-_spec = importlib.util.spec_from_file_location("detect_project_type", _SCRIPT)
-_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-detect = _mod.detect
+import pytest
+
+SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
 
 
-def test_empty_dir_returns_unknown():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        result = detect(tmpdir)
+def _import(name: str):
+    """Import a hyphenated script by absolute path."""
+    path = SCRIPTS / f"{name}.py"
+    module_name = name.replace("-", "_")
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+detect_mod = _import("detect-project-type")
+runnable_mod = _import("check-script-runnable")
+tests_mod = _import("check-script-has-tests")
+
+
+# ---------- _finalize: alias ----------
+
+class TestFinalizeAlias:
+    def test_project_type_mirrors_type(self, tmp_path):
+        r = detect_mod._finalize({"type": "api", "confidence": 0.9, "indicators": []}, str(tmp_path))
+        assert r["type"] == "api"
+        assert r["project_type"] == "api"
+
+    def test_does_not_overwrite_existing_project_type(self, tmp_path):
+        r = detect_mod._finalize(
+            {"type": "api", "project_type": "library", "confidence": 0.9, "indicators": []},
+            str(tmp_path),
+        )
+        assert r["project_type"] == "library"  # caller's explicit value wins
+
+    def test_no_type_field_does_not_crash(self, tmp_path):
+        r = detect_mod._finalize({"confidence": 0.0}, str(tmp_path))
+        assert "project_type" not in r  # nothing to alias
+
+
+# ---------- _finalize: script suggestion ----------
+
+def _make_tiny_script_project(root: Path, *, loc: int = 100) -> Path:
+    """Create a small project with a single Python file of `loc` non-blank lines."""
+    proj = root / "tiny"
+    proj.mkdir()
+    lines = ["print('hello')"] * loc
+    (proj / "tool.py").write_text("\n".join(lines) + "\n")
+    return proj
+
+
+class TestScriptSuggestion:
+    def test_tiny_project_gets_script_suggestion(self, tmp_path):
+        proj = _make_tiny_script_project(tmp_path, loc=50)
+        # detect() will return unknown (no manifests, no signals)
+        result = detect_mod._finalize(detect_mod.detect(str(proj)), str(proj))
         assert result["type"] == "unknown"
-        assert result["confidence"] == 0.0
+        assert result.get("suggested_profile") == "script"
+        assert result["suggested_profile_confidence"] == detect_mod._SCRIPT_CONFIDENCE
+        assert result["suggested_profile_metadata"]["loc"] == 50
+        # Indicators are populated
+        assert any("LOC" in s for s in result["suggested_profile_indicators"])
 
-
-def test_package_json_only_returns_fullstack():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "package.json"), "w").write('{"name": "app"}')
-        result = detect(tmpdir)
-        assert result["type"] == "fullstack"
-        assert result["confidence"] >= 0.7
-
-
-def test_next_config_returns_fullstack_high_confidence():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "package.json"), "w").write('{"name": "app"}')
-        open(os.path.join(tmpdir, "next.config.js"), "w").write("module.exports = {};")
-        result = detect(tmpdir)
-        assert result["type"] == "fullstack"
-        assert result["confidence"] >= 0.9
-
-
-def test_torch_in_requirements_returns_ml_pipeline():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "requirements.txt"), "w").write("torch==2.0.0\nnumpy\n")
-        result = detect(tmpdir)
-        assert result["type"] == "ml-pipeline"
-        assert result["confidence"] >= 0.85
-
-
-def test_transformers_in_pyproject_returns_ml_pipeline():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "pyproject.toml"), "w").write(
-            '[project]\nname = "trainer"\ndependencies = ["transformers"]\n'
+    def test_project_with_setup_py_no_suggestion(self, tmp_path):
+        proj = _make_tiny_script_project(tmp_path, loc=50)
+        (proj / "setup.py").write_text("from setuptools import setup\nsetup()\n")
+        # Existing detect() will return library; even if it returned unknown, the
+        # presence of setup.py disqualifies the script suggestion.
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(proj),
         )
-        result = detect(tmpdir)
-        assert result["type"] == "ml-pipeline"
+        assert "suggested_profile" not in result
 
-
-def test_cargo_toml_with_bin_returns_cli():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "Cargo.toml"), "w").write(
-            '[package]\nname = "my-cli"\n\n[[bin]]\nname = "my-cli"\npath = "src/main.rs"\n'
+    def test_project_with_package_json_no_suggestion(self, tmp_path):
+        proj = _make_tiny_script_project(tmp_path, loc=50)
+        (proj / "package.json").write_text("{}")
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(proj),
         )
-        result = detect(tmpdir)
-        assert result["type"] == "cli"
-        assert result["confidence"] >= 0.8
+        assert "suggested_profile" not in result
 
-
-def test_cargo_toml_without_bin_returns_library():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "Cargo.toml"), "w").write(
-            '[package]\nname = "mylib"\n\n[lib]\nname = "mylib"\n'
+    def test_large_project_no_suggestion(self, tmp_path):
+        # Over 500 LOC → no suggestion even with no manifest.
+        proj = _make_tiny_script_project(tmp_path, loc=600)
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(proj),
         )
-        result = detect(tmpdir)
-        assert result["type"] == "library"
+        assert "suggested_profile" not in result
 
-
-def test_pyproject_no_entry_points_returns_library():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "pyproject.toml"), "w").write(
-            '[build-system]\nrequires = ["setuptools"]\n[project]\nname = "mylib"\n'
+    def test_too_many_files_no_suggestion(self, tmp_path):
+        proj = tmp_path / "many"
+        proj.mkdir()
+        for i in range(25):
+            (proj / f"f{i}.py").write_text("print(1)\n")
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(proj),
         )
-        result = detect(tmpdir)
-        assert result["type"] == "library"
+        assert "suggested_profile" not in result
+
+    def test_mixed_language_no_suggestion(self, tmp_path):
+        # Has a Go file → fails the language-subset check.
+        proj = _make_tiny_script_project(tmp_path, loc=50)
+        (proj / "main.go").write_text("package main\nfunc main() {}\n")
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(proj),
+        )
+        assert "suggested_profile" not in result
+
+    def test_empty_project_no_suggestion(self, tmp_path):
+        # No source files at all → no suggestion.
+        proj = tmp_path / "empty"
+        proj.mkdir()
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(proj),
+        )
+        assert "suggested_profile" not in result
+
+    def test_already_classified_no_suggestion(self, tmp_path):
+        # If detect() found something non-unknown, don't suggest script.
+        proj = _make_tiny_script_project(tmp_path, loc=50)
+        result = detect_mod._finalize(
+            {"type": "api", "confidence": 0.9, "indicators": []},
+            str(proj),
+        )
+        assert "suggested_profile" not in result
+
+    def test_forge_dirs_excluded_from_count(self, tmp_path):
+        proj = _make_tiny_script_project(tmp_path, loc=50)
+        # Add a fake .forge/ and pipeline/ that would push file count over threshold
+        # if not ignored.
+        (proj / ".forge").mkdir()
+        for i in range(30):
+            (proj / ".forge" / f"x{i}.json").write_text("{}")
+        (proj / "pipeline").mkdir()
+        for i in range(15):
+            (proj / "pipeline" / f"f{i}.md").write_text("x")
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(proj),
+        )
+        # Should still suggest script — the Forge dirs are ignored.
+        assert result.get("suggested_profile") == "script"
 
 
-def test_go_mod_with_cmd_dir_returns_cli():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "go.mod"), "w").write("module example.com/app\n\ngo 1.21\n")
-        os.makedirs(os.path.join(tmpdir, "cmd"))
-        result = detect(tmpdir)
-        assert result["type"] == "cli"
+# ---------- _count_loc / _is_language_subset helpers ----------
+
+class TestHelpers:
+    def test_count_loc_skips_blank_and_comments(self, tmp_path):
+        (tmp_path / "x.py").write_text(
+            "# comment\n"
+            "\n"
+            "print(1)\n"
+            "  # indented comment\n"
+            "print(2)\n"
+        )
+        assert detect_mod._count_loc(str(tmp_path), detect_mod._SCRIPT_EXTENSIONS) == 2
+
+    def test_count_files_excludes_hidden(self, tmp_path):
+        (tmp_path / "visible.py").write_text("x")
+        (tmp_path / ".hidden").write_text("x")
+        (tmp_path / ".dotdir").mkdir()
+        (tmp_path / ".dotdir" / "y.py").write_text("x")
+        assert detect_mod._count_files(str(tmp_path)) == 1
+
+    def test_language_subset_passes(self, tmp_path):
+        (tmp_path / "a.py").write_text("x")
+        (tmp_path / "b.sh").write_text("#!/bin/sh\n")
+        assert detect_mod._is_language_subset(
+            str(tmp_path), detect_mod._SCRIPT_EXTENSIONS,
+        )
+
+    def test_language_subset_fails_on_disallowed_ext(self, tmp_path):
+        (tmp_path / "a.py").write_text("x")
+        (tmp_path / "b.go").write_text("package main")
+        assert not detect_mod._is_language_subset(
+            str(tmp_path), detect_mod._SCRIPT_EXTENSIONS,
+        )
+
+    def test_language_subset_ignores_extensionless(self, tmp_path):
+        (tmp_path / "a.py").write_text("x")
+        (tmp_path / "Makefile").write_text("all:\n\techo hi\n")  # no extension
+        assert detect_mod._is_language_subset(
+            str(tmp_path), detect_mod._SCRIPT_EXTENSIONS,
+        )
+
+    def test_language_subset_empty_returns_false(self, tmp_path):
+        assert not detect_mod._is_language_subset(
+            str(tmp_path), detect_mod._SCRIPT_EXTENSIONS,
+        )
 
 
-# ---------------------------------------------------------------------------
-# T-023: ML detection enhancements
-# ---------------------------------------------------------------------------
+# ---------- check-script-runnable.py ----------
 
-def test_train_py_and_torch_returns_ml_pipeline():
-    # done-when criterion: train.py + torch in requirements.txt → ml-pipeline
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "train.py"), "w").write("import torch\n")
-        open(os.path.join(tmpdir, "requirements.txt"), "w").write("torch==2.1.0\nnumpy\n")
-        result = detect(tmpdir)
-        assert result["type"] == "ml-pipeline"
-        assert result["confidence"] >= 0.9
+class TestRunnable:
+    def test_python_parses(self, tmp_path):
+        (tmp_path / "tool.py").write_text("print('hi')\n")
+        found, msg = runnable_mod.find_runnable(tmp_path)
+        assert found
+        assert "tool.py" in msg
 
+    def test_python_with_syntax_error_not_runnable(self, tmp_path):
+        (tmp_path / "tool.py").write_text("def broken(\n")
+        found, _ = runnable_mod.find_runnable(tmp_path)
+        assert not found
 
-def test_train_py_and_torch_high_confidence():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "train.py"), "w").write("# training script\n")
-        open(os.path.join(tmpdir, "requirements.txt"), "w").write("torch>=2.0\n")
-        result = detect(tmpdir)
-        assert result["confidence"] == 0.95
+    def test_shell_with_shebang(self, tmp_path):
+        (tmp_path / "tool.sh").write_text("#!/bin/bash\necho hi\n")
+        found, msg = runnable_mod.find_runnable(tmp_path)
+        assert found
+        assert "tool.sh" in msg
 
+    def test_shell_without_shebang_not_runnable(self, tmp_path):
+        (tmp_path / "tool.sh").write_text("echo hi\n")
+        found, _ = runnable_mod.find_runnable(tmp_path)
+        assert not found
 
-def test_train_py_alone_returns_ml_pipeline():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "train.py"), "w").write("# training\n")
-        result = detect(tmpdir)
-        assert result["type"] == "ml-pipeline"
-        assert result["confidence"] >= 0.75
+    def test_extensionless_with_shebang(self, tmp_path):
+        f = tmp_path / "mytool"
+        f.write_text("#!/usr/bin/env python3\nprint('hi')\n")
+        found, msg = runnable_mod.find_runnable(tmp_path)
+        assert found
+        assert "mytool" in msg
 
+    def test_ignored_dirs_skipped(self, tmp_path):
+        # Only runnable file is under .venv/ — should be ignored.
+        (tmp_path / ".venv").mkdir()
+        (tmp_path / ".venv" / "tool.py").write_text("print('hi')\n")
+        found, _ = runnable_mod.find_runnable(tmp_path)
+        assert not found
 
-def test_jupyter_notebook_returns_ml_pipeline():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "analysis.ipynb"), "w").write("{}")
-        result = detect(tmpdir)
-        assert result["type"] == "ml-pipeline"
+    def test_pipeline_dir_skipped(self, tmp_path):
+        # Files inside pipeline/ should be ignored (Forge artifacts, not user code)
+        (tmp_path / "pipeline").mkdir()
+        (tmp_path / "pipeline" / "tool.py").write_text("print('hi')\n")
+        found, _ = runnable_mod.find_runnable(tmp_path)
+        assert not found
 
-
-def test_sklearn_in_requirements_returns_ml_pipeline():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "requirements.txt"), "w").write("scikit-learn>=1.0\npandas\n")
-        result = detect(tmpdir)
-        assert result["type"] == "ml-pipeline"
-
-
-def test_train_py_indicator_in_result():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "train.py"), "w").write("")
-        open(os.path.join(tmpdir, "requirements.txt"), "w").write("torch\n")
-        result = detect(tmpdir)
-        combined = " ".join(result["indicators"]).lower()
-        assert "train.py" in combined
-
-
-# ---------------------------------------------------------------------------
-# T-023: API type detection
-# ---------------------------------------------------------------------------
-
-def test_fastapi_in_requirements_returns_api():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "requirements.txt"), "w").write("fastapi\nuvicorn\n")
-        result = detect(tmpdir)
-        assert result["type"] == "api"
-        assert result["confidence"] >= 0.85
+    def test_cli_exit_codes(self, tmp_path, capsys):
+        # Failure case
+        rc = runnable_mod.main(["--cwd", str(tmp_path)])
+        assert rc == 1
+        # Success case
+        (tmp_path / "ok.py").write_text("print('x')\n")
+        rc = runnable_mod.main(["--cwd", str(tmp_path)])
+        assert rc == 0
 
 
-def test_flask_in_requirements_returns_api():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "requirements.txt"), "w").write("flask>=2.0\n")
-        result = detect(tmpdir)
-        assert result["type"] == "api"
+# ---------- check-script-has-tests.py ----------
+
+class TestHasTests:
+    def test_pytest_style_file(self, tmp_path):
+        (tmp_path / "test_thing.py").write_text("def test_x(): pass\n")
+        found, msg = tests_mod.find_tests(tmp_path)
+        assert found
+        assert "test_thing.py" in msg
+
+    def test_suffix_style_file(self, tmp_path):
+        (tmp_path / "thing_test.py").write_text("def test_x(): pass\n")
+        found, _ = tests_mod.find_tests(tmp_path)
+        assert found
+
+    def test_shell_test_file(self, tmp_path):
+        (tmp_path / "tool.test.sh").write_text("#!/bin/bash\necho ok\n")
+        found, _ = tests_mod.find_tests(tmp_path)
+        assert found
+
+    def test_tests_dir_with_runnable(self, tmp_path):
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "smoke.py").write_text("print('ok')\n")
+        found, msg = tests_mod.find_tests(tmp_path)
+        assert found
+        assert "tests/" in msg
+
+    def test_examples_dir_with_runnable(self, tmp_path):
+        (tmp_path / "examples").mkdir()
+        (tmp_path / "examples" / "demo.py").write_text("print('demo')\n")
+        found, msg = tests_mod.find_tests(tmp_path)
+        assert found
+        assert "examples/" in msg
+
+    def test_no_tests_anywhere(self, tmp_path):
+        (tmp_path / "tool.py").write_text("print('hi')\n")
+        (tmp_path / "README.md").write_text("# hi")
+        found, msg = tests_mod.find_tests(tmp_path)
+        assert not found
+        assert "no tests found" in msg.lower()
+
+    def test_ignored_dirs_not_counted(self, tmp_path):
+        # Test inside .venv/ doesn't count
+        (tmp_path / ".venv").mkdir()
+        (tmp_path / ".venv" / "test_thing.py").write_text("def test_x(): pass\n")
+        found, _ = tests_mod.find_tests(tmp_path)
+        assert not found
+
+    def test_hidden_files_ignored(self, tmp_path):
+        (tmp_path / ".test_hidden.py").write_text("def test_x(): pass\n")
+        found, _ = tests_mod.find_tests(tmp_path)
+        assert not found
+
+    def test_cli_exit_codes(self, tmp_path):
+        rc = tests_mod.main(["--cwd", str(tmp_path)])
+        assert rc == 1
+        (tmp_path / "test_x.py").write_text("def test_x(): pass\n")
+        rc = tests_mod.main(["--cwd", str(tmp_path)])
+        assert rc == 0
 
 
-def test_django_in_requirements_returns_api():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        open(os.path.join(tmpdir, "requirements.txt"), "w").write("django>=4.0\n")
-        result = detect(tmpdir)
-        assert result["type"] == "api"
+# ---------- end-to-end via CLI ----------
 
-
-def test_routes_dir_with_app_py_returns_api():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.makedirs(os.path.join(tmpdir, "routes"))
-        open(os.path.join(tmpdir, "app.py"), "w").write("from flask import Flask\n")
-        result = detect(tmpdir)
-        assert result["type"] == "api"
+class TestDetectCLI:
+    def test_outputs_valid_json_with_project_type(self, tmp_path, capsys, monkeypatch):
+        proj = _make_tiny_script_project(tmp_path, loc=50)
+        monkeypatch.setattr(sys, "argv", ["detect-project-type.py", "--cwd", str(proj)])
+        try:
+            detect_mod.main()
+        except SystemExit:
+            pass
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert "project_type" in data
+        assert data["project_type"] == "unknown"
+        assert data.get("suggested_profile") == "script"

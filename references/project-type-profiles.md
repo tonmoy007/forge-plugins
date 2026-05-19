@@ -65,7 +65,18 @@ detection:
       - file_contains: { path: "pyproject.toml", pattern: "\\[project\\]" }
       - no_app_entry_point: true
     confidence_threshold: 0.5
-```
+  
+  script:
+    # Conservative — `script` is opt-in for projects too small to justify
+    # the full pipeline. Auto-detected only when the repo is unambiguously tiny.
+    indicators:
+      - total_loc_under: 500            # all source files combined
+      - no_file_exists: ["package.json", "setup.py", "pyproject.toml",
+                         "Cargo.toml", "go.mod", "Gemfile", "composer.json"]
+      - file_count_under: 20            # excluding hidden / .git / node_modules
+      - language_subset: ["python", "shell", "javascript"]
+    confidence_threshold: 0.75          # high bar — defaults to `unknown` if unsure
+    suggest_only: true                  # on match, prompt the user rather than auto-assign```
 
 ---
 
@@ -354,6 +365,105 @@ stage_overrides:
       - id: G12-LIB-003
         description: Migration guide for breaking changes
         severity: blocker
+```
+
+---
+
+## Profile: script
+
+```yaml
+name: script
+description: Small, single-purpose script or utility. Compressed 4-stage pipeline
+  designed for projects under ~500 LOC where the full 12-stage flow would be
+  overkill. Honest about when Forge is overkill: this profile exists so users
+  don't bounce off Forge on their first try with a tiny project.
+
+stage_emphasis:
+  high: [srs, implementation, evaluation]
+  low: []  # nothing is "low" — most stages are skipped entirely
+
+# Stages 2, 3, 5, 8, 9, 10, 11, 12 are effectively no-ops for `script` projects.
+# Their gate criteria are softened to warnings and their artifacts are optional.
+
+stage_overrides:
+  stage_2:
+    skip: true
+    rationale: |
+      A 200-line script doesn't have a UX in the design-system sense. If the
+      script has any user-facing surface (e.g., help text), capture it in the
+      SRS instead.
+
+  stage_3:
+    optional: true
+    rationale: |
+      Architecture for a single-file script is the file itself. If the script
+      grows beyond one module, prompt the user to revisit the profile.
+    soft_criteria:  # downgraded from blocker to warning
+      - id: G3-001
+      - id: G3-002
+
+  stage_4:
+    optional: true
+    rationale: |
+      Technical spec is fused into the SRS for `script` profile. Skip unless
+      the user explicitly invokes /forge:spec.
+
+  stage_5:
+    skip: true
+    rationale: |
+      Task DAG for a script is just "write it, test it, ship it" — not worth
+      modeling.
+
+  stage_6:
+    additional_artifacts: []  # no progress tracker overhead
+    additional_criteria:
+      - id: G6-SCRIPT-001
+        description: Script is executable (has shebang and chmod +x) OR is invokable via `python <script>`
+        check: script_returns_zero
+        args: { script: "scripts/check-script-runnable.py" }
+        severity: blocker
+      - id: G6-SCRIPT-002
+        description: Help text or `--help` flag exists if the script takes args
+        severity: warning
+
+  stage_7:
+    soft_criteria:  # downgrade these to warnings — full eval suite is overkill
+      - id: G7-001
+      - id: G7-002
+      - id: G7-003
+    additional_criteria:
+      - id: G7-SCRIPT-001
+        description: At least one test exists (pytest test, bash assertion, or executable example)
+        check: script_returns_zero
+        args: { script: "scripts/check-script-has-tests.py" }
+        severity: blocker
+      - id: G7-SCRIPT-002
+        description: Script runs end-to-end without error on a sample input
+        severity: warning
+
+  stage_8:
+    skip: true
+    replace_with: distribute
+    artifacts:
+      - "pipeline/08-deploy/distribute.md"  # one paragraph: "copy to ~/bin/" or "pipx install ."
+
+  stage_9:
+    skip: true
+    rationale: Scripts don't have runtime monitoring needs.
+
+  stage_10:
+    skip: true
+    rationale: Feedback for a personal script is just "did it work last time?"
+
+  stage_11:
+    skip: true
+    rationale: Resolution is "edit the script and re-run."
+
+  stage_12:
+    optional: true
+    rationale: |
+      Tag a version only if you intend to share or version this script. Most
+      scripts don't need a release stage.
 ```
 
 ---
