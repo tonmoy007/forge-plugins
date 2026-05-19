@@ -47,7 +47,7 @@ lesson is the only protection against that fact being forgotten.
    so the lesson context is fresh.
 4. Run the force-advance command:
    ```bash
-   python ${CLAUDE_PLUGIN_DIR}/scripts/force-advance.py \
+   python ${CLAUDE_PLUGIN_ROOT}/scripts/force-advance.py \
        --reason "<the user's exact reason>" \
        --cwd "<project>"
    ```
@@ -78,7 +78,7 @@ reviewed at the end of the cycle (≥ 10 characters)."
 
 **User**: "Deferring ADRs to next sprint; team consensus from today's standup."
 
-**Claude**: [runs `python ${CLAUDE_PLUGIN_DIR}/scripts/force-advance.py
+**Claude**: [runs `python ${CLAUDE_PLUGIN_ROOT}/scripts/force-advance.py
 --reason "Deferring ADRs to next sprint; team consensus from today's standup."
 --cwd "$(pwd)"`]
 

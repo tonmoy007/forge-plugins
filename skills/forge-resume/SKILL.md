@@ -25,7 +25,7 @@ exact next action — no re-discovery required.
 Run this check first:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py --cwd . read
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py --cwd . read
 ```
 
 If the command fails or the directory has no `pipeline/state.md`, tell the user
@@ -36,7 +36,7 @@ the project is not initialized and suggest `/forge:init`.
 ### 1. Read pipeline state
 
 ```bash
-python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py --cwd . read
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py --cwd . read
 ```
 
 Extract: `current_stage`, `current_task`, `current_milestone`, `last_updated`, `blockers`.
@@ -44,7 +44,7 @@ Extract: `current_stage`, `current_task`, `current_milestone`, `last_updated`, `
 ### 2. Load stage-appropriate context
 
 ```bash
-python3 ${CLAUDE_PLUGIN_DIR}/scripts/context-pruner.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/context-pruner.py \
   --stage <current_stage> \
   --cwd . \
   --budget 1800
@@ -65,7 +65,7 @@ in the previous session segment. If it is empty, note "no prior reflection found
 ### 4. Read recent lessons
 
 ```bash
-python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py --cwd . read
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py --cwd . read
 ```
 
 From `tasks/lessons.md`, read the 3 most recent lesson entries (those under the most recent
@@ -74,10 +74,10 @@ From `tasks/lessons.md`, read the 3 most recent lesson entries (those under the 
 ### 5. Check gate status
 
 ```bash
-python3 ${CLAUDE_PLUGIN_DIR}/scripts/check-gate.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py \
   --stage <current_stage> \
   --cwd . \
-  --plugin-dir ${CLAUDE_PLUGIN_DIR}
+  --plugin-dir ${CLAUDE_PLUGIN_ROOT}
 ```
 
 Note how many gate criteria pass. If any `blocker`-severity criteria fail, surface them.

@@ -32,7 +32,7 @@
       "matcher": "",
       "hooks": [{
         "type": "command",
-        "command": "python ${CLAUDE_PLUGIN_DIR}/hooks/session-start.py",
+        "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py",
         "timeout": 5
       }]
     }],
@@ -40,7 +40,7 @@
       "matcher": "",
       "hooks": [{
         "type": "command",
-        "command": "python ${CLAUDE_PLUGIN_DIR}/hooks/prompt-submit.py",
+        "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-submit.py",
         "timeout": 3
       }]
     }],
@@ -48,7 +48,7 @@
       "matcher": "Write|Edit|MultiEdit",
       "hooks": [{
         "type": "command",
-        "command": "python ${CLAUDE_PLUGIN_DIR}/hooks/pre-tool-write.py",
+        "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-write.py",
         "timeout": 3
       }]
     }],
@@ -56,7 +56,7 @@
       "matcher": "Write|Edit|MultiEdit|Bash",
       "hooks": [{
         "type": "command",
-        "command": "python ${CLAUDE_PLUGIN_DIR}/hooks/post-tool-use.py",
+        "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.py",
         "timeout": 5,
         "async": true
       }]
@@ -65,7 +65,7 @@
       "matcher": "",
       "hooks": [{
         "type": "command",
-        "command": "python ${CLAUDE_PLUGIN_DIR}/hooks/stop-reflect.py",
+        "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/stop-reflect.py",
         "timeout": 15
       }]
     }],
@@ -73,7 +73,7 @@
       "matcher": "",
       "hooks": [{
         "type": "command",
-        "command": "python ${CLAUDE_PLUGIN_DIR}/hooks/subagent-stop.py",
+        "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.py",
         "timeout": 5
       }]
     }],
@@ -81,7 +81,7 @@
       "matcher": "",
       "hooks": [{
         "type": "command",
-        "command": "python ${CLAUDE_PLUGIN_DIR}/hooks/session-end.py",
+        "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/session-end.py",
         "timeout": 10,
         "async": true
       }]

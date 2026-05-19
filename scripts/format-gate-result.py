@@ -129,7 +129,7 @@ _CHECK_TYPE_FIX_HINTS: dict[str, str] = {
         "pattern from the criterion description.",
     "script_returns_zero":
         "Run the check script directly to see its full output: "
-        "`python ${{CLAUDE_PLUGIN_DIR}}/{script_path}` — then resolve the issues it surfaces.",
+        "`python ${{CLAUDE_PLUGIN_ROOT}}/{script_path}` — then resolve the issues it surfaces.",
     "all_tests_pass":
         "Run `{test_command}` and resolve each failing test before re-running gate.",
 }

@@ -43,8 +43,8 @@ Explicit trigger conditions. Be specific:
 ## Steps
 
 1. Check that `pipeline/` doesn't already exist (if it does, prompt the user)
-2. Run `bash ${CLAUDE_PLUGIN_DIR}/scripts/init-pipeline.sh`
-3. Run `python ${CLAUDE_PLUGIN_DIR}/scripts/detect-project-type.py`
+2. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/init-pipeline.sh`
+3. Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/detect-project-type.py`
 4. Update `pipeline/state.md` with detected project type
 5. Print welcome message with next-step suggestion
 
@@ -112,7 +112,7 @@ In SKILL.md body:
 - `$ARGUMENTS` — full user input after the slash command
 - `$0`, `$1`, `$2`, ... — positional args
 - `${CLAUDE_SKILL_DIR}` — path to this skill's directory
-- `${CLAUDE_PLUGIN_DIR}` — path to the plugin root
+- `${CLAUDE_PLUGIN_ROOT}` — path to the plugin root
 
 ## Testing a Skill
 

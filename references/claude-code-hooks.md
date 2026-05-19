@@ -89,7 +89,7 @@ Plus event-specific fields:
         "hooks": [
           {
             "type": "command",
-            "command": "python ${CLAUDE_PLUGIN_DIR}/hooks/script.py",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/script.py",
             "timeout": 5,
             "async": false
           }
@@ -108,7 +108,7 @@ Plus event-specific fields:
 - Specific events have specific matchers (PreToolUse: tool name; SessionStart: trigger type)
 
 **Variables available in commands**:
-- `${CLAUDE_PLUGIN_DIR}` — absolute path to plugin root
+- `${CLAUDE_PLUGIN_ROOT}` — absolute path to plugin root
 - `${CLAUDE_TOOL_INPUT_FILE_PATH}` — for tool hooks, the file being acted on
 - `${CLAUDE_PROJECT_DIR}` — user's working directory
 

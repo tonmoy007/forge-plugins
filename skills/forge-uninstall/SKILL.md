@@ -32,7 +32,7 @@ Claude Code plugin registration; that's a separate `/plugin uninstall` action.
 
 1. **Always preview first.** Run a dry-run BEFORE any destructive action:
    ```bash
-   python ${CLAUDE_PLUGIN_DIR}/scripts/uninstall.py --dry-run --cwd "<project>"
+   python ${CLAUDE_PLUGIN_ROOT}/scripts/uninstall.py --dry-run --cwd "<project>"
    ```
 2. Present the full plan output **verbatim** to the user. Do not paraphrase what will
    be removed; the user needs to see the exact paths, file counts, and sizes
@@ -41,7 +41,7 @@ Claude Code plugin registration; that's a separate `/plugin uninstall` action.
 4. Only after the user replies with an unambiguous yes (or equivalent — "do it",
    "go ahead", "remove it"), run the actual removal:
    ```bash
-   python ${CLAUDE_PLUGIN_DIR}/scripts/uninstall.py --cwd "<project>" --yes
+   python ${CLAUDE_PLUGIN_ROOT}/scripts/uninstall.py --cwd "<project>" --yes
    ```
 5. If the user said "keep my SRS / specs / pipeline files", add `--keep-artifacts`.
    This preserves `pipeline/` and only removes `.forge/`
@@ -67,7 +67,7 @@ After running, all of these should be true:
 
 **User**: "I want to uninstall Forge from this project"
 
-**Claude**: [runs `python ${CLAUDE_PLUGIN_DIR}/scripts/uninstall.py --dry-run --cwd "$(pwd)"`]
+**Claude**: [runs `python ${CLAUDE_PLUGIN_ROOT}/scripts/uninstall.py --dry-run --cwd "$(pwd)"`]
 
 "Here's what would be removed:
 
@@ -89,7 +89,7 @@ architecture documents (and only remove the runtime), say 'keep artifacts'."
 
 **User**: "yes, but keep my SRS"
 
-**Claude**: [runs `python ${CLAUDE_PLUGIN_DIR}/scripts/uninstall.py --cwd "$(pwd)" --yes --keep-artifacts`]
+**Claude**: [runs `python ${CLAUDE_PLUGIN_ROOT}/scripts/uninstall.py --cwd "$(pwd)" --yes --keep-artifacts`]
 
 [Presents the output verbatim, including the next-steps reminder]
 

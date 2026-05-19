@@ -26,21 +26,21 @@ Use this skill whenever the user wants to:
 
 1. Parse `$ARGUMENTS` for `--dry-run`. If present, set `DRY_RUN=true`. If the user passed `--type <profile>`, capture that as `OVERRIDE_TYPE`.
 2. **If `DRY_RUN`**:
-   - Run `bash ${CLAUDE_PLUGIN_DIR}/scripts/init-pipeline.sh --dry-run`
+   - Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/init-pipeline.sh --dry-run`
    - Present the plan verbatim. The final line reads "Re-run without --dry-run to apply."
    - **Stop here. Do not proceed to step 3 or any subsequent step.** Wait for the user to explicitly confirm they want to apply the plan before doing the real init.
 3. Run the real init in manifest mode to capture what was created:
-   - `bash ${CLAUDE_PLUGIN_DIR}/scripts/init-pipeline.sh --manifest-only`
+   - `bash ${CLAUDE_PLUGIN_ROOT}/scripts/init-pipeline.sh --manifest-only`
    - The manifest is JSON: `{dry_run: false, root: "<abs path>", created: [...], skipped: [...]}`
    - Parse the JSON. The `created` array length tells you how many files were written; the `skipped` array shows pre-existing files that were left alone.
 4. Detect the project type (skip if `OVERRIDE_TYPE` was set):
-   - Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/detect-project-type.py --cwd .`
+   - Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-project-type.py --cwd .`
    - The output is JSON with a `project_type` (or `assigned_profile`) field, plus a `confidence` score and `indicators` list.
    - **If the response contains `suggested_profile` instead of `assigned_profile`** (this happens for the `script` profile, which is opt-in only), prompt the user: *"This looks like a small script (under 500 LOC, no package manifest). Forge has a streamlined `script` profile (4 active stages instead of 12). Use it, or the full pipeline?"* — and use the user's choice.
    - **If confidence < 0.7**, ask the user: *"I detected `[type]` (confidence [N]%) based on `[indicators]`. Does that sound right, or would you like to pick a different profile?"*
    - Available types: `ml-pipeline`, `fullstack`, `api`, `cli`, `library`, `script`, `unknown`.
 5. Write the detected (or user-confirmed) type into `pipeline/state.md`:
-   - `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py set --field project_type --value <type> --cwd .`
+   - `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py set --field project_type --value <type> --cwd .`
    - This is the only place project_type gets set on init; do not hand-edit the YAML frontmatter.
    - The assigned profile influences which lessons get surfaced at session start and which gate criteria apply.
 6. Check `.gitignore` for `.forge/`:
@@ -75,11 +75,11 @@ In dry-run mode, confirm:
 
 **User**: "Initialize Forge here"
 
-**Claude**: [runs `bash ${CLAUDE_PLUGIN_DIR}/scripts/init-pipeline.sh --manifest-only` and parses the JSON; 18 files created]
+**Claude**: [runs `bash ${CLAUDE_PLUGIN_ROOT}/scripts/init-pipeline.sh --manifest-only` and parses the JSON; 18 files created]
 
-[runs `python3 ${CLAUDE_PLUGIN_DIR}/scripts/detect-project-type.py --cwd .` and gets `{"project_type": "api", "confidence": 0.85, "indicators": ["fastapi in requirements.txt", "routes/ directory"]}`]
+[runs `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-project-type.py --cwd .` and gets `{"project_type": "api", "confidence": 0.85, "indicators": ["fastapi in requirements.txt", "routes/ directory"]}`]
 
-[runs `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py set --field project_type --value api --cwd .`]
+[runs `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py set --field project_type --value api --cwd .`]
 
 [reads `.gitignore` and finds no `.forge/` entry]
 
@@ -103,7 +103,7 @@ Created 18 files:
 
 **User**: "/forge:init --dry-run"
 
-**Claude**: [runs `bash ${CLAUDE_PLUGIN_DIR}/scripts/init-pipeline.sh --dry-run`]
+**Claude**: [runs `bash ${CLAUDE_PLUGIN_ROOT}/scripts/init-pipeline.sh --dry-run`]
 
 ```
 would create: pipeline/01-srs/.gitkeep
@@ -126,15 +126,15 @@ Re-run without --dry-run to apply.
 
 **User**: "Set up Forge for this 200-line shell script project"
 
-**Claude**: [runs `bash ${CLAUDE_PLUGIN_DIR}/scripts/init-pipeline.sh --manifest-only`; 18 files created]
+**Claude**: [runs `bash ${CLAUDE_PLUGIN_ROOT}/scripts/init-pipeline.sh --manifest-only`; 18 files created]
 
-[runs `python3 ${CLAUDE_PLUGIN_DIR}/scripts/detect-project-type.py --cwd .` and the response includes `"suggested_profile": "script"` because the repo is small and has no package manifest]
+[runs `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-project-type.py --cwd .` and the response includes `"suggested_profile": "script"` because the repo is small and has no package manifest]
 
 "This looks like a small script (under 500 LOC, no package manifest). Forge has a streamlined `script` profile that compresses the pipeline from 12 stages to 4 active ones (SRS-lite → Build → Eval → optional Release). Want to use it, or stick with the full pipeline?"
 
 **User**: "use the script profile"
 
-**Claude**: [runs `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py set --field project_type --value script --cwd .`]
+**Claude**: [runs `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py set --field project_type --value script --cwd .`]
 
 [gitignore check, etc.]
 

@@ -27,8 +27,8 @@ Create the `/forge:init` command that scaffolds a Forge pipeline in any project.
      or mentions 'init', 'initialize', 'set up Forge', or describes starting a new project
      they want orchestrated."
    - Body instructs Claude to:
-     1. Run `bash ${CLAUDE_PLUGIN_DIR}/scripts/init-pipeline.sh` to create directory structure
-     2. Run `python ${CLAUDE_PLUGIN_DIR}/scripts/detect-project-type.py` to identify the type
+     1. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/init-pipeline.sh` to create directory structure
+     2. Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/detect-project-type.py` to identify the type
      3. Write the initial `pipeline/state.md` with detected type
      4. Print a welcome message confirming what was created
      5. Suggest the next command (`/forge:srs` or `/forge:resume`)

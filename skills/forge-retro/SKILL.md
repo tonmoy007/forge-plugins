@@ -26,7 +26,7 @@ share, and act on for the next cycle.
 Confirm the project is at the right point:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py --cwd . read
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py --cwd . read
 ```
 
 If `pipeline/state.md` is missing, tell the user the project is not Forge-managed
@@ -36,8 +36,8 @@ complete and ask whether to proceed early (acceptable for mid-cycle pulse checks
 Refresh the skill-mining results so the retro shows the latest proposals:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_DIR}/scripts/mine-skills.py --cwd . \
-  --plugin-dir ${CLAUDE_PLUGIN_DIR}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/mine-skills.py --cwd . \
+  --plugin-dir ${CLAUDE_PLUGIN_ROOT}
 ```
 
 ## Steps
@@ -52,7 +52,7 @@ Read each of these in parallel — they all contribute to the retro:
 - `.forge/sessions/*.md` — session summaries written by `session-end.py`
 - Pending skill proposals:
   ```bash
-  python3 ${CLAUDE_PLUGIN_DIR}/scripts/skill-approval.py --cwd . list
+  python3 ${CLAUDE_PLUGIN_ROOT}/scripts/skill-approval.py --cwd . list
   ```
 
 ### 2. Identify what went well

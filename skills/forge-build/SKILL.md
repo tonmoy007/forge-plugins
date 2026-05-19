@@ -19,9 +19,9 @@ allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 1. Read `pipeline/state.md` — confirm Forge project.
 2. Confirm `pipeline/05-plan/task-dag.md` exists. If not: "Complete Stage 5 first (`/forge:plan`)."
 3. Read `build/05-implementation/progress.md` (or create it) to identify the current task.
-4. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/check-gate.py --stage 5` to confirm Stage 5 gate passes.
+4. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage 5` to confirm Stage 5 gate passes.
    If gate fails, show what's missing and pause.
-5. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 6` to load project-type overrides — these add build-stage criteria (e.g., fullstack: design tokens enforced, bundle budget, RSC boundary) that the Builder must respect.
+5. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 6` to load project-type overrides — these add build-stage criteria (e.g., fullstack: design tokens enforced, bundle budget, RSC boundary) that the Builder must respect.
 
 ## Steps
 
@@ -30,7 +30,7 @@ allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 3. Read the current task from the task DAG and the corresponding spec section.
 4. Follow the Builder workflow: read before editing, implement, test, verify, commit. Treat any `additional_criteria` from the profile as additional pre-commit checks (run them or document why they're deferred).
 5. Mark the task complete in `build/05-implementation/progress.md`.
-6. If this is the first task: run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 6`.
+6. If this is the first task: run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 6`.
 
 ## Verification
 

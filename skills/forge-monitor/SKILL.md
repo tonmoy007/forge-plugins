@@ -19,7 +19,7 @@ allowed-tools: [Read, Write, Bash]
 1. Read `pipeline/state.md` — confirm Forge project.
 2. Confirm `pipeline/08-deployment/deployment-plan.md` exists (or `package-spec.md` for CLI/library projects). If neither: "Complete Stage 8 first (`/forge:deploy`)."
 3. If stage > 9, ask if the user wants to update the health report.
-4. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 9` to load project-type overrides. **If the profile sets `skip: true` (library), skip this stage and report that monitoring is N/A for the project type.** Otherwise, treat each `additional_criteria` (e.g., API: 4xx/5xx alerts, p99 latency; ML: model drift, data quality, inference latency) as required SLI/SLO/alert entries.
+4. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 9` to load project-type overrides. **If the profile sets `skip: true` (library), skip this stage and report that monitoring is N/A for the project type.** Otherwise, treat each `additional_criteria` (e.g., API: 4xx/5xx alerts, p99 latency; ML: model drift, data quality, inference latency) as required SLI/SLO/alert entries.
 
 ## Steps
 
@@ -28,7 +28,7 @@ allowed-tools: [Read, Write, Bash]
 3. Read `pipeline/08-deployment/deployment-plan.md` and `pipeline/01-srs/srs.md` NFR section.
 4. Follow the Observer workflow: derive SLIs/SLOs from NFRs, check available signals, assess health. Add every profile criterion as a tracked signal with threshold and alert.
 5. Write `pipeline/09-monitoring/slo-definition.md` and `pipeline/09-monitoring/health-report.md`.
-6. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 9` to mark Stage 9 active.
+6. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 9` to mark Stage 9 active.
 
 ## Verification
 

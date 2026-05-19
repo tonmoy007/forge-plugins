@@ -18,9 +18,9 @@ allowed-tools: [Read, Write, Bash, Grep, Glob]
 
 1. Read `pipeline/state.md` — confirm Forge project.
 2. Confirm `pipeline/01-srs/srs.md` and `pipeline/04-technical-spec/technical-spec.md` exist.
-3. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/check-gate.py --stage 6` to see Stage 6 status.
+3. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage 6` to see Stage 6 status.
    If critical criteria fail, warn the user before proceeding.
-4. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 7` to load project-type evaluation criteria. **Every** profile criterion in `additional_criteria` (e.g., ML: model accuracy, GPU memory, drift detection; API: contract tests, load test, auth bypass; fullstack: Lighthouse, WCAG AA, responsive breakpoints; CLI: --help text, exit codes; library: API surface, semver, doc coverage) **must appear as a row in the eval matrix** with a pass/fail verdict and evidence.
+4. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 7` to load project-type evaluation criteria. **Every** profile criterion in `additional_criteria` (e.g., ML: model accuracy, GPU memory, drift detection; API: contract tests, load test, auth bypass; fullstack: Lighthouse, WCAG AA, responsive breakpoints; CLI: --help text, exit codes; library: API surface, semver, doc coverage) **must appear as a row in the eval matrix** with a pass/fail verdict and evidence.
 
 ## Steps
 
@@ -29,7 +29,7 @@ allowed-tools: [Read, Write, Bash, Grep, Glob]
 3. Read `pipeline/01-srs/srs.md` to enumerate all REQ-IDs.
 4. Follow the Evaluator workflow: run tests, check each REQ-ID for evidence, assess NFRs. Then evaluate each `additional_criteria` row from the profile loaded in pre-flight — for an ML project this includes the drift detection criterion (G7-ML-005).
 5. Write `pipeline/07-evaluation/eval-report.md` per the Output Contract. The eval matrix must explicitly list every profile criterion alongside REQ-IDs and NFRs.
-6. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 7` to mark Stage 7 active.
+6. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 7` to mark Stage 7 active.
 
 ## Verification
 

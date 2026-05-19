@@ -294,7 +294,7 @@ allowed-tools: [Read, Write, Bash]
 1. Read `pipeline/state.md` — confirm `current_stage` is 2 or higher.
 2. Run the profile loader:
    ```bash
-   python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 2
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 2
    ```
    Apply any `replace_with`, `skip`, or `additional_concerns` overrides.
 
@@ -310,7 +310,7 @@ allowed-tools: [Read, Write, Bash]
 5. Write `pipeline/02-product/ux-research.md` per the Output Contract.
 6. Run the gate check:
    ```bash
-   python3 ${CLAUDE_PLUGIN_DIR}/scripts/check-gate.py --stage 2 --cwd .
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage 2 --cwd .
    ```
 
 ## Verification

@@ -24,7 +24,7 @@ Use this skill whenever the user:
 
 1. Read state by running:
    ```bash
-   python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py --cwd . read
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py --cwd . read
    ```
    If the command fails with exit code 1, the project is not initialized — tell the user
    to run `/forge:init` first.
@@ -49,7 +49,7 @@ Use this skill whenever the user:
 
 3. If `scripts/check-gate.py` exists, run:
    ```bash
-   python3 ${CLAUDE_PLUGIN_DIR}/scripts/check-gate.py --stage <current_stage> --cwd .
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage <current_stage> --cwd .
    ```
    and append a **Gate** section showing pass/fail per criterion.
    If `check-gate.py` does not exist yet, skip this step silently.

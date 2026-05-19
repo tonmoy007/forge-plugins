@@ -32,7 +32,7 @@ fix command. The script exits 0 if all checks pass (warnings allowed), 1 if any 
    - Otherwise use `${CLAUDE_PROJECT_DIR}` if set, else the current working directory
 2. Run the diagnostic. Default invocation:
    ```bash
-   python ${CLAUDE_PLUGIN_DIR}/scripts/doctor.py --cwd "<project>"
+   python ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.py --cwd "<project>"
    ```
 3. If the user wants only failures and warnings (no passes), add `--quiet`
 4. If the user wants machine-readable output (parsing in a script), add `--json`
@@ -56,7 +56,7 @@ After running, all of these should be true:
 
 **User**: "Forge isn't injecting anything at session start"
 
-**Claude**: [runs `python ${CLAUDE_PLUGIN_DIR}/scripts/doctor.py --cwd "$(pwd)"`]
+**Claude**: [runs `python ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.py --cwd "$(pwd)"`]
 
 ```
 Forge Doctor — diagnostic report

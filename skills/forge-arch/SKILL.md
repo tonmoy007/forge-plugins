@@ -20,7 +20,7 @@ allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
 2. Confirm `pipeline/01-srs/srs.md` exists. If not: "Complete Stage 1 first (`/forge:srs`)."
 3. Confirm `pipeline/02-product-ux/prd.md` exists (warn if missing but don't block).
 4. If stage > 3, ask if the user wants to revise architecture.
-5. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/load-profile.py --cwd . --stage 3` to load project-type overrides. Note any `additional_concerns` (e.g., ML: training/inference path, checkpoint format; fullstack: SSR/SSG strategy, BFF boundary; API: versioning, pagination, idempotency) and `additional_artifacts` (e.g., openapi-spec.yaml, route-manifest.md).
+5. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 3` to load project-type overrides. Note any `additional_concerns` (e.g., ML: training/inference path, checkpoint format; fullstack: SSR/SSG strategy, BFF boundary; API: versioning, pagination, idempotency) and `additional_artifacts` (e.g., openapi-spec.yaml, route-manifest.md).
 
 ## Steps
 
@@ -29,7 +29,7 @@ allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
 3. Read `pipeline/01-srs/srs.md` and `pipeline/02-product-ux/prd.md`.
 4. Follow the System Architect workflow: C4 diagrams, data model, API surface, security model, ADRs. Address every `additional_concerns` item from the profile in the architecture doc, and produce any `additional_artifacts` listed.
 5. Write `pipeline/03-architecture/architecture.md`, ADR files, and any profile-specified extra artifacts per the Output Contract.
-6. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 3` to mark Stage 3 active.
+6. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 3` to mark Stage 3 active.
 
 ## Verification
 

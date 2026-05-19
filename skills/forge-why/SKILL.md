@@ -46,11 +46,11 @@ human-readable explanation. Four input modes:
    - Anything else → lesson tag
 2. Run:
    ```bash
-   python ${CLAUDE_PLUGIN_DIR}/scripts/why.py "<target>" --cwd "<project>"
+   python ${CLAUDE_PLUGIN_ROOT}/scripts/why.py "<target>" --cwd "<project>"
    ```
    For bare invocation, omit the target:
    ```bash
-   python ${CLAUDE_PLUGIN_DIR}/scripts/why.py --cwd "<project>"
+   python ${CLAUDE_PLUGIN_ROOT}/scripts/why.py --cwd "<project>"
    ```
 3. Present the output to the user **verbatim**. The fix hints inside are
    literal — do not paraphrase them.
@@ -77,7 +77,7 @@ After running, all of these should be true:
 
 **User**: "Why is G3-002 failing?"
 
-**Claude**: [runs `python ${CLAUDE_PLUGIN_DIR}/scripts/why.py G3-002 --cwd "$(pwd)"`]
+**Claude**: [runs `python ${CLAUDE_PLUGIN_ROOT}/scripts/why.py G3-002 --cwd "$(pwd)"`]
 
 ```
 Gate criterion: G3-002
@@ -100,7 +100,7 @@ you have one to point to?"
 
 **User**: "What's blocking me right now?"
 
-**Claude**: [runs `python ${CLAUDE_PLUGIN_DIR}/scripts/why.py --cwd "$(pwd)"`]
+**Claude**: [runs `python ${CLAUDE_PLUGIN_ROOT}/scripts/why.py --cwd "$(pwd)"`]
 
 ```
 Stage 3: 2 blocker(s):
@@ -125,7 +125,7 @@ to start drafting it together, or if you'd rather sketch the ADR first."
 
 **User**: "What is stage 7?"
 
-**Claude**: [runs `python ${CLAUDE_PLUGIN_DIR}/scripts/why.py 7 --cwd "$(pwd)"`]
+**Claude**: [runs `python ${CLAUDE_PLUGIN_ROOT}/scripts/why.py 7 --cwd "$(pwd)"`]
 
 ```
 Stage 7 — evaluation
@@ -144,7 +144,7 @@ like contract tests and load tests on top of the base gates."
 
 **User**: "Have I force-advanced before?"
 
-**Claude**: [runs `python ${CLAUDE_PLUGIN_DIR}/scripts/why.py force-advance --cwd "$(pwd)"`]
+**Claude**: [runs `python ${CLAUDE_PLUGIN_ROOT}/scripts/why.py force-advance --cwd "$(pwd)"`]
 
 ```
 Lesson tag: force-advance
