@@ -120,7 +120,12 @@
 ## Patterns by Category
 
 ### Plugin Development
-*(Empty — fill as patterns emerge)*
+- **The Claude Code plugin manifest has exactly one required field: `name`.**
+  There is no `claude_code_version`, `engines`, or `compatibility` field — a
+  minimum Claude Code version *cannot* be declared in `plugin.json`. Enforce it
+  at runtime instead (`doctor.py` checks `claude --version`). Before adding or
+  requiring any manifest field, check it against
+  https://json.schemastore.org/claude-code-plugin-manifest.json.
 
 ### Hook Implementation
 *(Empty)*
@@ -129,7 +134,12 @@
 *(Empty)*
 
 ### Testing
-*(Empty)*
+- **Validators must be tested against the real shipped artifact, not only
+  synthetic fixtures.** `validate-plugin.py` required `claude_code_version` and
+  its tests fixtures *also* injected that bogus field, so the suite stayed green
+  while the validator rejected the actual `.claude-plugin/plugin.json` for 3
+  releases. Rule: every artifact validator gets a test that runs it against the
+  real in-repo artifact (see `test_real_repo_manifest_validates`).
 
 ### Communication with User
 *(Empty)*

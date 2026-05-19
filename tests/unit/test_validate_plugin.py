@@ -21,9 +21,8 @@ def good_plugin(tmp_path: Path) -> Path:
     plugin_dir.mkdir()
     path = plugin_dir / "plugin.json"
     path.write_text(json.dumps({
-        "name": "sdlc-orchestrator",
+        "name": "forge",
         "version": "0.1.0",
-        "claude_code_version": ">=2.1.0",
         "hooks": {
             "SessionStart": [{"hooks": [{"type": "command", "command": "python hooks/session-start.py"}]}]
         }
@@ -38,7 +37,6 @@ def missing_name_plugin(tmp_path: Path) -> Path:
     path = plugin_dir / "plugin.json"
     path.write_text(json.dumps({
         "version": "0.1.0",
-        "claude_code_version": ">=2.1.0",
     }))
     return path
 
@@ -68,11 +66,31 @@ def test_unknown_hook_event_fails(tmp_path: Path) -> None:
     plugin_dir.mkdir()
     path = plugin_dir / "plugin.json"
     path.write_text(json.dumps({
-        "name": "sdlc-orchestrator",
+        "name": "forge",
         "version": "0.1.0",
-        "claude_code_version": ">=2.1.0",
         "hooks": {
             "UnknownEvent": [{"hooks": []}]
         }
     }))
     assert validate(path) is False
+
+
+def test_manifest_without_claude_code_version_passes(tmp_path: Path) -> None:
+    """Regression: claude_code_version is NOT a real manifest field (removed in
+    v0.1.1). A manifest omitting it must validate — the validator must not
+    require a field that does not exist in the official schema."""
+    plugin_dir = tmp_path / ".claude-plugin"
+    plugin_dir.mkdir()
+    path = plugin_dir / "plugin.json"
+    path.write_text(json.dumps({"name": "forge", "version": "0.1.3"}))
+    assert validate(path) is True
+
+
+def test_real_repo_manifest_validates() -> None:
+    """The actual shipped .claude-plugin/plugin.json must pass its own
+    validator. Guards against the validator drifting from the real manifest
+    (the exact failure that prompted this fix)."""
+    repo_manifest = (
+        Path(__file__).parent.parent.parent / ".claude-plugin" / "plugin.json"
+    )
+    assert validate(repo_manifest) is True

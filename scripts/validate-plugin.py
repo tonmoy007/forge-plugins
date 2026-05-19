@@ -16,7 +16,15 @@ KNOWN_HOOK_EVENTS = {
     "SessionEnd",
 }
 
-REQUIRED_FIELDS = ["name", "version", "claude_code_version"]
+# Per the official Claude Code plugin manifest schema
+# (https://json.schemastore.org/claude-code-plugin-manifest.json) `name` is the
+# ONLY schema-required field. There is no `claude_code_version`/`engines`
+# manifest field — a minimum Claude Code version cannot be expressed in the
+# manifest at all; it is enforced at runtime by scripts/doctor.py instead.
+# Forge additionally requires `version` as a release-discipline rule: every
+# release must pin an explicit semver for traceability (stricter than the
+# schema, intentionally).
+REQUIRED_FIELDS = ["name", "version"]
 
 
 def validate(plugin_path: Path) -> bool:
@@ -49,7 +57,7 @@ def validate(plugin_path: Path) -> bool:
             for hook in matcher_block.get("hooks", []):
                 cmd = hook.get("command", "")
                 # Extract script path from command (strip env var prefix)
-                parts = cmd.replace("${CLAUDE_PLUGIN_DIR}", str(plugin_dir)).split()
+                parts = cmd.replace("${CLAUDE_PLUGIN_ROOT}", str(plugin_dir)).split()
                 for part in parts:
                     if part.endswith(".py"):
                         script_path = Path(part)
