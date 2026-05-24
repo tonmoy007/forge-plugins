@@ -3,7 +3,11 @@
 # These are for SCRIPTS, not hooks. Hooks are stdlib-only by design (see ADR-001).
 # Scripts can use these freely.
 
-# Frontmatter parsing for state.md and SKILL.md files
+# python-frontmatter is TEST-ONLY as of v0.1.3.1. Production scripts parse
+# frontmatter with stdlib + PyYAML so external users don't need to pip-install it.
+# (Claude Code plugin installs don't trigger pip; and `pip install frontmatter`
+# resolves to an unrelated package.) Two existing tests still import it; remove
+# when those are rewritten.
 python-frontmatter>=1.0.0
 
 # Proposal schema validation in stop-reflect v4.1 helper modules

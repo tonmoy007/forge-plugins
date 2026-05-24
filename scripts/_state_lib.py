@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Reusable state library for pipeline/state.md. Imported directly by hooks (no shelling out)."""
+"""Reusable state library for pipeline/state.md. Imported directly by hooks.
+
+Uses stdlib + PyYAML for frontmatter parsing — no python-frontmatter dependency.
+Rationale: Claude Code plugin installs do not pip-install Python deps, and the bare
+PyPI name `frontmatter` resolves to an unrelated package (v0.1.3 user reports). See
+the v0.1.3.1 lesson in tasks/lessons.md.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +16,48 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-import frontmatter
+import yaml
+
+
+_FENCE = "---"
+
+
+def _split_frontmatter(text: str) -> tuple[dict, str]:
+    """Parse a frontmatter-style markdown document into (metadata, body).
+
+    Returns ({}, text) if no opening `---` fence is found on the first line.
+    Body is returned with a single leading newline stripped (matching the
+    python-frontmatter behavior we previously relied on).
+    """
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != _FENCE:
+        return {}, text
+    for i in range(1, len(lines)):
+        if lines[i].rstrip("\r\n") == _FENCE:
+            yaml_block = "".join(lines[1:i])
+            body = "".join(lines[i + 1 :])
+            if body.startswith("\n"):
+                body = body[1:]
+            data = yaml.safe_load(yaml_block) or {}
+            if not isinstance(data, dict):
+                data = {}
+            return data, body
+    return {}, text
+
+
+def _join_frontmatter(metadata: dict, body: str) -> str:
+    """Serialize (metadata, body) into a frontmatter markdown document.
+
+    Output format: `---\\n<yaml>---\\n\\n<body>` — matches the previous
+    python-frontmatter dumps output so on-disk state.md byte layout is preserved.
+    """
+    yaml_block = yaml.safe_dump(
+        metadata,
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+    )
+    return f"{_FENCE}\n{yaml_block}{_FENCE}\n\n{body}"
 
 
 def _normalize_metadata(metadata: dict) -> dict:
@@ -28,6 +75,7 @@ def _normalize_metadata(metadata: dict) -> dict:
         else:
             result[k] = v
     return result
+
 
 STATE_RELPATH = "pipeline/state.md"
 
@@ -98,8 +146,8 @@ def _atomic_write(path: Path, content: str) -> None:
 def read_state(cwd: str) -> dict:
     """Load and return the frontmatter dict from pipeline/state.md."""
     p = _ensure_state_exists(cwd)
-    post = frontmatter.load(str(p))
-    return _normalize_metadata(dict(post.metadata))
+    metadata, _ = _split_frontmatter(p.read_text())
+    return _normalize_metadata(metadata)
 
 
 def write_state(cwd: str, frontmatter_dict: dict) -> None:
@@ -110,19 +158,17 @@ def write_state(cwd: str, frontmatter_dict: dict) -> None:
     if not valid:
         print(f"error: invalid frontmatter — {'; '.join(errors)}", file=sys.stderr)
         sys.exit(1)
-    post = frontmatter.load(str(p))
-    for key, val in normalized.items():
-        post[key] = val
-    _atomic_write(p, frontmatter.dumps(post))
+    current, body = _split_frontmatter(p.read_text())
+    current.update(normalized)
+    _atomic_write(p, _join_frontmatter(current, body))
 
 
 def advance_stage(cwd: str, to: Optional[int] = None) -> dict:
     """Increment current_stage (or jump to `to`), update last_updated, return new state."""
     p = _ensure_state_exists(cwd)
-    post = frontmatter.load(str(p))
-    state = dict(post.metadata)
+    metadata, body = _split_frontmatter(p.read_text())
 
-    old = state.get("current_stage", 0)
+    old = metadata.get("current_stage", 0)
     if to is not None:
         if to < old:
             print(f"warning: moving backward from stage {old} to {to}", file=sys.stderr)
@@ -132,20 +178,19 @@ def advance_stage(cwd: str, to: Optional[int] = None) -> dict:
     else:
         new = old + 1
 
-    state["current_stage"] = new
-    state["last_updated"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    metadata["current_stage"] = new
+    metadata["last_updated"] = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
-    for key, val in state.items():
-        post[key] = val
-    _atomic_write(p, frontmatter.dumps(post))
-    return state
+    _atomic_write(p, _join_frontmatter(metadata, body))
+    return _normalize_metadata(metadata)
 
 
 def append_to_section(cwd: str, section_title: str, content: str) -> None:
     """Append content at the end of a ## section in the markdown body."""
     p = _ensure_state_exists(cwd)
-    post = frontmatter.load(str(p))
-    body = post.content
+    metadata, body = _split_frontmatter(p.read_text())
     header = f"## {section_title}"
     lines = body.split("\n")
 
@@ -161,5 +206,4 @@ def append_to_section(cwd: str, section_title: str, content: str) -> None:
         lines.insert(end_idx, content)
         body = "\n".join(lines)
 
-    post.content = body
-    _atomic_write(p, frontmatter.dumps(post))
+    _atomic_write(p, _join_frontmatter(metadata, body))

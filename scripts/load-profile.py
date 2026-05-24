@@ -36,11 +36,14 @@ def _read_project_type(cwd: Path) -> Optional[str]:
     if not state_path.exists():
         return None
     try:
-        import frontmatter  # type: ignore
-        post = frontmatter.load(state_path)
-        ptype = post.metadata.get("project_type")
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import _state_lib as lib  # noqa: E402
+        metadata = lib.read_state(str(cwd))
+        ptype = metadata.get("project_type")
         if isinstance(ptype, str) and ptype.strip():
             return ptype.strip()
+    except SystemExit:
+        return None
     except Exception:
         return None
     return None

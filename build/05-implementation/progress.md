@@ -6,8 +6,9 @@
 ## Current State
 
 - **Active milestone**: M7 — Polish + Documentation
-- **Current task**: — (all 33 tasks complete; v0.1.0 tagged)
-- **Last session ended**: 2026-05-12
+- **Current task**: — (all 33 tasks complete; v0.1.3.1 tagged)
+- **Last session ended**: 2026-05-24
+- **Last hotfix**: v0.1.3.1 — dropped `python-frontmatter` runtime dep (`scripts/_state_lib.py`, `scripts/load-profile.py`); 3 regression tests added. Resolves feedback/v0.1.3/feedback1.md `ModuleNotFoundError: frontmatter` reports.
 
 ## Task Status
 

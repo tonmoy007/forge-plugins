@@ -107,6 +107,13 @@
 - **NOT a rule**: Don't filter on "parameterizable steps" — patterns.jsonl doesn't record params today. Add that in a future task when T-026 logs them.
 - **Tags**: [skill-miner, mining, noise, sliding-window, filters]
 
+### 2026-05-24 — `frontmatter` on PyPI is a different package; never make `python-frontmatter` a runtime dep for Claude Code plugins
+- **Trigger**: Any production script (hook-called or invoked via slash command) that imports `frontmatter`. Claude Code plugin installation does NOT run `pip install`, so any third-party Python import in the hot path will `ModuleNotFoundError` on first session for every external user.
+- **Rule**: Production scripts parse YAML frontmatter with stdlib (`---` fence splitting) + PyYAML for the YAML block. Do not import `frontmatter` outside `tests/`. If you need a frontmatter parser, copy the `_split_frontmatter` / `_join_frontmatter` helpers from `scripts/_state_lib.py`.
+- **Why**: `python-frontmatter` is the package we want; `frontmatter` is an unrelated package with no `.load()`. Users self-remediating with `pip install frontmatter` land on the wrong one and hit `AttributeError: module 'frontmatter' has no attribute 'load'`. PyYAML is broadly preinstalled and already validated by `/forge:doctor`.
+- **Where**: `scripts/_state_lib.py`, `scripts/load-profile.py` (both fixed in v0.1.3.1); pattern: add a `TestNoFrontmatterDependency` regression class using a `PYTHONPATH` shim that raises `ImportError` from `frontmatter.py`.
+- **Tags**: [python, dependencies, plugin-distribution, hooks, v0.1.3.1, frontmatter, pyyaml]
+
 ### 2026-05-14 — argparse: subparser default overwrites parent value; use SUPPRESS on subparsers
 - **Trigger**: Hook or AI caller invokes `script.py --flag value subcommand` and the value is silently overwritten by the subparser's default, making `--flag` appear ignored
 - **Root cause**: argparse dispatches to subparsers by writing their defaults into the *same* namespace. If the subparser has `default=X` for a flag, it overwrites whatever the main parser set, even when the flag was not present in the subparser's remaining args.
