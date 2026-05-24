@@ -168,6 +168,64 @@ class TestHistoryAddCommand:
         assert text.count("passed") >= 2
 
 
+class TestNoFrontmatterDependency:
+    """Regression for v0.1.3.1 hotfix: the production state-manager path must work even
+    when the `python-frontmatter` PyPI package is missing or shadowed by the unrelated
+    `frontmatter` package. The plugin installer does not pip-install Python deps, and
+    `pip install frontmatter` returns the wrong package — every external user hit this.
+    """
+
+    def _shim_dir(self, tmp_path: Path) -> Path:
+        """Create a directory containing a `frontmatter.py` shim that raises ImportError."""
+        shim = tmp_path / "_shim"
+        shim.mkdir()
+        (shim / "frontmatter.py").write_text(
+            "raise ImportError('simulated: python-frontmatter not installed')\n"
+        )
+        return shim
+
+    def _run_with_shim(self, args: list[str], shim_dir: Path) -> subprocess.CompletedProcess:
+        import os as _os
+        env = _os.environ.copy()
+        # Prepend shim to PYTHONPATH so `import frontmatter` resolves to the broken shim.
+        env["PYTHONPATH"] = str(shim_dir) + _os.pathsep + env.get("PYTHONPATH", "")
+        return subprocess.run(
+            [PYTHON, SCRIPT] + args,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_read_works_without_python_frontmatter(self, tmp_path):
+        _make_state(tmp_path)
+        shim = self._shim_dir(tmp_path)
+        r = self._run_with_shim(["--cwd", str(tmp_path), "read"], shim)
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        data = json.loads(r.stdout)
+        assert data["project_type"] == "unknown"
+
+    def test_set_works_without_python_frontmatter(self, tmp_path):
+        _make_state(tmp_path)
+        shim = self._shim_dir(tmp_path)
+        r = self._run_with_shim(
+            ["--cwd", str(tmp_path), "set", "--field", "current_task", "--value", "T-200"],
+            shim,
+        )
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        r2 = self._run_with_shim(
+            ["--cwd", str(tmp_path), "read", "--field", "current_task"], shim
+        )
+        assert r2.stdout.strip() == "T-200"
+
+    def test_advance_works_without_python_frontmatter(self, tmp_path):
+        _make_state(tmp_path)
+        shim = self._shim_dir(tmp_path)
+        r = self._run_with_shim(["--cwd", str(tmp_path), "advance", "--to", "4"], shim)
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        data = json.loads(r.stdout)
+        assert data["current_stage"] == 4
+
+
 class TestCwdPositioning:
     """--cwd must be accepted in any argument position (AI callers use semantic order)."""
 

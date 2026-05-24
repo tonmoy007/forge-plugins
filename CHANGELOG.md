@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.3.1] — 2026-05-24
+
+Hotfix release. Removes the runtime dependency on the `python-frontmatter` PyPI
+package, which silently broke every external install: Claude Code plugin installs
+do not run `pip install`, and the bare PyPI name `frontmatter` resolves to an
+unrelated package (no `.load()`), so users who tried to self-remediate hit
+`AttributeError: module 'frontmatter' has no attribute 'load'`. State management
+now uses PyYAML + a stdlib frontmatter splitter; PyYAML is already a documented
+runtime dep checked by `/forge:doctor`.
+
+### Fixed
+- `scripts/_state_lib.py` — replaced `import frontmatter` and all `frontmatter.load`
+  / `frontmatter.dumps` calls with stdlib parsing of the `---` fence + PyYAML for
+  the YAML block. On-disk `pipeline/state.md` byte layout preserved.
+- `scripts/load-profile.py` — `_read_project_type()` now delegates to
+  `_state_lib.read_state` instead of importing `frontmatter` directly.
+
+### Added
+- 3 regression tests in `tests/unit/test_state_manager.py` (`TestNoFrontmatterDependency`)
+  that shadow `frontmatter` with an `ImportError`-raising shim and assert read/set/
+  advance still work. Catches future re-introductions of the dep.
+- One lesson in `tasks/lessons.md` capturing the dep-vs-package-name foot-gun.
+
+### User impact
+- External users on v0.1.3 hit `ModuleNotFoundError: No module named 'frontmatter'`
+  in every `state-manager.py` invocation (SessionStart, UserPromptSubmit, Stop hooks,
+  and `/forge:init` post-setup). v0.1.3.1 makes a clean install work end-to-end with
+  only PyYAML installed.
+
+---
+
 ## [0.1.3] — 2026-05-19
 
 First-run hardening release. Theme: make the first ten minutes — install, init,
