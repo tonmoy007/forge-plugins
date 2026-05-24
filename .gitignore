@@ -54,6 +54,10 @@ logs/
 .local/
 local.config.yaml
 
+# Raw tester feedback (may contain PII / machine paths)
+# Triaged findings live in build/06-evaluation/ instead.
+feedback/
+
 # Plugin install caches
 .claude-plugin/cache/
 .omc/
