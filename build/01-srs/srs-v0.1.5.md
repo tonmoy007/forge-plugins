@@ -44,17 +44,16 @@
 
 ### REQ-NEXTHINT-001 — Post-stage "next step" hint matches pipeline order
 
-**Source**: EF-004 (and blocked on OQ-5; see EF-016)
+**Source**: EF-004 (and EF-016; OQ-5 resolved 2026-06-01 → mandatory)
 
 **Trigger**: A `/forge:*` skill or `state-manager` advances stage and
 emits a next-step hint to the user.
 
-**Status**: Behavior below is the **mandatory** branch (OQ-5 option A).
-If OQ-5 lands on advisory (option B), this REQ is rewritten to offer
-both `/forge:product` and `/forge:arch` after SRS with trade-off
-guidance.
+**Status**: OQ-5 resolved 2026-06-01 — Stage 2 is **mandatory**. REQ
+locked to the mandatory-branch wording. Companion REQ-GATE-ENTRY-001
+covers the pre-flight block.
 
-**Behavior** (sketch):
+**Behavior**:
 
 - After `01-srs`, the next-step hint says **product/UX**, not architecture.
 - The hint is derived from a single source of truth (stage order table)
@@ -89,8 +88,51 @@ skill writes its output.
 - AC-PATHS-001b: No two directories under `pipeline/` correspond to the
   same stage.
 
-**Open**: Pick `04-spec` (matches existing init scaffold) vs
-`04-technical-spec` (matches existing skill output). Decide during plan.
+**Resolved**: OQ-1 locked 2026-06-01 — canonical name is **`04-spec`**
+(matches `forge:init` scaffold and `check-gate.py` expectations).
+`skills/forge-spec/SKILL.md` step 4 (writes to `pipeline/04-technical-spec/`)
+must change to `pipeline/04-spec/`. Any v0.1.3.x projects with a
+populated `04-technical-spec/` directory get a one-time migration note
+in the v0.1.5 CHANGELOG.
+
+---
+
+### REQ-GATE-ENTRY-001 — Pre-flight entry blocks for skippable stages
+
+**Source**: OQ-5 resolved → mandatory branch; companion to REQ-NEXTHINT-001.
+
+**Trigger**: A stage skill is invoked while its prior-stage prerequisite
+artifact is missing (e.g. `/forge:arch` invoked without `prd.md`).
+
+**Behavior** (sketch):
+
+- Every stage skill that depends on a prior stage's primary artifact
+  runs a pre-flight check before adopting its persona. If the required
+  artifact is missing, the skill exits 2 with a one-line message naming
+  the missing file and the prior-stage skill to run instead.
+- Applies to stages 2–11. Stage 1 has no prerequisite; stage 12 has its
+  own release gate. Per-stage prerequisite map lives alongside the
+  stage-order table that powers REQ-NEXTHINT-001 (single source of truth).
+- `scripts/_state_lib.py:advance_stage` **rejects** `to > old + 1`
+  unless invoked from `/forge:force-advance`. The current warn-but-
+  don't-block behavior is removed. `force-advance.py` becomes the only
+  documented path for intentional skips.
+
+**Acceptance** (sketch):
+
+- AC-GATE-ENTRY-001a: For each stage 2–11, a synthetic invocation with
+  the prior-stage artifact missing produces exit 2 and a message
+  naming the missing file. One test per stage.
+- AC-GATE-ENTRY-001b: `state-manager.py advance --to N` where N > current+1
+  exits non-zero unless `--force` is passed. `/forge:force-advance` is
+  the user-facing path to `--force`.
+- AC-GATE-ENTRY-001c: The pre-flight check and the next-step hint
+  derive from the same stage-order table (no duplicated stage logic).
+
+**Relation to other REQs**: Hardens [[req-nexthint-001]]'s mandatory
+contract; complements [[req-doctor-001]] / [[req-silentstate-001]] by
+preventing the surface-healthy-substance-inert antipattern at the
+*entry* gate (those REQs cover the *exit* gate and runtime state).
 
 ---
 
@@ -277,7 +319,111 @@ explicit correction prompt.
   clean control session (no hook errors, no blocks, no wedges) — a
   control test must yield zero flags.
 
-**Open**: Producers (1) and (4) need threshold values. See OQ-6.
+**Thresholds**: All 5 producers enabled per OQ-6 resolution (2026-06-01).
+Producer (1) hook-error cluster N=5; producer (2) repeated `PreToolUse`
+block M=2; producers (3) (4) (5) binary on first occurrence.
+
+---
+
+### REQ-BUILDBATCH-001 — `/forge:build` supports milestone-scoped batches
+
+**Source**: EF-020 (OQ-8 resolved 2026-06-01 → option B)
+
+**Trigger**: User wants to drive multiple tasks of a milestone without
+re-issuing `/forge:build` per task.
+
+**Status**: OQ-8 resolved 2026-06-01 — **option B (`--milestone N`)**.
+`--all` deferred to v0.1.6+; revisit only if v0.1.5 dogfood shows
+milestone batches insufficient and context-degradation isn't a problem.
+
+**Behavior**:
+
+- `/forge:build --milestone N` walks every T-ID under
+  `## Milestone N:` in `pipeline/05-plan/task-dag.md` in dependency
+  order. Each task still: runs the Builder persona, runs tests, commits
+  with `feat(T-XXX):` per task, marks done in `progress.md`. No batched
+  commits, no batched tests.
+- On the **first** task failure (test red, gate red, or hook block),
+  the batch **pauses**, prints which T-ID failed and why, leaves the
+  preceding task commits in place, and exits non-zero. User resumes
+  with `/forge:build` (single task) or `/forge:build --milestone N
+  --resume` (continues from the failed T-ID after the user has fixed
+  it).
+- Context discipline: the skill warns *"large batch — N tasks, consider
+  splitting"* when `N > 10` (threshold revisited per OQ-8). Default
+  batch limit is the milestone size; `--all` is intentionally not
+  offered in v0.1.5.
+- `/forge:build` (no flag) keeps current single-task behavior. The
+  default footer is updated to mention `--milestone` as an option.
+
+**Acceptance** (sketch):
+
+- AC-BUILDBATCH-001a: A synthetic project with a 3-task milestone
+  invoked as `/forge:build --milestone 1` produces exactly 3 commits,
+  each with the corresponding T-ID prefix, in dependency order.
+- AC-BUILDBATCH-001b: Same project with one task scripted to fail —
+  the failure halts the batch, leaves prior commits intact, and
+  `--resume` continues correctly after the failure is patched.
+- AC-BUILDBATCH-001c: Single-task invocation (`/forge:build` no flag)
+  produces identical output to v0.1.4 — backward compatible.
+
+**Relation to other REQs**: Composes with [[req-stagereflect-001]]
+(per-stage reflection) — a milestone-batch run gives the per-stage
+reflector richer data to summarize. Composes with [[req-silentstate-001]] /
+[[req-doctor-001]] — if state surfaces stop being silent, batch failure
+diagnostics get much better.
+
+---
+
+### REQ-GATESTUB-001 — Gate criteria pointing at unimplemented scripts fail loud
+
+**Source**: EF-019 (OQ-7 resolved 2026-06-01 → both)
+
+**Trigger**: `check-gate.py` evaluates a `script_returns_zero` criterion
+whose `script:` path does not exist in the plugin.
+
+**Status**: OQ-7 resolved 2026-06-01 — **both branches** in scope:
+fail-loud on missing scripts **and** implement the 15 missing scripts
+this cycle. v0.1.5 ships both halves together; partial delivery is not
+acceptance.
+
+**Behavior** (sketch, fail-loud half):
+
+- An unimplemented check script is treated as a configuration bug, not
+  a soft pass. `check-gate.py` reports the criterion as `inconclusive`
+  (not `False`-with-warning) and the gate summary surfaces a top-line
+  *"⚠️ N criteria unimplemented — gate result is provisional"* banner.
+- `severity: warning` for a missing-script criterion is **promoted to
+  blocker** at evaluation time. Rationale: a stub gate that silently
+  warns hides the same antipattern family as `/forge:doctor` reporting
+  healthy on a wedged stage. Lessons learned (EF-017, EF-007).
+- Audit: at REQ-GATESTUB-001 acceptance time, enumerate every
+  `script_returns_zero` criterion in `references/gate-criteria.md`,
+  confirm each referenced script exists, file follow-up REQs for any
+  that don't.
+
+**Acceptance** (sketch):
+
+- AC-GATESTUB-001a: A synthetic gate criterion pointing at a
+  nonexistent script produces `inconclusive` output and exits the gate
+  with non-zero status, regardless of declared severity.
+- AC-GATESTUB-001b: All 15 missing scripts ship in v0.1.5 — concretely:
+  `check_srs_acceptance.py`, `traceability-check.py`, `spec-coverage.py`,
+  `check_dag_completeness.py`, `check_dag_completion.py`, `token-audit.py`,
+  `check_coverage.py`, `check_todos.py`, `check_progress_sync.py`,
+  `check_nfr_coverage.py`, `check_open_bugs.py`, `check_health.py`,
+  `check_hotfix_tests.py`, `check_git_tag.py`, `some_check.py`
+  (or the criterion is removed/rewritten with explicit justification).
+  No `script_returns_zero` criterion in `references/gate-criteria.md`
+  may reference a missing script at v0.1.5 tag time.
+- AC-GATESTUB-001c: `/forge:doctor` and `/forge:status` surface the
+  *"N criteria unimplemented"* banner so a wedged pipeline cannot be
+  rationalized as "warnings only."
+
+**Relation to antipattern family**: Fourth instance of the surface-
+healthy / substance-inert family. Sister REQs: REQ-SILENTSTATE-001
+(hook layer), REQ-DOCTOR-001 (doctor layer), REQ-LESSON-SOURCES-001
+(lesson capture). REQ-GATESTUB-001 covers the **gate-config layer**.
 
 ---
 
@@ -332,7 +478,7 @@ stage.
 **Source**: EF-012
 
 **Trigger**: A research-oriented stage agent (SRS, product, architecture,
-spec, plan) needs current best-practice grounding.
+spec) needs current best-practice grounding. Planner excluded per OQ-3.
 
 **Behavior** (sketch):
 
@@ -410,12 +556,15 @@ errors that don't reference Forge file paths.
 | REQ                     | Source EF-ID(s)     | Category    |
 | ----------------------- | ------------------- | ----------- |
 | REQ-NEXTHINT-001        | EF-004              | bug         |
+| REQ-GATE-ENTRY-001      | OQ-5 → EF-016       | bug         |
 | REQ-PATHS-001           | EF-005              | bug         |
 | REQ-LARGEDOC-001        | EF-006              | friction    |
 | REQ-PATTERN-001         | EF-008              | bug         |
 | REQ-SILENTSTATE-001     | EF-007 (+EF-002)    | bug         |
 | REQ-DOCTOR-001          | EF-017              | bug         |
 | REQ-LESSON-SOURCES-001  | EF-018              | bug         |
+| REQ-GATESTUB-001        | EF-019              | bug         |
+| REQ-BUILDBATCH-001      | EF-020              | friction    |
 | REQ-SESSIONLOG-001      | EF-009, EF-015      | suggestion  |
 | REQ-STAGEREFLECT-001    | EF-010              | suggestion  |
 | REQ-WEBSEARCH-001       | EF-012              | suggestion  |
@@ -430,57 +579,69 @@ no longer pending re-verification.)
 
 ## 5. Open Questions
 
-- **OQ-1** — Should REQ-PATHS-001 standardize on `04-spec` or
-  `04-technical-spec`? Pick during plan; renaming has cascade effects
-  through skills, gate checks, and existing test fixtures.
-- **OQ-2** — Is `pattern.jsonl` worth fixing in v0.1.5 if skill-miner
-  proposals aren't being consumed by anyone yet? Argument for: defining
-  the schema now prevents drift. Argument against: empty bus is fine if
-  nothing reads it. Decide once skill-miner's downstream use is clear.
-- **OQ-3** — Should REQ-WEBSEARCH-001 apply to the planner stage too,
-  or only the upstream research stages? The planner's job is structural,
-  not research; cite-or-skip may not fit. Default: exclude planner.
-- **OQ-4** — Does v0.1.5 wait for v0.1.4 dogfood to complete before
-  locking scope, or can it start in parallel? Recommend: lock scope only
-  after dogfood, so EF-013 decomposition and any new findings can land
-  in the same SRS pass.
-- **OQ-6** *(blocks REQ-LESSON-SOURCES-001 acceptance)* — **Which
-  implicit signals are worth flagging, and at what threshold?** The
-  five candidate producers in REQ-LESSON-SOURCES-001 are not equal
-  cost/value. Decide per producer:
-  - **Hook-error threshold**: N = 1 (any error)? N = 5 (a cluster)?
-    N = 20+ (mass failure like the EF-002 case)? Lower N catches more
-    but risks lesson churn from transient noise. Recommend N = 5 as a
-    starting point — the EF-002 case would still fire (28 events), but
-    a one-off hook hiccup wouldn't.
-  - **Repeated `PreToolUse` block**: M = 2? M = 3? Recommend M = 2 —
-    two consecutive blocks on similar writes is already a clear policy
-    mismatch.
-  - **Bash heredoc after Write block**: binary signal — fires on first
-    occurrence within the same minute. No threshold.
-  - **Gate pass→wedge within session**: binary signal — fires on first
-    occurrence. No threshold.
-  - **State-read regression**: binary signal — fires on first
-    occurrence. No threshold.
-  Default to enabling all five producers in v0.1.5 with the suggested
-  thresholds; revisit cutoffs after v0.1.5 dogfood shows real false-
-  positive rates.
-- **OQ-5** *(blocks REQ-NEXTHINT-001)* — **Is stage 2 (product/UX)
-  mandatory or advisory?** Current code says advisory:
-  `skills/forge-arch/SKILL.md` step 3 warns-but-doesn't-block on missing
-  `prd.md`, and `_state_lib.py:advance_stage` only emits a stderr
-  warning when jumping stages. But EF-004's framing ("next step *should*
-  be product/UX") implies mandatory. Source: EF-016. Two branches:
-  - **(A) Mandatory** — `forge-arch` pre-flight exits 2 if `prd.md`
-    missing; `advance_stage` rejects `to > old + 1` unless invoked from
-    `/forge:force-advance`; REQ-NEXTHINT-001 reads as written.
-  - **(B) Advisory** — keep current code; rewrite REQ-NEXTHINT-001 so
-    the hint after SRS offers both paths ("`/forge:product` for UX work,
-    or `/forge:arch` to skip to architecture") and explains the
-    trade-off.
-  Decide before REQ-NEXTHINT-001 is finalized. If (A), add a new
-  REQ-GATE-ENTRY-001 covering pre-flight blocks for all skippable stages
-  (not just stage 2 — stages 4–11 have the same shape).
+- **OQ-1** *(resolved 2026-06-01 → `04-spec`)* — Should REQ-PATHS-001
+  standardize on `04-spec` or `04-technical-spec`? **Decision**:
+  `04-spec` is canonical (matches `forge:init` scaffold and
+  `check-gate.py`). `skills/forge-spec/SKILL.md` step 4 needs the path
+  changed in v0.1.5. CHANGELOG to include a one-time migration note
+  for v0.1.3.x projects with populated `04-technical-spec/` dirs.
+- **OQ-2** *(resolved 2026-06-01 → yes, define schema now)* — Is
+  `pattern.jsonl` worth fixing in v0.1.5 even without downstream
+  consumers? **Decision**: yes. Define and populate the schema in
+  v0.1.5 — prevents drift, lets the skill-miner ≥3-use trigger fire on
+  synthetic test data, small effort relative to design-debt cost later.
+  REQ-PATTERN-001 stays in scope.
+- **OQ-3** *(resolved 2026-06-01 → exclude planner)* — Should
+  REQ-WEBSEARCH-001 apply to the planner stage too? **Decision**:
+  exclude planner. WebSearch enabled on SRS / product / architecture /
+  spec only. Planner's job is structural; cite-or-skip doesn't fit and
+  the tool budget is better spent upstream. Revisit if v0.1.6 dogfood
+  shows planner agents want benchmarking data.
+- **OQ-4** *(resolved 2026-06-01 → wait for dogfood)* — Does v0.1.5
+  wait for v0.1.4 dogfood to complete before locking scope, or can it
+  start in parallel? **Decision**: wait. EF-013 decomposition and any
+  new findings land in the same SRS pass; tighter scope, slower cadence.
+- **OQ-6** *(resolved 2026-06-01 → all 5 producers enabled with
+  recommended thresholds)* — Which implicit lesson-capture signals are
+  worth flagging, and at what threshold? **Decision**: enable all five
+  producers in v0.1.5 with the thresholds below. Revisit cutoffs after
+  v0.1.5 dogfood shows real false-positive rates.
+  - **(1) Hook-error cluster** — fires when any single hook produces
+    ≥ **5** errors in one session.
+  - **(2) Repeated `PreToolUse` block** — fires when ≥ **2** consecutive
+    blocks on similar Write paths in one session.
+  - **(3) Bash heredoc after Write block** — binary; fires on first
+    occurrence within the same minute.
+  - **(4) Gate pass→wedge within session** — binary; fires on first
+    occurrence.
+  - **(5) State-read regression** (empty/default after prior successful
+    read in same session) — binary; fires on first occurrence.
+  AC-LESSON-SOURCES-001a covers one test per producer; AC-001c covers
+  the clean-control zero-flag check.
+- **OQ-5** *(resolved 2026-06-01 → mandatory)* — Is stage 2 (product/UX)
+  mandatory or advisory? **Decision**: option (A) **mandatory**.
+  `forge-arch` pre-flight exits 2 if `prd.md` missing; `advance_stage`
+  rejects `to > old + 1` unless invoked from `/forge:force-advance`.
+  REQ-NEXTHINT-001 locked to mandatory-branch wording. Companion
+  **REQ-GATE-ENTRY-001** added to cover pre-flight blocks for all
+  skippable stages 2–11 (same shape as stage 2). Source: EF-016.
+- **OQ-7** *(resolved 2026-06-01 → both)* — Fail-loud on unimplemented
+  check scripts, or implement the missing scripts first? **Decision**:
+  option (C) **both**. v0.1.5 ships the fail-loud `check-gate.py`
+  change **and** all 15 missing scripts together; partial delivery is
+  not acceptance. Audit (run 2026-06-01) found only 1 of 16
+  `script_returns_zero` scripts present; full list in AC-GATESTUB-001b.
+  The pattern is the bug, not the individual scripts — addressing both
+  layers in the same release. Source: EF-019.
+- **OQ-8** *(resolved 2026-06-01 → option B; `--all` deferred)* —
+  Per-task only, `--milestone N`, or also `--all`? **Decision**: option
+  (B) — ship `--milestone N` with per-task commits/gates and
+  pause-on-failure semantics (REQ-BUILDBATCH-001 as written). `--all`
+  is **deferred to v0.1.6+** and revisited only if v0.1.5 dogfood shows
+  milestone batches insufficient *and* context-degradation isn't a
+  problem. Milestone is the planner's natural unit; unbounded batching
+  invites context-degradation issues the project has no signal on yet.
+  Source: EF-020.
 
 ---
 
