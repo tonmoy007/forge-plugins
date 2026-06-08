@@ -95,10 +95,8 @@ def main() -> None:
         payload = {}
 
     tool_name: str = payload.get("tool_name", "")
-    tool_input_raw = payload.get("tool_input", {})
-    tool_input: dict = tool_input_raw if isinstance(tool_input_raw, dict) else {}
-    tool_response_raw = payload.get("tool_response", {})
-    tool_response: dict = tool_response_raw if isinstance(tool_response_raw, dict) else {}
+    tool_input: dict = payload.get("tool_input") or {}
+    tool_response: dict = payload.get("tool_response") or {}
     session_id: str = payload.get("session_id", "")
     cwd = Path(payload.get("cwd", os.getcwd()))
 

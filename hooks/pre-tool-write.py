@@ -103,8 +103,7 @@ def main() -> None:
     if tool_name not in {"Write", "Edit", "MultiEdit"}:
         sys.exit(0)
 
-    tool_input_raw = payload.get("tool_input", {})
-    tool_input: dict = tool_input_raw if isinstance(tool_input_raw, dict) else {}
+    tool_input = payload.get("tool_input", {})
     file_path = tool_input.get("file_path", "")
 
     if not _is_ui_file(file_path):
