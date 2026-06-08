@@ -17,6 +17,8 @@ import yaml
 SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+import _state_lib
+
 
 def _import_force_advance():
     """Import force-advance.py despite the hyphen."""
@@ -184,18 +186,16 @@ class TestStageAdvancement:
         monkeypatch.setattr(fa, "_get_blockers", lambda *a, **k: [])
         fa.main(["--reason", "ten chars!", "--cwd", str(tmp_path),
                  "--allow-no-blockers"])
-        import frontmatter
-        post = frontmatter.load(str(tmp_path / "pipeline" / "state.md"))
-        assert post["current_stage"] == 4
+        state = _state_lib.read_state(str(tmp_path))
+        assert state["current_stage"] == 4
 
     def test_jumps_to_explicit_stage(self, tmp_path, monkeypatch):
         _init_project(tmp_path, current_stage=2)
         monkeypatch.setattr(fa, "_get_blockers", lambda *a, **k: [])
         fa.main(["--reason", "ten chars!", "--cwd", str(tmp_path),
                  "--allow-no-blockers", "--to", "7"])
-        import frontmatter
-        post = frontmatter.load(str(tmp_path / "pipeline" / "state.md"))
-        assert post["current_stage"] == 7
+        state = _state_lib.read_state(str(tmp_path))
+        assert state["current_stage"] == 7
 
 
 # ---------- history annotation ----------
@@ -210,9 +210,9 @@ class TestHistoryRow:
         monkeypatch.setattr(fa, "_get_blockers", lambda *a, **k: blockers)
         fa.main(["--reason", "explicit override", "--cwd", str(tmp_path)])
 
-        import frontmatter
-        post = frontmatter.load(str(tmp_path / "pipeline" / "state.md"))
-        body = post.content
+        _, body = _state_lib._split_frontmatter(
+            (tmp_path / "pipeline" / "state.md").read_text()
+        )
         assert "FORCE" in body
         assert "G1-001,G1-002" in body
         assert "force-advanced" in body
@@ -223,12 +223,13 @@ class TestHistoryRow:
         long_reason = "x" * 200
         fa.main(["--reason", long_reason, "--cwd", str(tmp_path),
                  "--allow-no-blockers"])
-        import frontmatter
-        post = frontmatter.load(str(tmp_path / "pipeline" / "state.md"))
+        _, body = _state_lib._split_frontmatter(
+            (tmp_path / "pipeline" / "state.md").read_text()
+        )
         # Truncated reason includes ellipsis
-        assert "…" in post.content
+        assert "…" in body
         # Full reason is NOT in the history row (only first ~60 chars + ellipsis)
-        assert long_reason not in post.content
+        assert long_reason not in body
 
 
 # ---------- JSON output ----------
