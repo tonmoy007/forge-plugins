@@ -6,7 +6,8 @@
 ## Current State
 
 - **Active release**: v0.1.5 — scope locked 2026-06-09 (`build/01-srs/srs-v0.1.5.md`, `build/04-plan/task-dag-v0.1.5.md`)
-- **Current task**: T-113 next (M1–M4 done: T-101..T-112). M5 = lesson capture.
+- **Current task**: T-114 next (M5: T-113/T-115 done). Then M6 (T-116–121), M7 (T-122–125).
+- **Session 2026-06-09**: completed T-103..T-113 + T-115 (12 tasks, 18 commits on develop), 930 tests green. Remaining: T-114, M6, M7, + full-pipeline fixture harmonization.
 - **Known follow-up**: full-pipeline.sh xfail — sample-todo-api fixtures use
   inconsistent REQ/NFR ID schemes + no health-report.md; harmonize at T-125
   (§6 Forge-on-Forge). All 15 gate scripts exist; audit green.
@@ -29,6 +30,11 @@
 | T-110 | 🟢 done | 2026-06-09 | 2d22e21 | 5 build+eval scripts: token-audit, check_coverage, check_todos, check_progress_sync, check_nfr_coverage; test_gate_scripts_build_eval.py; 901 pass |
 | T-111 | 🟢 done | 2026-06-09 | d1541b4 | 5 release+health scripts: check_open_bugs, check_health, check_hotfix_tests, check_git_tag; some_check.py = doc-example only (justified); 917 pass |
 | T-112 | 🟡 audit done | 2026-06-09 | 387192f | AC-GATESTUB-001b audit green (test_gate_criteria_audit.py); traceability all argv modes; heading-based task detection. Full-pipeline xfail pending fixture ID harmonization (→ T-125). 920 pass |
+| T-113 | 🟢 done | 2026-06-09 | f049195 | REQ-EXTRACT-CWD-001: extract-lessons.py --cwd derives input/output; explicit overrides; test_extract_lessons_cwd.py; 923 pass |
+| T-114 | 🔲 todo | | | 5 implicit lesson-signal producers (_signal_producers.py); depends T-106/107/108 (done) |
+| T-115 | 🟢 done | 2026-06-09 | 7aeed8a | REQ-LESSON-SOURCES-001 EF-026: promote freq≥2 gate + 30-day TTL recall in session-start; is_stale(); test_promote_ttl.py + isolation guard; 930 pass |
+| T-116..121 | 🔲 todo | | | M6 UX nudges (build --milestone, why CI, session log, stage reflection, pattern bus, WebSearch) |
+| T-122..125 | 🔲 todo | | | M7 conventions/docs/decompose/release |
 
 ## Task Status
 

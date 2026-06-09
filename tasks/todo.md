@@ -37,6 +37,27 @@ Output block — status-dashboard mapping, not a stage-transition hint.
 
 ---
 
+## v0.1.5 progress (2026-06-09 session)
+
+Done + committed on `develop` (930 tests green, 1 xfail, validate exit 0):
+T-103, T-104, T-105, T-106, T-107, T-108, T-109, T-110, T-111, T-112(audit), T-113, T-115.
+
+**Resume here — remaining v0.1.5 work, in order:**
+- **T-114** [L] — 5 implicit lesson-signal producers (`scripts/_signal_producers.py`),
+  evaluated at session-end. Needs raw-event logging added: pre-tool-write blocks
+  + stop-reflect gate-outcome → `.forge/errors.log`; detectors read errors.log +
+  session-log.jsonl. Thresholds: hook-error N=5, repeated-block M=2, others binary.
+- **M6** — T-116 `/forge:build --milestone N`; T-117 `why.py` case-insensitive;
+  T-118 session.jsonl enrichment; T-119 per-stage reflection rollup; T-120
+  pattern.jsonl schema; T-121 WebSearch for SRS/product/arch/spec agents.
+- **M7** — T-122 decompose REQ-INTERACTIVE-001; T-123 large-doc split convention;
+  T-124 third-party-hook troubleshooting doc + issue template; T-125 release
+  (CHANGELOG 0.1.5, version bump) **+ harmonize sample-todo-api fixture IDs**
+  (REQ-NF/REQ-F vs NFR/REQ, add health-report.md) so `test_full_pipeline` passes
+  and its xfail marker is removed.
+
+---
+
 ## Archive
 
 ### T-031 — CONTRIBUTING.md + agent authoring guide ✅ 2026-05-12
