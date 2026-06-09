@@ -82,6 +82,7 @@ def _build_window_record(
     if any(not t for t in window):
         return None
     return {
+        "schema_version": 1,  # REQ-PATTERN-001 — see references/pattern-schema.md
         "ts": ts,
         "kind": f"tool_seq_{_WINDOW_SIZE}",
         "tools": window,
