@@ -235,6 +235,17 @@ auto-skill creation — validated end-to-end on the sample Todo API project (532
   > `11-resolution/`) or old filenames. Move them to the canonical names above so the
   > gate checks find them; otherwise the affected stage gate will report the artifact
   > missing.
+- **Wrong / dead next-step hints (REQ-NEXTHINT-001, T-103)** — every stage skill
+  hardcoded its `## Next Step` hint; two named commands that don't exist:
+  `/forge:srs` pointed at `/forge:ux` and `/forge:product` pointed at
+  `/forge:architecture` (canonical commands are `/forge:product` and `/forge:arch`).
+  After `01-srs` the hint now correctly names **product/UX**, not architecture.
+  Added a `next-hint` subcommand to `scripts/state-manager.py` that reads the
+  canonical hint from `references/stage-order.md`; all 12 stage skills now invoke
+  it instead of embedding a literal string. Also corrected the `forge-status`
+  stage→command table (stage 2/3 named the same dead commands).
+  `tests/unit/test_next_hint.py` enumerates all 12 transitions and guards against
+  re-drift.
 
 ### Added
 - Comprehensive external test findings to `build/06-evaluation/v0.1.3.1-early-feedback.md`:

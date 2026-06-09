@@ -39,4 +39,10 @@ After running, confirm:
 
 ## Next Step
 
-"Monitoring set up. Run `/forge:feedback` when you have user feedback or issues to triage."
+Derive the hint from the canonical stage table — never hardcode it
+(REQ-NEXTHINT-001, single source of truth). Run the helper and present its
+output to the user verbatim:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py next-hint --stage 9
+```

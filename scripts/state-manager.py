@@ -20,8 +20,9 @@ import json
 import os
 import sys
 
-# Ensure _state_lib is importable regardless of working directory
+# Ensure _state_lib / _stage_table are importable regardless of working directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _stage_table as stage_table
 import _state_lib as lib
 
 
@@ -65,6 +66,35 @@ def cmd_reflect(args: argparse.Namespace, cwd: str) -> None:
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     lib.append_to_section(cwd, "Last Reflection", f"{now}: {args.text}")
     print("reflected", file=sys.stderr)
+
+
+def cmd_next_hint(args: argparse.Namespace, cwd: str) -> None:
+    """Print the canonical next-step hint for a stage (single source of truth).
+
+    The hint text lives in references/stage-order.md (REQ-NEXTHINT-001); no
+    caller hardcodes it. With --stage N the hint is for completing stage N;
+    without it, the current_stage from pipeline/state.md is used.
+    """
+    if args.stage is not None:
+        stage_num = args.stage
+    else:
+        state = lib.read_state(cwd)
+        raw = state.get("current_stage")
+        try:
+            stage_num = int(raw)
+        except (TypeError, ValueError):
+            print(f"error: current_stage is not an integer: {raw!r}", file=sys.stderr)
+            sys.exit(1)
+
+    hint = stage_table.next_hint(stage_num)
+    if hint is None:
+        print(
+            f"error: no next-step hint for stage {stage_num} "
+            f"(valid stages are 1..{stage_table.max_stage()})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(hint)
 
 
 def cmd_history_add(args: argparse.Namespace, cwd: str) -> None:
@@ -113,6 +143,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_ref = sub.add_parser("reflect", parents=[sub_common], help="append text to Last Reflection section")
     p_ref.add_argument("text", help="reflection content")
 
+    p_hint = sub.add_parser(
+        "next-hint",
+        parents=[sub_common],
+        help="print the canonical next-step hint for a stage (from stage-order.md)",
+    )
+    p_hint.add_argument(
+        "--stage",
+        type=int,
+        metavar="N",
+        help="stage just completed (default: current_stage from state.md)",
+    )
+
     p_hist = sub.add_parser("history-add", parents=[sub_common], help="append a row to Stage History table")
     p_hist.add_argument("--stage", required=True, type=int, metavar="N")
     p_hist.add_argument("--result", required=True, metavar="RESULT")
@@ -129,6 +171,7 @@ def main() -> None:
         "advance": cmd_advance,
         "set": cmd_set,
         "reflect": cmd_reflect,
+        "next-hint": cmd_next_hint,
         "history-add": cmd_history_add,
     }
     dispatch[args.command](args, args.cwd)

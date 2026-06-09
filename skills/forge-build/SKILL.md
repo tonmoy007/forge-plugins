@@ -42,4 +42,13 @@ After each task, confirm:
 
 ## Next Step
 
-"Task complete. Run `/forge:build` again for the next task, or `/forge:eval` when all tasks are done."
+Derive the hint from the canonical stage table — never hardcode it
+(REQ-NEXTHINT-001, single source of truth). Run the helper and present its
+output to the user verbatim:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py next-hint --stage 6
+```
+
+(While tasks remain in the plan, keep running `/forge:build` per the workflow
+above; the hint above is the cross-stage handoff once the milestone is done.)

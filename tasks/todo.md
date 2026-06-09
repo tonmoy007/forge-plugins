@@ -4,16 +4,36 @@
 
 ---
 
-## Active Task: T-032
+## Active Task: T-103 — Next-step hint derived from the table
 
-**Goal**: End-to-end integration test — full pipeline run on `examples/sample-todo-api/`. All 12 stages produce artifacts.
+**Goal**: Stage skills / `state-manager` read the next-step hint from the T-101
+canonical table instead of hardcoded strings. After `01-srs` the hint names
+**product/UX**, not architecture. (REQ-NEXTHINT-001 · v0.1.5 M1)
 
-**Context**:
-- Done when: `tests/integration/full-pipeline.sh` exits 0 with all artifacts present and traceability chain holds
-- See `build/04-plan/task-dag.md` T-032.
-- REQ-IDs: NFR-011, NFR-012
-- Depends on: All previous tasks (T-031 now done)
-- Note: T-030 (README.md) and T-033 (package/publish) both block on this.
+**The bug**: all 12 stage skills hardcode their `## Next Step` hint. Two name
+commands that don't exist:
+- `forge-srs` → `/forge:ux` (canonical: `/forge:product`)
+- `forge-product` → `/forge:architecture` (canonical: `/forge:arch`)
+
+`stage-order.md` invariant: no component may hardcode a next-step string.
+
+**Steps**:
+- [x] Write `tests/unit/test_next_hint.py` first (TDD) — failed before impl
+- [x] Add `next-hint` subcommand to `scripts/state-manager.py` (reads `_stage_table`)
+- [x] Replace `## Next Step` literal in all 12 stage SKILL.md with helper invocation
+- [x] Fixed forge-status stage→command table (rows 2/3 named dead commands)
+- [x] Targeted test green (57) → full suite green (810) → plugin validates
+- [x] Update `progress.md` (T-103 done) + `CHANGELOG.md` + lesson captured
+- [ ] Commit `feat(T-103): derive next-step hint from canonical stage table`
+
+**Done when**: a test enumerates each transition and asserts the hint names the
+correct next stage; grep test finds no hardcoded next-step strings (incl.
+`/forge:ux`, `/forge:architecture`) outside the helper.
+
+**Out of scope** (noted): `forge-status` embedded stage→command table + Example
+Output block — status-dashboard mapping, not a stage-transition hint.
+
+**Depends on**: T-101 ✅, T-102 ✅
 
 ---
 

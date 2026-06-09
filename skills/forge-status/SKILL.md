@@ -67,8 +67,8 @@ Use this skill whenever the user:
 |-------|---------|
 | 0 | (not started) |
 | 1 | `/forge:srs` |
-| 2 | `/forge:ux` |
-| 3 | `/forge:architecture` |
+| 2 | `/forge:product` |
+| 3 | `/forge:arch` |
 | 4 | `/forge:spec` |
 | 5 | `/forge:plan` |
 | 6 | `/forge:build` |

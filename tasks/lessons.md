@@ -122,6 +122,13 @@
 - **Why**: AI callers construct commands in semantic order ("do X with Y in Z"), not argparse-position order. Tolerance for `--flag` after the subcommand is required for AI-callable CLIs.
 - **Tags**: [python, argparse, cli, ai-callable, robustness, suppress, v0.1.1]
 
+### 2026-06-09 — `/forge:ux` and `/forge:architecture` are live prompt-submit aliases, not dead commands
+
+- **Trigger**: Writing a "no hardcoded / no dead command" grep guard over `skills/`, or renaming a stage command
+- **Rule**: `hooks/prompt-submit.py` maps natural-language stage words to stages (`"ux"→2`, `"architecture"→3`) via `re.search(r"/forge:(\w+)")` + a dict — so `/forge:ux` and `/forge:architecture` are *recognized inputs* even though the registered slash commands are `/forge:product` and `/forge:arch`. Distinguish **input aliases** (allowed in a skill's `description` / When-to-Use) from **forward hints / command-to-run mappings** (must be canonical). Scope dead-command tests to `## Next Step` sections and command-mapping tables, not whole file bodies.
+- **Why**: A whole-file grep for `/forge:ux` false-positives on legitimate alias documentation, while the real bugs (stale forward hints, drifted status stage→command table) hide among them. The canonical command for a stage is `_stage_table.stage(n)["skill"]`; tie status/hint tests to that, not to a hand-list.
+- **Tags**: [forge, prompt-submit, aliases, next-hint, testing, REQ-NEXTHINT-001, T-103]
+
 ---
 
 ## Patterns by Category

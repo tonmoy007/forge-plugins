@@ -39,4 +39,10 @@ After running, confirm:
 
 ## Next Step
 
-"Technical spec written. Run `/forge:plan` to create the implementation task plan."
+Derive the hint from the canonical stage table — never hardcode it
+(REQ-NEXTHINT-001, single source of truth). Run the helper and present its
+output to the user verbatim:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py next-hint --stage 4
+```
