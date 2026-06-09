@@ -43,6 +43,29 @@ intentionally).
 5. Mark the task complete in `build/05-implementation/progress.md`.
 6. If this is the first task: run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 6`.
 
+## Milestone Batch Mode (`--milestone N`)
+
+When invoked as `/forge:build --milestone N`, build every task in that milestone,
+one at a time, instead of a single task (REQ-BUILDBATCH-001):
+
+1. Get the ordered task list (dependency order):
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/build-batch.py --milestone N --cwd .
+   ```
+   If it warns "large batch" (N > 10 tasks), tell the user and ask whether to
+   proceed or split before starting.
+2. For **each** T-ID in that order, run the full single-task Steps above:
+   Builder persona → implement → tests → **one commit `feat(T-XXX): …`** →
+   mark done in progress.md. No batched commits, no batched tests.
+3. **Pause on the first failure** (red tests, gate failure, or a hook block):
+   stop the batch, report which T-ID failed and why, and leave the preceding
+   task commits in place. Do not continue to later tasks.
+4. After the user fixes the failure, resume with
+   `/forge:build --milestone N --resume` — `build-batch.py --resume` skips tasks
+   already marked done in progress.md, so the batch picks up at the failed task.
+
+Plain `/forge:build` (no flag) keeps the single-task behavior unchanged.
+
 ## Verification
 
 After each task, confirm:
