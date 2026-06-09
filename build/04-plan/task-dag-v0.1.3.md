@@ -41,8 +41,9 @@ T-109 stays 🟡 solely for that asset; the text rewrite is complete and shipped
 evidence; external-user dogfood explicitly waived for v0.1.3 and moved to
 v0.1.4 as a non-waivable gate (D-V13-11 / srs-v0.1.3 §9 item 4).
 
-**Estimated remaining**: ~3 days of focused work + 1 day for external-user dogfood
-(non-negotiable per srs-v0.1.3 §9 item 4).
+**Remaining**: none functional — v0.1.3 shipped (tags `v0.1.3` + `v0.1.3.1`).
+The only open item is the T-109 README GIF (🟡, deferred to dogfood, un-producible
+in-session). External-user dogfood was carried to v0.1.4 as R-V14-1 (D-V13-11).
 
 ---
 
@@ -110,7 +111,7 @@ help. These absorb the support questions you'd otherwise answer one-by-one.
 - **Depends on**: none
 - **REQ-IDs**: REQ-CLEAN-001, REQ-CLEAN-002, REQ-CLEAN-003, REQ-CLEAN-004
 
-### T-103 🟡 `/forge:init --dry-run` + manifest
+### T-103 ✅ `/forge:init --dry-run` + manifest
 
 - **Description**: Add `--dry-run` and `--manifest-only` modes to
   `init-pipeline.sh`. Update the skill to use manifest output to drive the
@@ -123,10 +124,11 @@ help. These absorb the support questions you'd otherwise answer one-by-one.
   - Manifest JSON parses correctly when used by the skill.
 - **Depends on**: none
 - **REQ-IDs**: REQ-UX-001, REQ-UX-002, REQ-UX-003
-- **Status note**: `init-pipeline.sh` rewrite is complete. SKILL.md update is
-  pending — I need to see the current `skills/forge-init/SKILL.md` to write
-  a precise diff. Drop-in replacement is risky without context on existing
-  behaviors.
+- **Status note**: DONE (verified 2026-06-09). `init-pipeline.sh` supports
+  `--dry-run` (plan ending "Re-run without --dry-run to apply.") and
+  `--manifest-only` (valid JSON: `dry_run/root/created/skipped`).
+  `skills/forge-init/SKILL.md` has the dry-run preview, manifest capture, the
+  `suggested_profile` prompt, and the `.gitignore` check (steps 1-3, 6).
 
 ---
 
@@ -196,7 +198,7 @@ trapped.
 Catch the small-project audience with the `script` profile, prove the whole
 release works end-to-end with one round-trip test, and ship.
 
-### T-107 🟡 `script` project profile
+### T-107 ✅ `script` project profile
 
 - **Description**: New 6th profile for sub-500-LOC projects. Compresses
   effective stages from 12 to 4 (SRS-lite, build, eval, optional release).
@@ -214,13 +216,15 @@ release works end-to-end with one round-trip test, and ship.
   - The check-script-* scripts return 0/1 deterministically.
 - **Depends on**: none (independent of other v0.1.3 work)
 - **REQ-IDs**: REQ-PROF-001, REQ-PROF-002
-- **Status note**: Profile definition and detection-block YAML are complete
-  (see `references/project-type-profiles-script-addition.md`). The
-  `detect-project-type.py` modifications and the two check-script-* scripts
-  are pending — they need the existing `detect-project-type.py` as a starting
-  point.
+- **Status note**: DONE (verified 2026-06-09). The `script` profile is in
+  `references/project-type-profiles.md` (§"Profile: script", with `suggest_only`,
+  `total_loc_under`, `file_count_under`, `language_subset`); the standalone
+  `-script-addition.md` was folded in and removed. `detect-project-type.py`
+  implements the indicators (`_is_language_subset`, `_SCRIPT_EXTENSIONS`, the
+  suggest-only path); `check-script-runnable.py` + `check-script-has-tests.py`
+  exist and run; `test_detect_project_type.py` has 41 cases (green).
 
-### T-108 ⬜ First-run round-trip integration test
+### T-108 ✅ First-run round-trip integration test
 
 - **Description**: Shell-script integration test that simulates a new user's
   complete first-day experience: install → `/forge:doctor` (healthy) → `/forge:init --dry-run` → `/forge:init` → simulate a Stage 1 gate failure → `/forge:why G1-001` → `/forge:force-advance --reason "..."` → `/forge:uninstall --dry-run` → `/forge:uninstall --yes`.
@@ -233,8 +237,11 @@ release works end-to-end with one round-trip test, and ship.
   - Test captures stdout/stderr of each command and asserts on expected substrings.
 - **Depends on**: T-101, T-102, T-103, T-104, T-105, T-106 (the commands it exercises)
 - **REQ-IDs**: REQ-TEST-001
+- **Status note**: DONE (verified 2026-06-09). `tests/integration/test_v013_first_run.sh`
+  exists with fixture `tests/fixtures/v013_first_run/sample.sh`; runs clean
+  (exit 0, "PASS — v0.1.3 first-run round-trip completed successfully").
 
-### T-109 ⬜ README rewrite
+### T-109 🟡 README rewrite (text ✅ shipped; binary GIF asset deferred)
 
 - **Description**: Rewrite the first 200 words of README.md to lead with
   discipline + traceability (not memory). Add a `docs/gate-philosophy.md`
@@ -243,13 +250,20 @@ release works end-to-end with one round-trip test, and ship.
   - `README.md` (rewrite intro + "What Forge Does" sections)
   - `docs/gate-philosophy.md` (new)
 - **Done when**:
-  - Intro doesn't claim "Claude forgets between sessions" (no longer true).
-  - At least one animated GIF or screenshot showing REQ-ID traceability across stages.
-  - Gate-philosophy doc covers: when to override, what gets recorded, how to revisit overridden gates.
+  - ✅ Intro doesn't claim "Claude forgets between sessions" (verified absent 2026-06-09).
+  - 🟡 At least one animated GIF or screenshot showing REQ-ID traceability across
+    stages — **DEFERRED** (D-V13-11): a binary asset that can't be produced in an
+    AI session; to be captured during real-user dogfood. A text traceability
+    diagram stands in the README meanwhile.
+  - ✅ Gate-philosophy doc covers: when to override, what gets recorded, how to
+    revisit overridden gates (`docs/gate-philosophy.md` exists).
 - **Depends on**: none (paperwork; can run in parallel with T-105/T-106/T-108)
 - **REQ-IDs**: — (no SRS requirement; release readiness)
+- **Status note**: Text rewrite + gate-philosophy shipped. The ONLY residual is
+  the GIF asset, which stays 🟡 until dogfood (un-producible in-session). This is
+  the single remaining v0.1.3 item; everything functional is done and released.
 
-### T-110 ⬜ CHANGELOG + version bump
+### T-110 ✅ CHANGELOG + version bump
 
 - **Description**: CHANGELOG entry summarizing v0.1.3. Version bump in
   plugin.json. Git tag.
@@ -341,8 +355,8 @@ Before tagging v0.1.3:
 - [x] CHANGELOG.md has v0.1.3 entry
 - [x] `.claude-plugin/plugin.json` version is `0.1.3`
 - [x] `marketplace.json` updated to `0.1.3`
-- [ ] Git tag `v0.1.3` created and pushed
-- [ ] GitHub release notes published
+- [x] Git tag `v0.1.3` created and pushed (also `v0.1.3.1` hotfix)
+- [x] GitHub release notes published
 
 The external-user item was deferred by **explicit owner decision** (D-V13-11),
 not skipped. v0.1.4 carries it as a hard gate with no waiver path.
