@@ -31,7 +31,6 @@ jobs:
 
       - name: Coverage threshold
         run: pytest tests/unit/ --cov=hooks --cov=scripts --cov-fail-under=80
-        continue-on-error: true   # Becomes hard fail after T-013
 
   integration:
     runs-on: ubuntu-latest
@@ -51,7 +50,6 @@ jobs:
 
       - name: Run integration tests
         run: pytest tests/integration/ -v
-        continue-on-error: true   # Becomes hard fail after M2 lands
 
   lint:
     runs-on: ubuntu-latest
