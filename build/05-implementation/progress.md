@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active release**: v0.1.5 — scope locked 2026-06-09 (`build/01-srs/srs-v0.1.5.md`, `build/04-plan/task-dag-v0.1.5.md`)
-- **Current task**: T-107 next (M1+M2 done; M3: T-106 done)
+- **Current task**: T-109 next (M1+M2+M3 done: T-101..T-108). M4 = 15 gate scripts.
 - **Last session**: 2026-06-09 — merged PR #1 (EF-021..027 + 3 hotfixes) to main; locked v0.1.5; started M1.
 - **Last hotfix**: v0.1.3.1 — dropped `python-frontmatter` runtime dep (`scripts/_state_lib.py`, `scripts/load-profile.py`); 3 regression tests added. Resolves feedback/v0.1.3/feedback1.md `ModuleNotFoundError: frontmatter` reports.
 
@@ -20,8 +20,12 @@
 | T-104 | 🟢 done | 2026-06-09 | 442c2af | REQ-PIPEBOUNDS-001: advance rejects out-of-range, cycle-wraps past 12 to (cycle+1,0); validate_frontmatter range-checks current_stage; set -1/99/13 rejected, state intact; test_pipebounds.py; 821 pass |
 | T-105 | 🟢 done | 2026-06-09 | df811ea | REQ-GATE-ENTRY-001: check_prerequisite + `preflight --stage N` (exit 2); advance skips need --force; 10 stage skills gated; force-advance routes via force=True; test_entry_gates.py; 847 pass |
 | T-106 | 🟢 done | 2026-06-09 | 51a843a | REQ-SILENTSTATE-001: hooks/_state_read.py helper; 6 hook read-sites route through it (warn + log to .forge/errors.log); check-gate inconclusive+exit2 on unreadable state; doctor check_state_read_failures; session-end footer; test_silentstate.py (9); 856 pass |
-| T-107 | 🔲 todo | | | doctor runs current-stage gate inline (healthy/wedged/broken) |
-| T-108 | 🔲 todo | | | check-gate fails loud on missing scripts |
+| T-107 | 🟢 done | 2026-06-09 | 2a5d0e9 | REQ-DOCTOR-001: doctor runs current-stage gate inline; overall_status healthy/wedged/broken; JSON carries overall_status; test_doctor_gate.py; 864 pass |
+| T-108 | 🟢 done | 2026-06-09 | 1d1bb47 | REQ-GATESTUB-001 fail-loud: missing script → inconclusive + blocker-promoted + exit2; doctor/status banner; stop-reflect parses gate JSON regardless of exit; test_gatestub.py; full-pipeline xfail until M4; 866 pass |
+| T-109 | 🔲 todo | | | 5 req+spec gate scripts |
+| T-110 | 🔲 todo | | | 5 build+eval gate scripts |
+| T-111 | 🔲 todo | | | 5 release+health gate scripts |
+| T-112 | 🔲 todo | | | gate-criteria audit (no dangling scripts); remove full-pipeline xfail |
 
 ## Task Status
 
