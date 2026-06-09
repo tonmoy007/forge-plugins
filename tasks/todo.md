@@ -4,7 +4,16 @@
 
 ---
 
-## Active Task: T-103 — Next-step hint derived from the table
+## v0.1.5 — COMPLETE (2026-06-09)
+
+All 25 tasks done (T-101..T-125). 986 tests pass, 0 xfail; validate-plugin.py
+exit 0; Forge-on-Forge full-pipeline passes 12/12; plugin at 0.1.5.
+Branch `feat/v0.1.5-rest` (T-114..T-125, off develop) → open PR into `develop`;
+T-101..T-113 already on develop. Tag `v0.1.5` from `main` after develop→main merge.
+
+---
+
+## Active Task: T-103 — Next-step hint derived from the table (DONE — archived below)
 
 **Goal**: Stage skills / `state-manager` read the next-step hint from the T-101
 canonical table instead of hardcoded strings. After `01-srs` the hint names
