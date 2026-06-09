@@ -130,6 +130,11 @@ silently, so a long batch is observable.
 
 ## 6. Acceptance Definition (release is done when)
 
+> **Status (2026-06-09)**: REQ acceptance **SATISFIED** — T-126/127/128 landed;
+> the three structural tests pass; full suite 1026 green; validate exit 0;
+> full-pipeline 12/12. Remaining for release: T-130 (version bump to 0.1.6 +
+> CHANGELOG `## [0.1.6]`), then PR→develop→main→tag.
+
 - All three REQ acceptance criteria pass via their structural tests
   (`test_interactive_clarify.py`, `test_interactive_confirm.py`,
   `test_interactive_narrate.py`).
