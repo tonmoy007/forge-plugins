@@ -38,7 +38,7 @@ Migrations managed with a lightweight migration runner (no ORM required).
 ## Cross-Cutting Concerns
 
 - **Structured logging**: every request emits JSON log with `request_id`, `user_id`,
-  `method`, `path`, `status`, `duration_ms` (REQ-NF-003)
+  `method`, `path`, `status`, `duration_ms` (NFR-003)
 - **Error handling**: all errors mapped to RFC 7807 Problem Details JSON
 - **Config**: 12-factor — all config via environment variables
 

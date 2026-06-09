@@ -8,22 +8,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pytest
-
 SCRIPT = Path(__file__).parent / "full-pipeline.sh"
 PLUGIN_DIR = Path(__file__).parent.parent.parent
 
 
-@pytest.mark.xfail(
-    reason="All 15 gate scripts now exist (T-109..T-111) and the gate-criteria "
-    "audit is green (T-112, test_gate_criteria_audit.py). The end-to-end pipeline "
-    "is still red because the sample-todo-api fixtures use inconsistent ID schemes "
-    "(task-dag NFR-001/REQ-001 vs srs/eval REQ-NF-001/REQ-F-001) and lack a stage-9 "
-    "health-report.md, so the now-enforced traceability/NFR/health gates fail. "
-    "Harmonizing the fixture IDs is §6 Forge-on-Forge acceptance work (tracked for "
-    "the release task T-125); remove this marker once the fixtures are reconciled.",
-    strict=False,
-)
 def test_full_pipeline_exits_zero():
     """Full pipeline integration test: all artifacts present, traceability intact."""
     result = subprocess.run(
