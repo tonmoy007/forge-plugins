@@ -26,12 +26,23 @@ jobs:
         run: python scripts/validate-plugin.py
         # T-001 must land before this passes
 
-      - name: Run unit tests
-        run: pytest tests/unit/ -v --cov=hooks --cov=scripts --cov-report=term-missing
+      - name: Enable subprocess coverage
+        # Many tests exercise scripts by running them as subprocesses, which
+        # coverage.py cannot see unless each child Python starts coverage
+        # itself. This .pth does exactly that whenever COVERAGE_PROCESS_START is
+        # set, lifting the measured number from ~52% to the real ~73%.
+        run: |
+          SITEPKG=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+          echo "import coverage; coverage.process_startup()" > "$SITEPKG/forge-subprocess-cov.pth"
 
-      - name: Coverage threshold
-        run: pytest tests/unit/ --cov=hooks --cov=scripts --cov-fail-under=80
-        continue-on-error: true   # Becomes hard fail after T-013
+      - name: Run unit tests + coverage gate
+        # Single instrumented run: in-process + subprocess coverage measures
+        # ~73%; the gate sits at 70 for a small buffer. (Previously a stale
+        # `continue-on-error` no-op parked on "becomes hard fail after T-013".)
+        env:
+          COVERAGE_PROCESS_START: ${{ github.workspace }}/.coveragerc
+          COVERAGE_FILE: ${{ github.workspace }}/.coverage
+        run: pytest tests/unit/ -v --cov=hooks --cov=scripts --cov-report=term-missing --cov-config=.coveragerc --cov-fail-under=70
 
   integration:
     runs-on: ubuntu-latest
@@ -51,7 +62,6 @@ jobs:
 
       - name: Run integration tests
         run: pytest tests/integration/ -v
-        continue-on-error: true   # Becomes hard fail after M2 lands
 
   lint:
     runs-on: ubuntu-latest
