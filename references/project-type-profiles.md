@@ -86,6 +86,17 @@ detection:
       - file_contains: { path: "package.json", pattern: "\"workspaces\"" }
       - file_contains: { path: "Cargo.toml", pattern: "\\[workspace\\]" }
       - dir_exists_all: ["packages/", "apps/"]
+    confidence_threshold: 0.85
+
+  mobile:
+    # Checked after monorepo but before fullstack/api: a React Native repo has a
+    # package.json and would otherwise be mistaken for fullstack.
+    indicators:
+      - file_exists: ["pubspec.yaml"]                      # Flutter
+      - file_exists: ["Podfile"]                           # iOS
+      - file_glob: ["*.xcodeproj", "*.xcworkspace"]        # iOS
+      - dir_with_file: { dir: "android/", file: "build.gradle" }  # Android
+      - file_contains: { path: "package.json", pattern: "react-native" }
     confidence_threshold: 0.85```
 
 ---
@@ -407,6 +418,46 @@ stage_overrides:
         description: Internal package dependency graph is acyclic
         check: script_returns_zero
         args: { script: "scripts/check_monorepo_graph.py" }
+        severity: blocker
+```
+
+---
+
+## Profile: mobile
+
+```yaml
+name: mobile
+description: Native or cross-platform mobile app (Flutter, React Native, native
+  iOS, or native Android). UI-heavy, so product-ux carries weight, and shipping
+  means clearing an app-store review — captured by a store-readiness release gate.
+
+stage_emphasis:
+  high: [product-ux, implementation, evaluation]
+
+stage_overrides:
+  stage_2:
+    design_system_mode: full
+    additional_steps:
+      - "Size touch targets for thumbs (min 44x44pt iOS / 48x48dp Android)"
+      - "Design offline, empty, loading, and error states for every screen"
+      - "Follow platform conventions (iOS Human Interface Guidelines / Material Design)"
+    additional_concerns:
+      - "Per-platform navigation patterns (tab bar vs bottom nav, back behavior)"
+      - "Safe-area / notch / gesture-bar handling"
+
+  stage_3:
+    additional_concerns:
+      - "Offline sync and local persistence strategy (conflict resolution)"
+      - "Push notification delivery and permission flow"
+      - "Deep link / universal link routing"
+      - "State restoration after process death / backgrounding"
+
+  stage_12:
+    additional_criteria:
+      - id: G12-MOBILE-001
+        description: App store metadata present (bundle id / version / signing config)
+        check: script_returns_zero
+        args: { script: "scripts/check_store_readiness.py" }
         severity: blocker
 ```
 

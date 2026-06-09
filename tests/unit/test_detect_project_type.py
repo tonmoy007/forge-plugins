@@ -404,3 +404,50 @@ class TestMonorepoDetection:
         # packages/ alone (without apps/ or a workspace manifest) is not enough.
         (tmp_path / "packages").mkdir()
         assert detect_mod.detect(str(tmp_path))["type"] != "monorepo"
+
+
+# ---------- detect: mobile (T-132 / REQ-PROFILE-MOBILE-001) ----------
+
+class TestMobileDetection:
+    def test_flutter_with_lib_dir_classifies_mobile(self, tmp_path):
+        (tmp_path / "pubspec.yaml").write_text("name: myapp\nflutter:\n  uses-material-design: true\n")
+        (tmp_path / "lib").mkdir()
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "mobile"
+        assert result["confidence"] >= 0.85
+
+    def test_ios_podfile_classifies_mobile(self, tmp_path):
+        (tmp_path / "Podfile").write_text("platform :ios, '13.0'\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "mobile"
+
+    def test_ios_xcodeproj_classifies_mobile(self, tmp_path):
+        (tmp_path / "MyApp.xcodeproj").mkdir()
+        assert detect_mod.detect(str(tmp_path))["type"] == "mobile"
+
+    def test_android_dir_with_build_gradle_classifies_mobile(self, tmp_path):
+        (tmp_path / "android").mkdir()
+        (tmp_path / "build.gradle").write_text("apply plugin: 'com.android.application'\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "mobile"
+
+    def test_react_native_classifies_mobile(self, tmp_path):
+        (tmp_path / "package.json").write_text(
+            '{"name": "app", "dependencies": {"react-native": "0.73.0", "react": "18.2.0"}}'
+        )
+        assert detect_mod.detect(str(tmp_path))["type"] == "mobile"
+
+    def test_react_native_is_mobile_not_fullstack(self, tmp_path):
+        # A React Native repo has package.json but must NOT fall through to fullstack.
+        (tmp_path / "package.json").write_text(
+            '{"name": "app", "dependencies": {"react-native": "0.73.0"}}'
+        )
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "mobile"
+        assert result["type"] != "fullstack"
+
+    def test_plain_fullstack_not_mobile(self, tmp_path):
+        # Sanity: a Next.js app with no mobile signal stays fullstack.
+        (tmp_path / "package.json").write_text(
+            '{"name": "app", "dependencies": {"next": "14.0.0"}}'
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = {}\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "fullstack"

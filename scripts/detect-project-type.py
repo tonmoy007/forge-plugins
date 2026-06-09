@@ -110,6 +110,56 @@ def _detect_monorepo(cwd: str, files: set) -> dict | None:
     return {"type": "monorepo", "confidence": 0.90, "indicators": indicators}
 
 
+# ---------- T-132: mobile detection ----------
+
+
+def _detect_mobile(cwd: str, files: set) -> dict | None:
+    """Return a mobile classification if any mobile-platform signal is present, else None.
+
+    Signals (ANY):
+      - Flutter: `pubspec.yaml` present (confidence boosted by a `lib/` dir or a
+        `flutter:` key in the file).
+      - iOS: `Podfile`, or any `*.xcodeproj` / `*.xcworkspace`.
+      - Android: an `android/` dir together with a `build.gradle`.
+      - React Native: `react-native` in package.json dependencies.
+
+    Runs BEFORE the fullstack/api/package.json branches so a React Native repo
+    (which has a package.json) classifies as `mobile`, not `fullstack`.
+    """
+    indicators: list[str] = []
+
+    # Flutter
+    has_pubspec = "pubspec.yaml" in files
+    if has_pubspec:
+        pubspec = _read(os.path.join(cwd, "pubspec.yaml"))
+        if _has_dir(cwd, "lib") or "flutter:" in pubspec:
+            indicators.append("pubspec.yaml + Flutter signal (lib/ or flutter: key)")
+        else:
+            indicators.append("pubspec.yaml present (Flutter)")
+
+    # iOS
+    if "Podfile" in files:
+        indicators.append("Podfile present (iOS)")
+    xcode = [f for f in files if f.endswith((".xcodeproj", ".xcworkspace"))]
+    if xcode:
+        indicators.append(f"{xcode[0]} present (iOS)")
+
+    # Android
+    if _has_dir(cwd, "android") and "build.gradle" in files:
+        indicators.append("android/ directory with build.gradle (Android)")
+
+    # React Native
+    if "package.json" in files:
+        content = _read(os.path.join(cwd, "package.json"))
+        if "react-native" in content:
+            indicators.append("package.json depends on react-native")
+
+    if not indicators:
+        return None
+
+    return {"type": "mobile", "confidence": 0.90, "indicators": indicators}
+
+
 def detect(cwd: str) -> dict:
     try:
         files = set(os.listdir(cwd))
@@ -127,6 +177,14 @@ def detect(cwd: str) -> dict:
     mono = _detect_monorepo(cwd, files)
     if mono is not None:
         return mono
+
+    # --------------------------------------------------------------- Mobile
+    # Checked AFTER monorepo but BEFORE ml/fullstack/api: a React Native repo
+    # has a package.json and would otherwise fall through to the fullstack
+    # branch. Detected via Flutter / iOS / Android / React Native signals.
+    mobile = _detect_mobile(cwd, files)
+    if mobile is not None:
+        return mobile
 
     # ------------------------------------------------------------------ ML
     # Signals: ML library in requirements, train.py, *.ipynb, models/
