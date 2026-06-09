@@ -97,7 +97,17 @@ detection:
       - file_glob: ["*.xcodeproj", "*.xcworkspace"]        # iOS
       - dir_with_file: { dir: "android/", file: "build.gradle" }  # Android
       - file_contains: { path: "package.json", pattern: "react-native" }
-    confidence_threshold: 0.85```
+    confidence_threshold: 0.85
+
+  data-contract:
+    # After ml/fullstack but before api/library: a schema-first repo (.proto,
+    # schemas/, buf.yaml) with no server framework classifies here, not api.
+    indicators:
+      - file_glob: ["*.proto", "*.avsc", "*.graphql", "*.graphqls"]
+      - file_exists: ["buf.yaml", "dbt_project.yml"]
+      - dir_exists: ["schemas/", "contracts/"]
+      - no_app_framework: true   # a server dep makes it `api`, not data-contract
+    confidence_threshold: 0.8```
 
 ---
 
@@ -458,6 +468,47 @@ stage_overrides:
         description: App store metadata present (bundle id / version / signing config)
         check: script_returns_zero
         args: { script: "scripts/check_store_readiness.py" }
+        severity: blocker
+```
+
+---
+
+## Profile: data-contract
+
+```yaml
+name: data-contract
+description: Schema-first project whose deliverable is data contracts (Protobuf,
+  Avro, JSON Schema, GraphQL SDL, or dbt models), not a UI or a running service.
+  Emphasis shifts to precise schema definition and backward-compatibility.
+
+stage_emphasis:
+  high: [spec, architecture, evaluation]
+  low: [product-ux]
+
+stage_overrides:
+  stage_2:
+    skip_wireframes: true
+    skip_steps: ["visual_design", "wireframes", "component_specs"]
+
+  stage_4:
+    additional_steps:
+      - "Define every schema with explicit field/type semantics and required-ness"
+      - "Document the compatibility mode (backward / forward / full) per schema"
+      - "Define a versioning + deprecation policy (reserve field numbers, never reuse)"
+    additional_concerns:
+      - "Wire/serialization compatibility across producers and consumers"
+      - "Migration path for breaking changes (dual-publish, version negotiation)"
+
+  stage_7:
+    additional_artifacts:
+      - "pipeline/07-evaluation/compatibility-matrix.md"  # producer/consumer x version
+    additional_criteria:
+      - id: G7-DC-001
+        description: Schema hygiene + compatibility policy — no duplicate protobuf
+          field numbers; buf breaking-change policy present. Hygiene + policy,
+          NOT a semantic cross-version diff (which needs the prior schema version).
+        check: script_returns_zero
+        args: { script: "scripts/check_schema_compat.py" }
         severity: blocker
 ```
 

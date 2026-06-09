@@ -451,3 +451,43 @@ class TestMobileDetection:
         )
         (tmp_path / "next.config.js").write_text("module.exports = {}\n")
         assert detect_mod.detect(str(tmp_path))["type"] == "fullstack"
+
+
+# ---------- detect: data-contract (T-133 / REQ-PROFILE-DATACONTRACT-001) ----------
+
+class TestDataContractDetection:
+    def test_root_proto_file_classifies_data_contract(self, tmp_path):
+        (tmp_path / "user.proto").write_text(
+            'syntax = "proto3";\nmessage User { string id = 1; }\n'
+        )
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "data-contract"
+        assert result["confidence"] >= 0.8
+
+    def test_schemas_dir_classifies_data_contract(self, tmp_path):
+        schemas = tmp_path / "schemas"
+        schemas.mkdir()
+        (schemas / "event.avsc").write_text('{"type": "record", "name": "Event"}')
+        assert detect_mod.detect(str(tmp_path))["type"] == "data-contract"
+
+    def test_buf_yaml_classifies_data_contract(self, tmp_path):
+        (tmp_path / "buf.yaml").write_text("version: v1\nbreaking:\n  use: [FILE]\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "data-contract"
+
+    def test_proto_is_not_api_or_library(self, tmp_path):
+        (tmp_path / "schema.proto").write_text("message M { int32 x = 1; }\n")
+        t = detect_mod.detect(str(tmp_path))["type"]
+        assert t == "data-contract"
+        assert t not in ("api", "library")
+
+    def test_grpc_service_with_server_dep_stays_api(self, tmp_path):
+        # A real service that also ships .proto has an API framework dep — it
+        # must fall through to `api`, not be stolen by data-contract.
+        (tmp_path / "api.proto").write_text("message Req { int32 x = 1; }\n")
+        (tmp_path / "requirements.txt").write_text("fastapi\ngrpcio\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "api"
+
+    def test_plain_library_not_data_contract(self, tmp_path):
+        # Sanity: a Python library with no schema files stays library.
+        (tmp_path / "setup.py").write_text("from setuptools import setup\nsetup()\n")
+        assert detect_mod.detect(str(tmp_path))["type"] != "data-contract"

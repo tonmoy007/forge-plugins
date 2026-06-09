@@ -160,6 +160,60 @@ def _detect_mobile(cwd: str, files: set) -> dict | None:
     return {"type": "mobile", "confidence": 0.90, "indicators": indicators}
 
 
+# ---------- T-133: data-contract detection ----------
+
+# Schema source extensions and marker files that signal a schema-first repo.
+_SCHEMA_EXTS = (".proto", ".avsc", ".graphql", ".graphqls")
+_SCHEMA_MARKERS = ("buf.yaml", "dbt_project.yml")
+_SCHEMA_DIRS = ("schemas", "contracts")
+
+
+def _detect_data_contract(cwd: str, files: set) -> dict | None:
+    """Return a data-contract classification for schema-first repos, else None.
+
+    Signals (ANY): a `buf.yaml`/`dbt_project.yml` marker, a `schemas/` or
+    `contracts/` directory, or a schema source file (`.proto`/`.avsc`/`.graphql`)
+    at the root or under those dirs. Guarded so a real service that merely ships
+    `.proto` (a gRPC API with a server framework dep) still classifies as `api`,
+    not data-contract — honoring the "no application entry point" requirement.
+    """
+    indicators: list[str] = []
+
+    for marker in _SCHEMA_MARKERS:
+        if marker in files:
+            indicators.append(f"{marker} present")
+
+    for d in _SCHEMA_DIRS:
+        if _has_dir(cwd, d):
+            indicators.append(f"{d}/ directory present")
+
+    root_schema = [f for f in files if f.endswith(_SCHEMA_EXTS)]
+    if root_schema:
+        indicators.append(f"schema file present ({root_schema[0]})")
+    else:
+        for d in _SCHEMA_DIRS:
+            base = os.path.join(cwd, d)
+            if not os.path.isdir(base):
+                continue
+            for _root, _dirs, fs in os.walk(base):
+                if any(x.endswith(_SCHEMA_EXTS) for x in fs):
+                    indicators.append(f"schema source file(s) under {d}/")
+                    break
+
+    if not indicators:
+        return None
+
+    # Guard: a server/API that also ships schemas has an API framework dep —
+    # let it fall through to the `api` branch instead of stealing it here.
+    for req_file in ("requirements.txt", "pyproject.toml", "package.json"):
+        if req_file in files:
+            content = _read(os.path.join(cwd, req_file))
+            if any(lib in content for lib in _API_LIBS):
+                return None
+
+    return {"type": "data-contract", "confidence": 0.85, "indicators": indicators}
+
+
 def detect(cwd: str) -> dict:
     try:
         files = set(os.listdir(cwd))
@@ -231,6 +285,14 @@ def detect(cwd: str) -> dict:
         indicators.append("package.json present")
         indicators.append(f"{next_configs[0]} present (Next.js)")
         return {"type": "fullstack", "confidence": 0.95, "indicators": indicators}
+
+    # ------------------------------------------------------- Data-contract
+    # After ml/fullstack (strong, specific signals) but BEFORE api/library:
+    # a schema-first repo (.proto / schemas/ / buf.yaml, no server framework)
+    # must classify as data-contract, not api or library.
+    data_contract = _detect_data_contract(cwd, files)
+    if data_contract is not None:
+        return data_contract
 
     # -------------------------------------------------------------------  API
     # Signals: API framework in requirements/package.json, routes/ or api/ dir
