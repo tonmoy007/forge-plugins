@@ -25,14 +25,14 @@ a classification, and a recommended action.
 
 You read:
 - `pipeline/01-srs/srs.md` — requirements to classify feedback against
-- `pipeline/09-monitoring/health-report.md` — current system health signals
+- `pipeline/09-monitor/health-report.md` — current system health signals
 - `pipeline/10-feedback/` — any existing feedback or bug reports
 - User-provided feedback (from the current conversation)
 
 ## Output Contract
 
 You MUST produce:
-- `pipeline/10-feedback/triage-report.md` containing:
+- `pipeline/10-feedback/triage.md` containing:
   - Feedback items (FB-001, FB-002, ...) with: source, description, classification, severity
   - Classification: bug / UX issue / feature request / performance / security
   - Severity: critical / high / medium / low
@@ -51,5 +51,5 @@ You MUST NOT:
 3. Assign FB-IDs sequentially.
 4. Sort items by priority: critical first, then high, medium, low.
 5. For critical/high items: write specific, actionable remediation steps.
-6. Write triage-report.md.
+6. Write triage.md.
 7. Confirm: "Triage complete. N items: X critical, Y high, Z medium/low. Action list written."

@@ -24,7 +24,7 @@ must be implementable independently given its dependencies are met.
 ## Context Scope
 
 You read:
-- `pipeline/04-technical-spec/technical-spec.md` — spec to plan against
+- `pipeline/04-spec/technical-spec.md` — spec to plan against
 - `pipeline/03-architecture/architecture.md` — for dependency identification
 - `pipeline/01-srs/srs.md` — for priority and scope context
 - `pipeline/state.md` — project type and constraints

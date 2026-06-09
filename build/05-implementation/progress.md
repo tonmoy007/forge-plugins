@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active release**: v0.1.5 — scope locked 2026-06-09 (`build/01-srs/srs-v0.1.5.md`, `build/04-plan/task-dag-v0.1.5.md`)
-- **Current task**: M2 — T-104 next (T-101/102/103 done)
+- **Current task**: T-103 next (T-101/102 done)
 - **Last session**: 2026-06-09 — merged PR #1 (EF-021..027 + 3 hotfixes) to main; locked v0.1.5; started M1.
 - **Last hotfix**: v0.1.3.1 — dropped `python-frontmatter` runtime dep (`scripts/_state_lib.py`, `scripts/load-profile.py`); 3 regression tests added. Resolves feedback/v0.1.3/feedback1.md `ModuleNotFoundError: frontmatter` reports.
 
@@ -15,7 +15,7 @@
 | Task | Status | Completed | Commit | Notes |
 |------|--------|-----------|--------|-------|
 | T-101 | 🟢 done | 2026-06-09 | — | `references/stage-order.md` + `scripts/_stage_table.py` loader + 38 tests; single source of truth (dirs, prereqs, next-hints, bounds, cycles); resolves EF-005 dir-name drift; 745/745 pass |
-| T-102 | 🔲 todo | | | fix `04-spec` collision in forge-spec SKILL.md |
+| T-102 | 🟢 done | 2026-06-09 | — | canonicalized ALL stage paths (broader than EF-005: stages 4/8/9/10/11 wedged). 17 files (7 skills + 9 agents + CHANGELOG); dir+filename renames to match gates; added feedback-log.md & backlog-updates.md (gate blockers skills never wrote); test_canonical_paths.py guard; 753/753 pass |
 | T-103 | 🔲 todo | | | next-step hint from table |
 | T-104 | 🔲 todo | | | stage-bound + cycle-wrap enforcement |
 

@@ -28,13 +28,13 @@ allowed-tools: [Read, Write, Grep]
 3. Read `pipeline/03-architecture/architecture.md` and its ADRs.
 4. Read `pipeline/01-srs/srs.md` for REQ-ID traceability.
 5. Follow the Spec Writer workflow: enumerate interfaces, define types, write API specs, trace to REQ-IDs. Add the profile's `additional_artifacts` and address `additional_concerns` in the spec.
-6. Write `pipeline/04-technical-spec/technical-spec.md` and any profile-specified extra artifacts per the Output Contract.
+6. Write `pipeline/04-spec/technical-spec.md` and any profile-specified extra artifacts per the Output Contract.
 7. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 4` to mark Stage 4 active.
 
 ## Verification
 
 After running, confirm:
-- `pipeline/04-technical-spec/technical-spec.md` exists with typed interfaces and REQ-ID traces
+- `pipeline/04-spec/technical-spec.md` exists with typed interfaces and REQ-ID traces
 - `pipeline/state.md` shows `current_stage: 4`
 
 ## Next Step

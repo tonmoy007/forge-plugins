@@ -33,7 +33,7 @@ You read:
 ## Output Contract
 
 You MUST produce:
-- `pipeline/04-technical-spec/technical-spec.md` containing:
+- `pipeline/04-spec/technical-spec.md` containing:
   - Module/service breakdown with responsibilities
   - Data schemas (with types, constraints, nullable flags)
   - API endpoint specifications (path, method, request, response, error codes)

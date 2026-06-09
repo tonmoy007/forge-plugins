@@ -218,6 +218,23 @@ auto-skill creation — validated end-to-end on the sample Todo API project (532
   payloads from Bash/Read events. Hook no longer crashes on non-Write tool events (EF-022).
 - `hooks/pre-tool-write.py` — added `isinstance` guard for string `tool_input` payloads
   from inline Write events (EF-023).
+- **Stage path collision (EF-005, REQ-PATHS-001, T-102)** — stage skills and agent
+  personas wrote/read artifacts at directories and filenames the gates never checked,
+  silently wedging stages 4, 8, 9, 10, and 11. Canonicalized every stage path to the
+  single source of truth (`references/stage-order.md` + `gate-criteria.md`):
+  `04-technical-spec/`→`04-spec/`, `08-deployment/`→`08-deploy/`,
+  `09-monitoring/`→`09-monitor/`, `11-resolution/`→`11-resolve/`;
+  `deployment-plan.md`→`deploy-plan.md`, `slo-definition.md`→`observability.md`,
+  `resolution-log.md`→`hotfixes.md`, `triage-report.md`→`triage.md`. `/forge:feedback`
+  now also writes `feedback-log.md` and `/forge:resolve` now also writes
+  `backlog-updates.md` (both are gate blockers that were never produced).
+  `tests/unit/test_canonical_paths.py` guards against re-drift.
+
+  > **Migration note**: projects created with v0.1.3.x may have artifacts under the
+  > old directories (`pipeline/04-technical-spec/`, `08-deployment/`, `09-monitoring/`,
+  > `11-resolution/`) or old filenames. Move them to the canonical names above so the
+  > gate checks find them; otherwise the affected stage gate will report the artifact
+  > missing.
 
 ### Added
 - Comprehensive external test findings to `build/06-evaluation/v0.1.3.1-early-feedback.md`:

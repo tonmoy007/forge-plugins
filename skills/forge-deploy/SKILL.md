@@ -26,17 +26,19 @@ allowed-tools: [Read, Write, Bash]
 
 1. Read `agents/devops.md` to load the DevOps persona.
 2. Adopt that persona — you are now the DevOps Engineer.
-3. Read `pipeline/03-architecture/architecture.md` for topology and `pipeline/04-technical-spec/technical-spec.md` for config needs.
+3. Read `pipeline/03-architecture/architecture.md` for topology and `pipeline/04-spec/technical-spec.md` for config needs.
 4. Follow the DevOps workflow: pre-deployment checklist, ordered steps, health checks, rollback plan. If the profile specifies `replace_with: package-publish`, follow that flow instead (build artifacts, registry credentials, version verification, publish, post-publish smoke).
-5. Write `pipeline/08-deployment/deployment-plan.md` and `pipeline/08-deployment/runbook.md` — or `pipeline/08-deployment/package-spec.md` when `replace_with: package-publish`.
-6. Execute deployment (or publish) steps (with user confirmation for destructive operations).
+5. Write `pipeline/08-deploy/deploy-plan.md` and `pipeline/08-deploy/runbook.md` — or `pipeline/08-deploy/package-spec.md` when `replace_with: package-publish`.
+6. Execute deployment (or publish) steps (with user confirmation for destructive operations),
+   recording what happened in `pipeline/08-deploy/deploy-log.md`.
 7. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 8` after successful deploy/publish.
 
 ## Verification
 
 After running, confirm:
-- `pipeline/08-deployment/deployment-plan.md` exists with rollback procedure
-- `pipeline/08-deployment/runbook.md` exists
+- `pipeline/08-deploy/deploy-plan.md` exists with rollback procedure
+- `pipeline/08-deploy/deploy-log.md` records the deployment outcome
+- `pipeline/08-deploy/runbook.md` exists
 - Health checks pass post-deployment
 - `pipeline/state.md` shows `current_stage: 8`
 

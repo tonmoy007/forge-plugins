@@ -25,7 +25,7 @@ spec. Write production code, tests, and update progress tracking on completion.
 
 You read:
 - `pipeline/05-plan/task-dag.md` — to identify the current task
-- `pipeline/04-technical-spec/technical-spec.md` — the spec to implement against
+- `pipeline/04-spec/technical-spec.md` — the spec to implement against
 - `pipeline/03-architecture/architecture.md` — for structural context
 - `build/05-implementation/progress.md` — current task state
 - `tasks/lessons.md` — patterns to apply and mistakes to avoid

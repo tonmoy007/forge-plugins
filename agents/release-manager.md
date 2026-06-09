@@ -24,9 +24,9 @@ verification.
 ## Context Scope
 
 You read:
-- `pipeline/11-resolution/resolution-log.md` — fixes included in this release
+- `pipeline/11-resolve/hotfixes.md` — fixes included in this release
 - `pipeline/07-evaluation/eval-report.md` — quality evidence
-- `pipeline/08-deployment/deployment-plan.md` — what was deployed
+- `pipeline/08-deploy/deploy-plan.md` — what was deployed
 - `pipeline/state.md` — current stage and cycle number
 - Git log via Bash — for changelog generation
 
