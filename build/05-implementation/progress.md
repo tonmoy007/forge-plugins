@@ -7,12 +7,12 @@
 
 - **Active release**: v0.1.7 — "Three more project-type profiles" — scope locked
   2026-06-09 (`build/01-srs/srs-v0.1.7.md`, `build/04-plan/task-dag-v0.1.7.md`).
-- **v0.1.7 build COMPLETE (T-131..T-134)** — monorepo / mobile / data-contract
-  profiles, each with auto-detection + a real gate (check_monorepo_graph.py,
-  check_store_readiness.py, check_schema_compat.py). Built SERIALLY (shared
-  detection trio) on `feat/v0.1.7-profiles`. 1073 tests pass; validate 0;
-  full-pipeline 12/12; profile parity test now covers all 8 standard profiles.
-  Remaining: T-135 (version bump 0.1.7 + CHANGELOG), then PR→develop→main→tag.
+- **v0.1.7 COMPLETE + RELEASED** — all 5 tasks (T-131..T-135). monorepo / mobile /
+  data-contract profiles, each with auto-detection + a real gate
+  (check_monorepo_graph.py, check_store_readiness.py, check_schema_compat.py).
+  Built SERIALLY (shared detection trio). Tag `v0.1.7` (`a1192fc`) + GitHub
+  release on both remotes; 1076 tests pass; validate 0; full-pipeline 12/12;
+  manifests at 0.1.7; CHANGELOG `[0.1.7]` on top. origin/polygon parity.
 - **v0.1.6 COMPLETE + RELEASED** — all 5 tasks (T-126..T-130). CLARIFY / CONFIRM /
   NARRATE via a 3-agent parallel fan-out. Tag `v0.1.6` (`baccc5e`) + GitHub
   release on both remotes; CHANGELOG `[0.1.6]`. origin/polygon parity.
@@ -32,7 +32,7 @@
 | T-132 | 🟢 done | 2026-06-09 | 06d3d84 | REQ-PROFILE-MOBILE-001: mobile profile + detection (Flutter/iOS/Android/RN, before fullstack so RN≠fullstack) + check_store_readiness.py (per-platform store metadata); test_check_store_readiness.py |
 | T-133 | 🟢 done | 2026-06-09 | 23e4c1b | REQ-PROFILE-DATACONTRACT-001: data-contract profile + detection (.proto/schemas/buf, before api, guarded so gRPC-with-server-dep stays api) + check_schema_compat.py (proto field-number hygiene + buf policy; not a semantic diff); test_check_schema_compat.py |
 | T-134 | 🟢 done | 2026-06-09 | (this commit) | Wiring: load-profile parity test extended to all 8 standard profiles; monorepo gained a stage_5 override (≥3 invariant); README profile table + Detection Heuristics doc synced; progress + ROADMAP |
-| T-135 | 🔲 todo | — | — | Release: bump-version.py 0.1.7 + CHANGELOG [0.1.7] + full pre-release verification |
+| T-135 | 🟢 done | 2026-06-09 | 7ddb408 | Release: bump-version.py 0.1.7 + CHANGELOG [0.1.7]; pre-release green (1076 pass, validate 0, full-pipeline 12/12); tagged v0.1.7, GitHub release, mirrored to polygon |
 
 ## v0.1.6 Task Status
 
