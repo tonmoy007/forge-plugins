@@ -23,6 +23,18 @@ import sys
 from pathlib import Path
 
 _PLUGIN_DIR = Path(__file__).parent.parent
+# v0.1.5.1: fail soft when PyYAML is missing — a hook must never crash-spam the
+# session with an import traceback (_state_lib and others require PyYAML).
+try:
+    import yaml  # noqa: F401
+except ImportError:
+    print(
+        "[Forge] PyYAML is not installed — Forge hooks are inactive. "
+        "Fix: pip install pyyaml (then run /forge:doctor).",
+        file=sys.stderr,
+    )
+    raise SystemExit(0)
+
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(Path(__file__).parent))
 
