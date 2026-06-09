@@ -320,21 +320,36 @@ def main(argv: Optional[list[str]] = None) -> int:
         description="Extract structured lessons from correction-flags.jsonl"
     )
     parser.add_argument(
+        "--cwd",
+        type=Path,
+        default=Path("."),
+        metavar="PATH",
+        help="project root; --input/--output default relative to it (matches other forge scripts)",
+    )
+    parser.add_argument(
         "--input",
         type=Path,
-        default=Path(".forge/correction-flags.jsonl"),
+        default=None,
         metavar="PATH",
+        help="default: <cwd>/.forge/correction-flags.jsonl",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("tasks/lessons.md"),
+        default=None,
         metavar="PATH",
+        help="default: <cwd>/tasks/lessons.md",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print without writing")
     parser.add_argument("--since", metavar="YYYY-MM-DD", help="Skip flags older than date")
     parser.add_argument("--llm", action="store_true", help="Use lesson-extractor agent")
     args = parser.parse_args(argv)
+
+    # REQ-EXTRACT-CWD-001: derive default paths from --cwd; explicit flags override.
+    if args.input is None:
+        args.input = args.cwd / ".forge" / "correction-flags.jsonl"
+    if args.output is None:
+        args.output = args.cwd / "tasks" / "lessons.md"
 
     flags = parse_flags(args.input, since=args.since)
     if not flags:
