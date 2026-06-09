@@ -11,7 +11,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 - Claude Code marketplace publication (pending marketplace availability)
-- Additional project-type profiles (data-contract, mobile, monorepo)
+
+---
+
+## [0.1.7] — 2026-06-09
+
+**Three more project-type profiles.** Forge now ships 10 profiles. Each new
+profile auto-detects and carries a real, deterministic gate executable (run via
+`check-gate.py`); profiles load generically through `load-profile.py`, so they
+apply across all 12 stages with no per-skill wiring.
+
+### Added
+- **monorepo** profile (REQ-PROFILE-MONOREPO-001, T-131) — multi-package
+  workspaces (pnpm/yarn/npm workspaces, Nx, Turborepo, Lerna, Cargo workspace).
+  Detected ahead of single-package signals. Gate `check_monorepo_graph.py`
+  fails on a cycle in the internal package dependency graph.
+- **mobile** profile (REQ-PROFILE-MOBILE-001, T-132) — Flutter / React Native /
+  native iOS / native Android (React Native is no longer mistaken for fullstack).
+  Product-ux stays high. Gate `check_store_readiness.py` requires per-platform
+  store metadata (iOS bundle id+version; Android applicationId+versionCode+
+  versionName; Flutter version).
+- **data-contract** profile (REQ-PROFILE-DATACONTRACT-001, T-133) — schema-first
+  repos (Protobuf / Avro / GraphQL SDL / dbt), guarded so a service that also
+  ships `.proto` stays `api`. Gate `check_schema_compat.py` enforces schema
+  hygiene + policy (no duplicate protobuf field numbers; a buf breaking-change
+  policy when `buf.yaml` is present) — explicitly *not* a semantic cross-version
+  diff (which needs the prior schema version).
+
+### Changed
+- `load-profile.py` parity test now covers all 8 standard profiles; the monorepo
+  profile gained a stage_5 (plan) override. README + Detection Heuristics doc
+  list the 3 new profiles.
 
 ---
 

@@ -231,8 +231,11 @@ class TestCustomProfiles:
 # All five required profiles parse
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("ptype", ["api", "fullstack", "ml-pipeline", "cli", "library"])
-def test_all_five_profiles_parse(tmp_path, ptype):
+@pytest.mark.parametrize("ptype", [
+    "api", "fullstack", "ml-pipeline", "cli", "library",
+    "monorepo", "mobile", "data-contract",   # v0.1.7
+])
+def test_all_standard_profiles_parse(tmp_path, ptype):
     _make_state(tmp_path, ptype)
     name, profile = _mod.load_profile(tmp_path)
     assert name == ptype

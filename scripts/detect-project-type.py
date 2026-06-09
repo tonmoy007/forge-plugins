@@ -72,6 +72,148 @@ def _req_content(cwd: str, files: set) -> str:
     return ""
 
 
+# ---------- T-131: monorepo detection ----------
+
+# Workspace marker files: presence of any one signals a monorepo.
+_MONOREPO_MARKERS = ("pnpm-workspace.yaml", "lerna.json", "turbo.json", "nx.json")
+
+
+def _detect_monorepo(cwd: str, files: set) -> dict | None:
+    """Return a monorepo classification if any workspace signal is present, else None.
+
+    Signals (ANY): a workspace marker file (pnpm-workspace.yaml, lerna.json,
+    turbo.json, nx.json), a `"workspaces"` field in package.json, a `[workspace]`
+    table in Cargo.toml, or BOTH `packages/` and `apps/` directories present.
+    """
+    indicators: list[str] = []
+
+    for marker in _MONOREPO_MARKERS:
+        if marker in files:
+            indicators.append(f"{marker} present")
+
+    if "package.json" in files:
+        content = _read(os.path.join(cwd, "package.json"))
+        if '"workspaces"' in content:
+            indicators.append('package.json declares "workspaces"')
+
+    if "Cargo.toml" in files:
+        content = _read(os.path.join(cwd, "Cargo.toml"))
+        if "[workspace]" in content:
+            indicators.append("Cargo.toml declares [workspace]")
+
+    if _has_dir(cwd, "packages") and _has_dir(cwd, "apps"):
+        indicators.append("packages/ and apps/ directories present")
+
+    if not indicators:
+        return None
+
+    return {"type": "monorepo", "confidence": 0.90, "indicators": indicators}
+
+
+# ---------- T-132: mobile detection ----------
+
+
+def _detect_mobile(cwd: str, files: set) -> dict | None:
+    """Return a mobile classification if any mobile-platform signal is present, else None.
+
+    Signals (ANY):
+      - Flutter: `pubspec.yaml` present (confidence boosted by a `lib/` dir or a
+        `flutter:` key in the file).
+      - iOS: `Podfile`, or any `*.xcodeproj` / `*.xcworkspace`.
+      - Android: an `android/` dir together with a `build.gradle`.
+      - React Native: `react-native` in package.json dependencies.
+
+    Runs BEFORE the fullstack/api/package.json branches so a React Native repo
+    (which has a package.json) classifies as `mobile`, not `fullstack`.
+    """
+    indicators: list[str] = []
+
+    # Flutter
+    has_pubspec = "pubspec.yaml" in files
+    if has_pubspec:
+        pubspec = _read(os.path.join(cwd, "pubspec.yaml"))
+        if _has_dir(cwd, "lib") or "flutter:" in pubspec:
+            indicators.append("pubspec.yaml + Flutter signal (lib/ or flutter: key)")
+        else:
+            indicators.append("pubspec.yaml present (Flutter)")
+
+    # iOS
+    if "Podfile" in files:
+        indicators.append("Podfile present (iOS)")
+    xcode = [f for f in files if f.endswith((".xcodeproj", ".xcworkspace"))]
+    if xcode:
+        indicators.append(f"{xcode[0]} present (iOS)")
+
+    # Android
+    if _has_dir(cwd, "android") and "build.gradle" in files:
+        indicators.append("android/ directory with build.gradle (Android)")
+
+    # React Native
+    if "package.json" in files:
+        content = _read(os.path.join(cwd, "package.json"))
+        if "react-native" in content:
+            indicators.append("package.json depends on react-native")
+
+    if not indicators:
+        return None
+
+    return {"type": "mobile", "confidence": 0.90, "indicators": indicators}
+
+
+# ---------- T-133: data-contract detection ----------
+
+# Schema source extensions and marker files that signal a schema-first repo.
+_SCHEMA_EXTS = (".proto", ".avsc", ".graphql", ".graphqls")
+_SCHEMA_MARKERS = ("buf.yaml", "dbt_project.yml")
+_SCHEMA_DIRS = ("schemas", "contracts")
+
+
+def _detect_data_contract(cwd: str, files: set) -> dict | None:
+    """Return a data-contract classification for schema-first repos, else None.
+
+    Signals (ANY): a `buf.yaml`/`dbt_project.yml` marker, a `schemas/` or
+    `contracts/` directory, or a schema source file (`.proto`/`.avsc`/`.graphql`)
+    at the root or under those dirs. Guarded so a real service that merely ships
+    `.proto` (a gRPC API with a server framework dep) still classifies as `api`,
+    not data-contract — honoring the "no application entry point" requirement.
+    """
+    indicators: list[str] = []
+
+    for marker in _SCHEMA_MARKERS:
+        if marker in files:
+            indicators.append(f"{marker} present")
+
+    for d in _SCHEMA_DIRS:
+        if _has_dir(cwd, d):
+            indicators.append(f"{d}/ directory present")
+
+    root_schema = [f for f in files if f.endswith(_SCHEMA_EXTS)]
+    if root_schema:
+        indicators.append(f"schema file present ({root_schema[0]})")
+    else:
+        for d in _SCHEMA_DIRS:
+            base = os.path.join(cwd, d)
+            if not os.path.isdir(base):
+                continue
+            for _root, _dirs, fs in os.walk(base):
+                if any(x.endswith(_SCHEMA_EXTS) for x in fs):
+                    indicators.append(f"schema source file(s) under {d}/")
+                    break
+
+    if not indicators:
+        return None
+
+    # Guard: a server/API that also ships schemas has an API framework dep —
+    # let it fall through to the `api` branch instead of stealing it here.
+    for req_file in ("requirements.txt", "pyproject.toml", "package.json"):
+        if req_file in files:
+            content = _read(os.path.join(cwd, req_file))
+            if any(lib in content for lib in _API_LIBS):
+                return None
+
+    return {"type": "data-contract", "confidence": 0.85, "indicators": indicators}
+
+
 def detect(cwd: str) -> dict:
     try:
         files = set(os.listdir(cwd))
@@ -79,6 +221,24 @@ def detect(cwd: str) -> dict:
         return {"type": "unknown", "confidence": 0.0, "indicators": ["cannot read directory"]}
 
     indicators: list[str] = []
+
+    # ------------------------------------------------------------- Monorepo
+    # Checked FIRST: a monorepo wraps single-package signals (a Next.js app,
+    # an API, a library) inside workspaces, so it must win before those
+    # branches fire. Detected via ANY workspace manifest or the packages/+apps/
+    # convention. Deliberately specific so plain fullstack/api/library projects
+    # don't match.
+    mono = _detect_monorepo(cwd, files)
+    if mono is not None:
+        return mono
+
+    # --------------------------------------------------------------- Mobile
+    # Checked AFTER monorepo but BEFORE ml/fullstack/api: a React Native repo
+    # has a package.json and would otherwise fall through to the fullstack
+    # branch. Detected via Flutter / iOS / Android / React Native signals.
+    mobile = _detect_mobile(cwd, files)
+    if mobile is not None:
+        return mobile
 
     # ------------------------------------------------------------------ ML
     # Signals: ML library in requirements, train.py, *.ipynb, models/
@@ -125,6 +285,14 @@ def detect(cwd: str) -> dict:
         indicators.append("package.json present")
         indicators.append(f"{next_configs[0]} present (Next.js)")
         return {"type": "fullstack", "confidence": 0.95, "indicators": indicators}
+
+    # ------------------------------------------------------- Data-contract
+    # After ml/fullstack (strong, specific signals) but BEFORE api/library:
+    # a schema-first repo (.proto / schemas/ / buf.yaml, no server framework)
+    # must classify as data-contract, not api or library.
+    data_contract = _detect_data_contract(cwd, files)
+    if data_contract is not None:
+        return data_contract
 
     # -------------------------------------------------------------------  API
     # Signals: API framework in requirements/package.json, routes/ or api/ dir

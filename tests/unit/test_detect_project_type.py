@@ -346,3 +346,148 @@ class TestDetectCLI:
         assert "project_type" in data
         assert data["project_type"] == "unknown"
         assert data.get("suggested_profile") == "script"
+
+
+# ---------- detect: monorepo (T-131 / REQ-PROFILE-MONOREPO-001) ----------
+
+class TestMonorepoDetection:
+    def test_pnpm_workspace_classifies_monorepo(self, tmp_path):
+        (tmp_path / "pnpm-workspace.yaml").write_text("packages:\n  - 'packages/*'\n")
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "monorepo"
+        assert result["confidence"] >= 0.85
+
+    def test_workspaces_field_in_package_json_classifies_monorepo(self, tmp_path):
+        (tmp_path / "package.json").write_text(
+            '{"name": "root", "private": true, "workspaces": ["packages/*"]}'
+        )
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "monorepo"
+
+    def test_turbo_json_classifies_monorepo(self, tmp_path):
+        (tmp_path / "turbo.json").write_text('{"pipeline": {}}')
+        assert detect_mod.detect(str(tmp_path))["type"] == "monorepo"
+
+    def test_cargo_workspace_classifies_monorepo(self, tmp_path):
+        (tmp_path / "Cargo.toml").write_text("[workspace]\nmembers = [\"crates/*\"]\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "monorepo"
+
+    def test_packages_and_apps_dirs_classify_monorepo(self, tmp_path):
+        (tmp_path / "packages").mkdir()
+        (tmp_path / "apps").mkdir()
+        assert detect_mod.detect(str(tmp_path))["type"] == "monorepo"
+
+    def test_monorepo_with_nextjs_app_wins_over_fullstack(self, tmp_path):
+        # A monorepo that contains a Next.js app at the root must still be
+        # classified `monorepo` — the wrapper signal takes precedence.
+        (tmp_path / "pnpm-workspace.yaml").write_text("packages:\n  - 'apps/*'\n")
+        (tmp_path / "package.json").write_text(
+            '{"name": "root", "workspaces": ["apps/*"], "dependencies": {"next": "14.0.0"}}'
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = {}\n")
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "monorepo"
+
+    def test_plain_fullstack_not_monorepo(self, tmp_path):
+        # Single-package Next.js app must NOT be mistaken for a monorepo.
+        (tmp_path / "package.json").write_text(
+            '{"name": "app", "dependencies": {"next": "14.0.0"}}'
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = {}\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "fullstack"
+
+    def test_plain_api_not_monorepo(self, tmp_path):
+        (tmp_path / "requirements.txt").write_text("fastapi\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "api"
+
+    def test_only_packages_dir_not_monorepo(self, tmp_path):
+        # packages/ alone (without apps/ or a workspace manifest) is not enough.
+        (tmp_path / "packages").mkdir()
+        assert detect_mod.detect(str(tmp_path))["type"] != "monorepo"
+
+
+# ---------- detect: mobile (T-132 / REQ-PROFILE-MOBILE-001) ----------
+
+class TestMobileDetection:
+    def test_flutter_with_lib_dir_classifies_mobile(self, tmp_path):
+        (tmp_path / "pubspec.yaml").write_text("name: myapp\nflutter:\n  uses-material-design: true\n")
+        (tmp_path / "lib").mkdir()
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "mobile"
+        assert result["confidence"] >= 0.85
+
+    def test_ios_podfile_classifies_mobile(self, tmp_path):
+        (tmp_path / "Podfile").write_text("platform :ios, '13.0'\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "mobile"
+
+    def test_ios_xcodeproj_classifies_mobile(self, tmp_path):
+        (tmp_path / "MyApp.xcodeproj").mkdir()
+        assert detect_mod.detect(str(tmp_path))["type"] == "mobile"
+
+    def test_android_dir_with_build_gradle_classifies_mobile(self, tmp_path):
+        (tmp_path / "android").mkdir()
+        (tmp_path / "build.gradle").write_text("apply plugin: 'com.android.application'\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "mobile"
+
+    def test_react_native_classifies_mobile(self, tmp_path):
+        (tmp_path / "package.json").write_text(
+            '{"name": "app", "dependencies": {"react-native": "0.73.0", "react": "18.2.0"}}'
+        )
+        assert detect_mod.detect(str(tmp_path))["type"] == "mobile"
+
+    def test_react_native_is_mobile_not_fullstack(self, tmp_path):
+        # A React Native repo has package.json but must NOT fall through to fullstack.
+        (tmp_path / "package.json").write_text(
+            '{"name": "app", "dependencies": {"react-native": "0.73.0"}}'
+        )
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "mobile"
+        assert result["type"] != "fullstack"
+
+    def test_plain_fullstack_not_mobile(self, tmp_path):
+        # Sanity: a Next.js app with no mobile signal stays fullstack.
+        (tmp_path / "package.json").write_text(
+            '{"name": "app", "dependencies": {"next": "14.0.0"}}'
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = {}\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "fullstack"
+
+
+# ---------- detect: data-contract (T-133 / REQ-PROFILE-DATACONTRACT-001) ----------
+
+class TestDataContractDetection:
+    def test_root_proto_file_classifies_data_contract(self, tmp_path):
+        (tmp_path / "user.proto").write_text(
+            'syntax = "proto3";\nmessage User { string id = 1; }\n'
+        )
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "data-contract"
+        assert result["confidence"] >= 0.8
+
+    def test_schemas_dir_classifies_data_contract(self, tmp_path):
+        schemas = tmp_path / "schemas"
+        schemas.mkdir()
+        (schemas / "event.avsc").write_text('{"type": "record", "name": "Event"}')
+        assert detect_mod.detect(str(tmp_path))["type"] == "data-contract"
+
+    def test_buf_yaml_classifies_data_contract(self, tmp_path):
+        (tmp_path / "buf.yaml").write_text("version: v1\nbreaking:\n  use: [FILE]\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "data-contract"
+
+    def test_proto_is_not_api_or_library(self, tmp_path):
+        (tmp_path / "schema.proto").write_text("message M { int32 x = 1; }\n")
+        t = detect_mod.detect(str(tmp_path))["type"]
+        assert t == "data-contract"
+        assert t not in ("api", "library")
+
+    def test_grpc_service_with_server_dep_stays_api(self, tmp_path):
+        # A real service that also ships .proto has an API framework dep — it
+        # must fall through to `api`, not be stolen by data-contract.
+        (tmp_path / "api.proto").write_text("message Req { int32 x = 1; }\n")
+        (tmp_path / "requirements.txt").write_text("fastapi\ngrpcio\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "api"
+
+    def test_plain_library_not_data_contract(self, tmp_path):
+        # Sanity: a Python library with no schema files stays library.
+        (tmp_path / "setup.py").write_text("from setuptools import setup\nsetup()\n")
+        assert detect_mod.detect(str(tmp_path))["type"] != "data-contract"

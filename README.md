@@ -158,6 +158,9 @@ Forge detects your project type at init and customizes the pipeline:
 | `ml-pipeline` | Adds data contract step; GPU memory and drift detection lessons |
 | `cli` | Skips UX flows; emphasizes help text and exit-code documentation |
 | `library` | Emphasizes API stability and semver constraints |
+| `monorepo` | Cross-package architecture + build orchestration; acyclic dependency-graph gate |
+| `mobile` | UI-heavy (Flutter/RN/iOS/Android); platform UX + app-store readiness gate |
+| `data-contract` | Schema-first (Protobuf/Avro/GraphQL/dbt); schema-hygiene + compatibility gate |
 
 Run `/forge:init` — Forge detects the type automatically, or you can override it.
 
