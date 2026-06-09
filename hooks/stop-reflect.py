@@ -196,7 +196,10 @@ def _run_gate_check(cwd: Path, stage: int, plugin_dir: Path) -> dict:
             text=True,
             timeout=10,
         )
-        if result.returncode == 0 and result.stdout.strip():
+        # Parse the JSON whenever it is present — check-gate exits non-zero on an
+        # inconclusive/unimplemented gate (REQ-GATESTUB-001) but still emits a
+        # meaningful report we must act on, not discard as "no gate".
+        if result.stdout.strip().startswith("{"):
             return json.loads(result.stdout)
     except (subprocess.TimeoutExpired, json.JSONDecodeError):
         pass

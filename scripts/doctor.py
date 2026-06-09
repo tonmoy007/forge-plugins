@@ -442,21 +442,33 @@ def check_current_stage_gate(forge_root: Path, cwd: Path) -> Optional[CheckResul
             "current_stage_gate", "project", "warn",
             f"Could not evaluate the Stage {stage} gate",
         )
-    if data.get("inconclusive"):
-        return CheckResult(
-            "current_stage_gate", "project", "fail",
-            f"Stage {stage} gate is inconclusive — state could not be read",
-            fix="Run /forge:status",
-        )
     blockers = [
         d for d in data.get("details", [])
         if not d.get("passed") and d.get("severity") == "blocker"
     ]
-    if blockers:
-        ids = ", ".join(d["id"] for d in blockers)
+    blocker_ids = [d["id"] for d in blockers]
+    unimplemented = data.get("unimplemented", 0)
+
+    if data.get("inconclusive"):
+        # Name both the unimplemented count and any failing blocker IDs so the
+        # verdict never hides a wedged stage behind a "provisional" label.
+        bits = []
+        if unimplemented > 0:
+            bits.append(f"{unimplemented} criteria unimplemented (missing check scripts)")
+        named = [bid for bid in blocker_ids if bid != "STATE-READ"]
+        if named:
+            bits.append("blocker failures: " + ", ".join(named))
+        if not bits:
+            bits.append("state could not be read")
         return CheckResult(
             "current_stage_gate", "project", "fail",
-            f"Stage {stage} gate has {len(blockers)} blocker failure(s): {ids}",
+            f"⚠️ Stage {stage} gate is inconclusive — {'; '.join(bits)}; result is provisional",
+            fix="Run /forge:status and /forge:why <G-ID> for detail",
+        )
+    if blockers:
+        return CheckResult(
+            "current_stage_gate", "project", "fail",
+            f"Stage {stage} gate has {len(blockers)} blocker failure(s): {', '.join(blocker_ids)}",
             fix="Run /forge:status and /forge:why <G-ID> for detail",
         )
     return CheckResult(

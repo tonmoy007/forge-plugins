@@ -100,7 +100,12 @@ def test_gate_inconclusive_on_corrupt_state(tmp_path: Path) -> None:
     assert any(d["id"] == "STATE-READ" for d in data["details"])
 
 
-def test_gate_not_inconclusive_on_good_state(tmp_path: Path) -> None:
+def test_gate_no_state_read_failure_on_good_state(tmp_path: Path) -> None:
+    """A readable state must not produce a STATE-READ inconclusive detail.
+
+    (The gate may still be inconclusive for an unrelated reason — e.g. a missing
+    check script per REQ-GATESTUB-001 — so we assert specifically on STATE-READ.)
+    """
     _good_state(tmp_path)
     r = subprocess.run(
         [PYTHON, str(SCRIPTS / "check-gate.py"),
@@ -108,7 +113,7 @@ def test_gate_not_inconclusive_on_good_state(tmp_path: Path) -> None:
         capture_output=True, text=True,
     )
     data = json.loads(r.stdout)
-    assert data["inconclusive"] is False
+    assert not any(d["id"] == "STATE-READ" for d in data["details"])
 
 
 # ---------- (iii) doctor callout ----------

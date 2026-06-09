@@ -52,6 +52,10 @@ Use this skill whenever the user:
    python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage <current_stage> --cwd .
    ```
    and append a **Gate** section showing pass/fail per criterion.
+   If the JSON has `inconclusive: true` or `unimplemented > 0`, surface a banner
+   at the top of the Gate section — `⚠️ N criteria unimplemented — gate result is
+   provisional` — so a wedged pipeline is never rationalized as "warnings only"
+   (REQ-GATESTUB-001). A provisional gate is not a pass.
    If `check-gate.py` does not exist yet, skip this step silently.
 
 4. Print the dashboard to the user.

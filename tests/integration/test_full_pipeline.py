@@ -8,10 +8,18 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).parent / "full-pipeline.sh"
 PLUGIN_DIR = Path(__file__).parent.parent.parent
 
 
+@pytest.mark.xfail(
+    reason="T-108 makes unimplemented gate scripts fail loud (REQ-GATESTUB-001); "
+    "the full pipeline goes green again once M4 (T-109..T-112) ships all 15 gate "
+    "scripts. Remove this marker in T-112.",
+    strict=False,
+)
 def test_full_pipeline_exits_zero():
     """Full pipeline integration test: all artifacts present, traceability intact."""
     result = subprocess.run(
