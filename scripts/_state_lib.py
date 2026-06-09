@@ -79,6 +79,21 @@ def _normalize_metadata(metadata: dict) -> dict:
 
 STATE_RELPATH = "pipeline/state.md"
 
+
+def _stage_bounds() -> tuple[int, int]:
+    """Return (min_stage, max_stage) from the canonical stage table (T-101).
+
+    Falls back to the documented (0, 12) invariant if the table cannot be read,
+    so this hot-path library never crashes a hook on a packaging glitch.
+    """
+    try:
+        import _stage_table
+
+        b = _stage_table.bounds()
+        return int(b.get("min_stage", 0)), int(b.get("max_stage", 12))
+    except Exception:
+        return 0, 12
+
 # Field name → expected Python type(s). Order matches state.md schema.
 REQUIRED_FIELDS: dict[str, type | tuple[type, ...]] = {
     "schema_version": int,
@@ -105,6 +120,13 @@ def validate_frontmatter(data: dict) -> tuple[bool, list[str]]:
         if not isinstance(val, types):
             type_names = " | ".join(t.__name__ for t in types)
             errors.append(f"'{field}' must be {type_names}, got {type(val).__name__}")
+    # REQ-PIPEBOUNDS-001: current_stage must stay within the canonical bounds.
+    # (Type already checked above; only range-check a well-typed int.)
+    stage_val = data.get("current_stage")
+    if isinstance(stage_val, int):
+        lo, hi = _stage_bounds()
+        if not lo <= stage_val <= hi:
+            errors.append(f"'current_stage' must be in [{lo}, {hi}], got {stage_val}")
     return len(errors) == 0, errors
 
 
@@ -168,8 +190,17 @@ def advance_stage(cwd: str, to: Optional[int] = None) -> dict:
     p = _ensure_state_exists(cwd)
     metadata, body = _split_frontmatter(p.read_text())
 
+    lo, hi = _stage_bounds()
     old = metadata.get("current_stage", 0)
+
     if to is not None:
+        # REQ-PIPEBOUNDS-001: out-of-range jumps are rejected, not warned-and-written.
+        if not lo <= to <= hi:
+            print(
+                f"error: cannot advance to stage {to} — outside valid range [{lo}, {hi}]",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         if to < old:
             print(f"warning: moving backward from stage {old} to {to}", file=sys.stderr)
         elif to > old + 1:
@@ -177,6 +208,15 @@ def advance_stage(cwd: str, to: Optional[int] = None) -> dict:
         new = to
     else:
         new = old + 1
+        # REQ-PIPEBOUNDS-001 cycle-wrap: advancing past the last stage wraps to
+        # (cycle + 1, min_stage) per the stage table's on_overflow: cycle-wrap.
+        if new > hi:
+            new = lo
+            metadata["cycle"] = int(metadata.get("cycle", 1)) + 1
+            print(
+                f"cycle complete — wrapping to cycle {metadata['cycle']}, stage {lo}",
+                file=sys.stderr,
+            )
 
     metadata["current_stage"] = new
     metadata["last_updated"] = datetime.datetime.now(datetime.timezone.utc).strftime(
