@@ -1,0 +1,16 @@
+# Coverage configuration — see the "Enable subprocess coverage" step in
+# .github/workflows/tests.yml.
+#
+# Much of the suite exercises scripts by *running them as subprocesses*
+# (state-manager.py, the gate scripts, build-batch.py, ...) rather than by
+# import. coverage.py only sees in-process code, so without subprocess
+# instrumentation the measured number is artificially low (~52%). With
+# parallel mode + an absolute COVERAGE_FILE + a .pth that calls
+# coverage.process_startup() in each child, every Python that inherits
+# COVERAGE_PROCESS_START joins one parallel data set that pytest-cov combines
+# before reporting — surfacing the real number (~73%).
+[run]
+parallel = true
+source =
+    hooks
+    scripts
