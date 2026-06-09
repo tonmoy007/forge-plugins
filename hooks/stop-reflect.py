@@ -363,6 +363,12 @@ def main() -> None:
             d for d in details
             if not d.get("passed") and d.get("severity") == "blocker"
         ]
+        # T-114: record the gate outcome so the pass->wedge producer can detect a
+        # stage that passed earlier in the session and later wedged.
+        _state_read.log_event(
+            forge_dir, "gate_outcome",
+            f"stage={current_stage} blockers={len(unmet_blockers)}", session_id,
+        )
 
         if user_done:
             if not unmet_blockers:

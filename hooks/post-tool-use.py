@@ -132,6 +132,24 @@ def main() -> None:
     except Exception:  # noqa: BLE001
         pass
 
+    # Step 1b: T-114 heredoc-bypass signal — a bash heredoc writing a UI file
+    # after the design-system check already flagged a violation this session is
+    # the EF-003 "route around the hook" pattern.
+    if tool_name == "Bash":
+        command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+        ui_ext = (".css", ".scss", ".tsx", ".jsx", ".vue", ".html")
+        if "<<" in command and any(ext in command for ext in ui_ext):
+            try:
+                import _signal_producers
+                prior_violation = any(
+                    e.get("kind") == "pretool_violation"
+                    for e in _signal_producers.read_events(forge_dir, session_id)
+                )
+                if prior_violation:
+                    _state_read.log_event(forge_dir, "heredoc_bypass", command[:120], session_id)
+            except Exception:  # noqa: BLE001 - signal logging must never break the hook
+                pass
+
     # Step 2: Pattern tracking — sliding 3-tool window with stable signature
     try:
         recent = _read_last_n(log_path, _WINDOW_SIZE)

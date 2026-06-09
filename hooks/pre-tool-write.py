@@ -136,6 +136,12 @@ def main() -> None:
     if not violations:
         sys.exit(0)
 
+    # T-114: record the violation so the repeated-block / heredoc-bypass producers
+    # can see a pattern of fighting the design-system check on the same files.
+    _state_read.log_event(
+        cwd / ".forge", "pretool_violation", file_path, payload.get("session_id", "")
+    )
+
     capped = violations[:10]
     suffix = (
         f"\n  ... and {len(violations) - 10} more violation(s)"

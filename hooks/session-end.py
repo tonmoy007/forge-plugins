@@ -16,6 +16,7 @@ import datetime
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -119,6 +120,32 @@ def _write_session_summary(
     return out_path
 
 
+def _run_signal_producers(cwd: Path, forge_dir: Path, session_id: str) -> None:
+    """T-114: emit implicit lesson-signal flags, then materialize them into lessons.
+
+    The flags use prompt text the rule-based extractor already matches, so we
+    reuse extract-lessons.py (→ tasks/lessons.md) and sync-lessons.py
+    (→ .forge/lessons.yaml) unchanged. Best-effort; never raises.
+    """
+    import _signal_producers
+
+    emitted = _signal_producers.run(forge_dir, session_id)
+    if not emitted:
+        return
+    scripts = _PLUGIN_DIR / "scripts"
+    for name in ("extract-lessons.py", "sync-lessons.py"):
+        script = scripts / name
+        if not script.exists():
+            continue
+        try:
+            subprocess.run(
+                [sys.executable, str(script), "--cwd", str(cwd)],
+                capture_output=True, timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+
 def main() -> None:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -144,6 +171,13 @@ def main() -> None:
             f"[Forge] {failures} state-read failure(s) this session — "
             f"pipeline/state.md could not be read. Run /forge:doctor."
         )
+
+    # T-114: evaluate implicit lesson-signal producers and materialize any flags
+    # into lessons before the session closes. Never block session end on failure.
+    try:
+        _run_signal_producers(cwd, forge_dir, session_id)
+    except Exception:  # noqa: BLE001
+        pass
 
     lessons = _recent_lessons(cwd)
     files = _recent_files(forge_dir)
