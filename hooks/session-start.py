@@ -25,7 +25,17 @@ from typing import Optional
 
 import subprocess
 
-import yaml
+# v0.1.5.1: fail soft when PyYAML is missing — a hook must never crash-spam the
+# session with an import traceback (_state_lib and others require PyYAML).
+try:
+    import yaml  # noqa: F401
+except ImportError:
+    print(
+        "[Forge] PyYAML is not installed — Forge hooks are inactive. "
+        "Fix: pip install pyyaml (then run /forge:doctor).",
+        file=sys.stderr,
+    )
+    raise SystemExit(0)
 
 # Resolve plugin root and make _state_lib + _hook_runner importable
 _PLUGIN_DIR = Path(__file__).parent.parent

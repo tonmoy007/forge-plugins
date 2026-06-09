@@ -17,6 +17,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.5.1] — 2026-06-09
+
+Hotfix. Forge hooks crashed with a `ModuleNotFoundError` traceback at import time
+when **PyYAML was not installed** in the user's Python (e.g. a bare conda env) —
+every Stop/SessionStart/etc. event spammed the session. Same dependency-not-
+installed failure mode as the v0.1.3.1 `python-frontmatter` bug, moved to `yaml`.
+
+### Fixed
+- The 6 active hooks (`session-start`, `prompt-submit`, `pre-tool-write`,
+  `post-tool-use`, `stop-reflect`, `session-end`) now **fail soft** when PyYAML is
+  absent: they print one actionable line — `[Forge] PyYAML is not installed —
+  Forge hooks are inactive. Fix: pip install pyyaml (then run /forge:doctor).` —
+  and exit 0 instead of crashing with a traceback. The guard runs at import time,
+  before `_state_lib` (which requires PyYAML) is imported. `/forge:doctor` already
+  detects the missing dependency.
+- `tests/unit/test_pyyaml_missing.py` — shadows `yaml` with an ImportError shim
+  and asserts every guarded hook exits 0 with the message and no traceback.
+
+### Note
+- This does not make Forge *function* without PyYAML (it remains a required
+  runtime dependency, checked by `/forge:doctor`); it stops the crash-spam and
+  tells the user exactly how to fix it.
+
 ## [0.1.5] — 2026-06-09
 
 Bug-fix-heavy release driven by two on-project testers (EF-001…027). Theme: sand
