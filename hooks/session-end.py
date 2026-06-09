@@ -21,7 +21,9 @@ from pathlib import Path
 
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib
+import _state_read
 from _hook_runner import run_hook
 
 def _recent_lessons(cwd: Path, limit: int = 3) -> list[str]:
@@ -131,10 +133,17 @@ def main() -> None:
 
     forge_dir = cwd / ".forge"
 
-    try:
-        state = lib.read_state(str(cwd))
-    except Exception:  # noqa: BLE001
-        state = {}
+    state, warning = _state_read.read_state_safe(str(cwd), session_id)
+    if warning:
+        print(warning)
+
+    # REQ-SILENTSTATE-001: footer summarizing state-read failures this session.
+    failures = _state_read.count_state_read_failures(forge_dir, session_id)
+    if failures > 0:
+        print(
+            f"[Forge] {failures} state-read failure(s) this session — "
+            f"pipeline/state.md could not be read. Run /forge:doctor."
+        )
 
     lessons = _recent_lessons(cwd)
     files = _recent_files(forge_dir)

@@ -342,6 +342,41 @@ def check_disk_space() -> CheckResult:
         )
 
 
+def check_state_read_failures(cwd: Path) -> CheckResult:
+    """REQ-SILENTSTATE-001: surface state-read failures so a degraded session
+    can't pass as healthy. Reads `.forge/errors.log` for `state_read_failed`."""
+    log = cwd / ".forge" / "errors.log"
+    if not log.exists():
+        return CheckResult(
+            "state_read_failures", "project", "pass", "No state-read failures recorded",
+        )
+    count = 0
+    try:
+        for line in log.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if row.get("kind") == "state_read_failed":
+                count += 1
+    except OSError as e:
+        return CheckResult(
+            "state_read_failures", "project", "warn", f"Could not read {log}: {e}",
+        )
+    if count > 0:
+        return CheckResult(
+            "state_read_failures", "project", "fail",
+            f"{count} state-read failure(s) recorded — pipeline/state.md could not be read",
+            fix="Inspect pipeline/state.md frontmatter, then run /forge:status",
+        )
+    return CheckResult(
+        "state_read_failures", "project", "pass", "No state-read failures recorded",
+    )
+
+
 def check_hook_errors(cwd: Path) -> CheckResult:
     log = cwd / ".forge" / "hook-errors.log"
     if not log.exists():
@@ -403,6 +438,7 @@ def run_checks(forge_root: Path, cwd: Path) -> list[CheckResult]:
     gi = check_gitignore(cwd)
     if gi:
         results.append(gi)
+    results.append(check_state_read_failures(cwd))
     results.append(check_global_forge())
     results.append(check_disk_space())
     results.append(check_hook_errors(cwd))

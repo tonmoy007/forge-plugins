@@ -14,6 +14,25 @@ from pathlib import Path
 
 import yaml
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _state_lib as lib  # noqa: E402
+
+
+def _state_readable(cwd: Path) -> bool:
+    """REQ-SILENTSTATE-001: a gate cannot pass against unreadable state.
+
+    Returns True when state.md is absent (a different, separately-reported
+    condition) or readable; False when it exists but cannot be parsed.
+    """
+    state_path = cwd / "pipeline" / "state.md"
+    if not state_path.exists():
+        return True
+    try:
+        lib.read_state(str(cwd))
+        return True
+    except (Exception, SystemExit):  # noqa: BLE001 - unreadable state is the signal
+        return False
+
 
 def _load_stage_criteria(plugin_dir: Path, stage: int) -> list[dict]:
     gate_file = plugin_dir / "references" / "gate-criteria.md"
@@ -122,6 +141,20 @@ def _evaluate(criterion: dict, cwd: Path, plugin_dir: Path) -> dict:
 def evaluate_stage(stage: int, cwd: Path, plugin_dir: Path) -> dict:
     criteria = _load_stage_criteria(plugin_dir, stage)
     details = [_evaluate(c, cwd, plugin_dir) for c in criteria]
+
+    # REQ-SILENTSTATE-001: if state.md exists but is unreadable, the whole gate is
+    # inconclusive — it must not read as a clean pass against missing data.
+    state_readable = _state_readable(cwd)
+    if not state_readable:
+        details.insert(0, {
+            "id": "STATE-READ",
+            "description": "pipeline/state.md is readable",
+            "check": "state_readable",
+            "severity": "blocker",
+            "passed": False,
+            "message": "pipeline/state.md exists but could not be read — gate result is inconclusive",
+        })
+
     passed = sum(1 for d in details if d["passed"])
     failed = len(details) - passed
     return {
@@ -129,6 +162,7 @@ def evaluate_stage(stage: int, cwd: Path, plugin_dir: Path) -> dict:
         "total": len(details),
         "passed": passed,
         "failed": failed,
+        "inconclusive": not state_readable,
         "details": details,
     }
 
@@ -154,6 +188,10 @@ def main() -> None:
         plugin_dir=Path(args.plugin_dir),
     )
     print(json.dumps(result, indent=2))
+    # REQ-SILENTSTATE-001: a gate run against unreadable state exits non-zero so
+    # callers can't treat an inconclusive result as a pass.
+    if result.get("inconclusive"):
+        sys.exit(2)
 
 
 if __name__ == "__main__":

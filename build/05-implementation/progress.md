@@ -6,7 +6,7 @@
 ## Current State
 
 - **Active release**: v0.1.5 — scope locked 2026-06-09 (`build/01-srs/srs-v0.1.5.md`, `build/04-plan/task-dag-v0.1.5.md`)
-- **Current task**: T-104 next (T-101/102/103 done)
+- **Current task**: T-106 next (M1 + M2 done: T-101..T-105)
 - **Last session**: 2026-06-09 — merged PR #1 (EF-021..027 + 3 hotfixes) to main; locked v0.1.5; started M1.
 - **Last hotfix**: v0.1.3.1 — dropped `python-frontmatter` runtime dep (`scripts/_state_lib.py`, `scripts/load-profile.py`); 3 regression tests added. Resolves feedback/v0.1.3/feedback1.md `ModuleNotFoundError: frontmatter` reports.
 
@@ -16,8 +16,10 @@
 |------|--------|-----------|--------|-------|
 | T-101 | 🟢 done | 2026-06-09 | — | `references/stage-order.md` + `scripts/_stage_table.py` loader + 38 tests; single source of truth (dirs, prereqs, next-hints, bounds, cycles); resolves EF-005 dir-name drift; 745/745 pass |
 | T-102 | 🟢 done | 2026-06-09 | — | canonicalized ALL stage paths (broader than EF-005: stages 4/8/9/10/11 wedged). 17 files (7 skills + 9 agents + CHANGELOG); dir+filename renames to match gates; added feedback-log.md & backlog-updates.md (gate blockers skills never wrote); test_canonical_paths.py guard; 753/753 pass |
-| T-103 | 🟢 done | 2026-06-09 | — | `next-hint` subcommand in state-manager.py reads canonical hint from stage table; all 12 stage skills invoke it (no hardcoded strings); fixed 2 dead-command hints (`/forge:ux`→product, `/forge:architecture`→arch) + forge-status stage→command table rows 2/3; test_next_hint.py (57 tests) enumerates all transitions; 810/810 pass |
-| T-104 | 🔲 todo | | | stage-bound + cycle-wrap enforcement |
+| T-103 | 🟢 done | 2026-06-09 | 1 commit | `next-hint` subcommand reads canonical hint from stage table; all 12 stage skills invoke it; fixed 2 dead-command hints + forge-status table; test_next_hint.py (57 tests); 810 pass |
+| T-104 | 🟢 done | 2026-06-09 | 442c2af | REQ-PIPEBOUNDS-001: advance rejects out-of-range, cycle-wraps past 12 to (cycle+1,0); validate_frontmatter range-checks current_stage; set -1/99/13 rejected, state intact; test_pipebounds.py; 821 pass |
+| T-105 | 🟢 done | 2026-06-09 | df811ea | REQ-GATE-ENTRY-001: check_prerequisite + `preflight --stage N` (exit 2); advance skips need --force; 10 stage skills gated; force-advance routes via force=True; test_entry_gates.py; 847 pass |
+| T-106 | 🔲 todo | | | surface state-read failures (fail-loud) |
 
 ## Task Status
 

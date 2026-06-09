@@ -27,6 +27,7 @@ sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 import _state_lib as lib
+import _state_read
 from _hook_runner import run_hook
 import _event_log as event_log
 import _executor as executor
@@ -262,10 +263,11 @@ def main() -> None:
 
     forge_dir = cwd / ".forge"
 
-    try:
-        state = lib.read_state(str(cwd))
-    except Exception as e:
-        _log_error(forge_dir, "state_read_failed", str(e))
+    state, warning = _state_read.read_state_safe(str(cwd), session_id)
+    if not state:
+        # REQ-SILENTSTATE-001: surface the failure (read_state_safe already logged it).
+        if warning:
+            print(warning)
         sys.exit(0)
 
     # --- Step 0: Pre-flight ---

@@ -29,7 +29,9 @@ import yaml
 # Resolve plugin root and make _state_lib + _hook_runner importable
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib  # noqa: E402
+import _state_read  # noqa: E402
 from _hook_runner import run_hook  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
@@ -196,19 +198,16 @@ def _compose(
     return "\n".join(lines)
 
 
-def run(cwd: Path) -> Optional[str]:
+def run(cwd: Path, session_id: str = "") -> Optional[str]:
     """Return context string, or None to exit silently."""
     state_path = cwd / "pipeline" / "state.md"
     if not state_path.exists():
         return None  # not a Forge project
 
-    try:
-        state = lib.read_state(str(cwd))
-    except SystemExit:
-        return "[Forge] Warning: pipeline/state.md is unreadable — run /forge:init."
-    except Exception as exc:
-        _LOG.warning("session-start: state read failed: %s", exc)
-        return None
+    # REQ-SILENTSTATE-001: surface read failures instead of swallowing them.
+    state, warning = _state_read.read_state_safe(str(cwd), session_id)
+    if not state:
+        return warning or "[Forge] Warning: pipeline/state.md is unreadable — run /forge:doctor."
 
     stage = state.get("current_stage", 0)
     project_type = state.get("project_type", "unknown")
@@ -250,7 +249,7 @@ def main() -> None:
         payload = {}
 
     cwd = Path(payload.get("cwd", os.getcwd()))
-    result = run(cwd)
+    result = run(cwd, payload.get("session_id", ""))
     if result is not None:
         print(result)
     sys.exit(0)

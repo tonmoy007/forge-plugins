@@ -21,7 +21,9 @@ from pathlib import Path
 from typing import Optional
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib
+import _state_read
 from _hook_runner import run_hook
 
 _WINDOW_SIZE = 3
@@ -108,11 +110,10 @@ def main() -> None:
     # Best-effort stage read (skip if no state file)
     current_stage = 0
     if (cwd / "pipeline" / "state.md").exists():
-        try:
-            state = lib.read_state(str(cwd))
-            current_stage = state.get("current_stage", 0)
-        except Exception:  # noqa: BLE001
-            pass
+        state, warning = _state_read.read_state_safe(str(cwd), session_id)
+        if warning:
+            print(warning)
+        current_stage = state.get("current_stage", 0)
 
     # Step 1: Append session log entry
     file_path = tool_input.get("file_path", "")

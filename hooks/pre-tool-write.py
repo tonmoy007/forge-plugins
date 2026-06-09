@@ -17,7 +17,9 @@ from pathlib import Path
 
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib
+import _state_read
 from _hook_runner import run_hook
 
 _UI_EXTENSIONS = {".tsx", ".jsx", ".ts", ".js", ".vue", ".svelte", ".css", ".scss", ".html"}
@@ -115,11 +117,10 @@ def main() -> None:
     # Only enforce after Stage 6
     if not (cwd / "pipeline" / "state.md").exists():
         sys.exit(0)
-    try:
-        state = lib.read_state(str(cwd))
-        if state.get("current_stage", 0) < 6:
-            sys.exit(0)
-    except Exception:  # noqa: BLE001
+    state, warning = _state_read.read_state_safe(str(cwd), payload.get("session_id", ""))
+    if warning:
+        print(warning)
+    if state.get("current_stage", 0) < 6:
         sys.exit(0)
 
     # Only enforce when a design system has been authored
