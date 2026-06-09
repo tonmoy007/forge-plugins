@@ -423,6 +423,17 @@ def main() -> None:
                 f"✅ Stage {current_stage} gate passed."
                 f" Advanced to stage {current_stage + 1}."
             )
+            # T-119: roll up the completed stage's sessions into reflection.md.
+            stage_reflect = _PLUGIN_DIR / "scripts" / "stage-reflect.py"
+            if stage_reflect.exists():
+                try:
+                    subprocess.run(
+                        [sys.executable, str(stage_reflect), "--stage", str(current_stage),
+                         "--cwd", str(cwd), "--gate-status", "pass"],
+                        capture_output=True, timeout=15,
+                    )
+                except Exception:  # noqa: BLE001 - rollup must never break the Stop hook
+                    pass
         else:
             _log_error(forge_dir, "advance_stage_failed", "")
 
