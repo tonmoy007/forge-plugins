@@ -178,8 +178,15 @@ class TestAdvanceStage:
 
     def test_jump_to_target(self, tmp_path):
         _make_state(tmp_path)
-        lib.advance_stage(str(tmp_path), to=6)
+        # REQ-GATE-ENTRY-001: a multi-stage jump now requires force.
+        lib.advance_stage(str(tmp_path), to=6, force=True)
         assert lib.read_state(str(tmp_path))["current_stage"] == 6
+
+    def test_multi_stage_jump_without_force_rejected(self, tmp_path):
+        _make_state(tmp_path)
+        with pytest.raises(SystemExit):
+            lib.advance_stage(str(tmp_path), to=6)
+        assert lib.read_state(str(tmp_path))["current_stage"] == 0
 
     def test_updates_last_updated(self, tmp_path):
         _make_state(tmp_path)
@@ -195,7 +202,7 @@ class TestAdvanceStage:
 
     def test_backward_advance_emits_warning(self, tmp_path, capsys):
         _make_state(tmp_path)
-        lib.advance_stage(str(tmp_path), to=5)
+        lib.advance_stage(str(tmp_path), to=5, force=True)
         lib.advance_stage(str(tmp_path), to=2)  # backward
         captured = capsys.readouterr()
         assert "backward" in captured.err

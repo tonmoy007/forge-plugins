@@ -16,6 +16,17 @@ allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 
 ## Pre-flight Check
 
+**Entry gate (REQ-GATE-ENTRY-001)** — before adopting the persona, verify the
+prior stage's artifact exists:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py preflight --stage 6
+```
+
+If it exits non-zero, **STOP**: present its message verbatim and do not proceed —
+the prior stage must be completed first (or use `/forge:force-advance` to skip
+intentionally).
+
 1. Read `pipeline/state.md` — confirm Forge project.
 2. Confirm `pipeline/05-plan/task-dag.md` exists. If not: "Complete Stage 5 first (`/forge:plan`)."
 3. Read `build/05-implementation/progress.md` (or create it) to identify the current task.

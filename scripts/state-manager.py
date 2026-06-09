@@ -38,8 +38,21 @@ def cmd_read(args: argparse.Namespace, cwd: str) -> None:
 
 
 def cmd_advance(args: argparse.Namespace, cwd: str) -> None:
-    new_state = lib.advance_stage(cwd, to=args.to)
+    new_state = lib.advance_stage(cwd, to=args.to, force=getattr(args, "force", False))
     print(json.dumps(new_state, indent=2, default=str))
+
+
+def cmd_preflight(args: argparse.Namespace, cwd: str) -> None:
+    """REQ-GATE-ENTRY-001: block stage entry when the prior artifact is missing.
+
+    Exit 0 when the prerequisite is present (or the stage has none); exit 2 with a
+    one-line message naming the missing file + the skill to run instead.
+    """
+    ok, message = lib.check_prerequisite(cwd, args.stage)
+    if not ok:
+        print(message, file=sys.stderr)
+        sys.exit(2)
+    print(f"stage {args.stage}: prerequisite satisfied", file=sys.stderr)
 
 
 def cmd_set(args: argparse.Namespace, cwd: str) -> None:
@@ -135,6 +148,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_adv = sub.add_parser("advance", parents=[sub_common], help="increment current_stage")
     p_adv.add_argument("--to", type=int, metavar="N", help="jump to stage N instead of +1")
+    p_adv.add_argument(
+        "--force",
+        action="store_true",
+        help="allow skipping more than one stage (the /forge:force-advance path)",
+    )
+
+    p_pre = sub.add_parser(
+        "preflight",
+        parents=[sub_common],
+        help="check a stage's prior-stage prerequisite artifact (exit 2 if missing)",
+    )
+    p_pre.add_argument("--stage", required=True, type=int, metavar="N", help="stage to enter")
 
     p_set = sub.add_parser("set", parents=[sub_common], help="set a single frontmatter field")
     p_set.add_argument("--field", required=True, metavar="FIELD")
@@ -172,6 +197,7 @@ def main() -> None:
         "set": cmd_set,
         "reflect": cmd_reflect,
         "next-hint": cmd_next_hint,
+        "preflight": cmd_preflight,
         "history-add": cmd_history_add,
     }
     dispatch[args.command](args, args.cwd)

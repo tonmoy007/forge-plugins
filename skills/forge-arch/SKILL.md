@@ -16,6 +16,17 @@ allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
 
 ## Pre-flight Check
 
+**Entry gate (REQ-GATE-ENTRY-001)** — before adopting the persona, verify the
+prior stage's artifact exists:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py preflight --stage 3
+```
+
+If it exits non-zero, **STOP**: present its message verbatim and do not proceed —
+the prior stage must be completed first (or use `/forge:force-advance` to skip
+intentionally).
+
 1. Read `pipeline/state.md` — confirm Forge project.
 2. Confirm `pipeline/01-srs/srs.md` exists. If not: "Complete Stage 1 first (`/forge:srs`)."
 3. Confirm `pipeline/02-product-ux/prd.md` exists (warn if missing but don't block).

@@ -16,6 +16,17 @@ allowed-tools: [Read, Write, Bash]
 
 ## Pre-flight Check
 
+**Entry gate (REQ-GATE-ENTRY-001)** — before adopting the persona, verify the
+prior stage's artifact exists:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py preflight --stage 9
+```
+
+If it exits non-zero, **STOP**: present its message verbatim and do not proceed —
+the prior stage must be completed first (or use `/forge:force-advance` to skip
+intentionally).
+
 1. Read `pipeline/state.md` — confirm Forge project.
 2. Confirm `pipeline/08-deploy/deploy-plan.md` exists (or `package-spec.md` for CLI/library projects). If neither: "Complete Stage 8 first (`/forge:deploy`)."
 3. If stage > 9, ask if the user wants to update the health report.

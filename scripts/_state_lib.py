@@ -185,8 +185,35 @@ def write_state(cwd: str, frontmatter_dict: dict) -> None:
     _atomic_write(p, _join_frontmatter(current, body))
 
 
-def advance_stage(cwd: str, to: Optional[int] = None) -> dict:
-    """Increment current_stage (or jump to `to`), update last_updated, return new state."""
+def check_prerequisite(cwd: str, stage: int) -> tuple[bool, str]:
+    """REQ-GATE-ENTRY-001: is stage `stage`'s prior-stage artifact present?
+
+    Returns (ok, message). ok=True (empty message) when the stage has no
+    prerequisite (stage 1) or the prerequisite file exists under `cwd`. ok=False
+    with a one-line message naming the missing file and the skill to run instead.
+    """
+    try:
+        import _stage_table
+
+        prereq = _stage_table.prerequisite(stage)
+        prereq_skill = _stage_table.prerequisite_skill(stage)
+    except Exception:
+        # Without the table we cannot assert a prerequisite; don't block.
+        return True, ""
+    if not prereq:
+        return True, ""
+    if (Path(cwd) / prereq).exists():
+        return True, ""
+    skill_hint = f" — run {prereq_skill} first" if prereq_skill else ""
+    return False, f"Stage {stage} requires {prereq}, which is missing{skill_hint}."
+
+
+def advance_stage(cwd: str, to: Optional[int] = None, force: bool = False) -> dict:
+    """Increment current_stage (or jump to `to`), update last_updated, return new state.
+
+    REQ-GATE-ENTRY-001: a jump of more than one stage (`to > old + 1`) is rejected
+    unless `force=True`. `/forge:force-advance` is the documented forced path.
+    """
     p = _ensure_state_exists(cwd)
     metadata, body = _split_frontmatter(p.read_text())
 
@@ -203,6 +230,14 @@ def advance_stage(cwd: str, to: Optional[int] = None) -> dict:
             sys.exit(1)
         if to < old:
             print(f"warning: moving backward from stage {old} to {to}", file=sys.stderr)
+        elif to > old + 1 and not force:
+            # REQ-GATE-ENTRY-001: skipping stages requires an explicit force path.
+            print(
+                f"error: cannot skip stages {old + 1}–{to - 1} (stage {old} → {to}). "
+                f"Complete them in order, or use /forge:force-advance to skip intentionally.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         elif to > old + 1:
             print(f"warning: skipping stages {old + 1}–{to - 1}", file=sys.stderr)
         new = to
