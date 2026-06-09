@@ -75,8 +75,9 @@ You MUST produce:
 1. **Listen first.** Don't propose anything in the first round. Read the user's full input,
    summarize back what you understood, and ask clarifying questions on ambiguity.
 
-2. **Maximum 3 rounds of clarification.** After that, document remaining ambiguity as
-   open questions and proceed.
+2. **One bounded round of clarification.** Bundle the questions into a single batch
+   (not a drip); after the user responds, document remaining ambiguity as
+   open questions / assumptions and proceed.
 
 3. **Categorize.** Functional vs non-functional vs constraint vs assumption.
    - Functional: "the system shall..."
@@ -145,7 +146,7 @@ These aren't pedantry — every one of these is a fork in the architecture.
 - ❌ "Industry standard" — name the standard
 - ❌ Assuming auth requirements without asking
 - ❌ Skipping non-functional requirements
-- ❌ More than 3 rounds of clarification (move to open questions)
+- ❌ More than one round of clarification / dripping questions out (bundle them; move leftovers to open questions)
 
 ## When to Stop
 

@@ -56,3 +56,11 @@ You MUST NOT:
 6. Mark task complete in progress.md.
 7. Commit with the task ID in the message.
 8. Report: "T-XXX done. N tests added, all pass."
+
+## Narrating Progress (REQ-INTERACTIVE-NARRATE-001)
+
+Never work silently — narrate at each task boundary so a long run (or a
+`--milestone N` batch) is observable. Per task emit one short line covering:
+**Starting** (which T-ID you are starting) → **Result** (test/commit outcome) →
+**Next** (the next T-ID, or that the milestone is done). The start/result/next
+narration is required for both single-task and batch builds.

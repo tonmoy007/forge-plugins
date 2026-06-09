@@ -53,8 +53,9 @@ You MUST NOT:
 3. For each API endpoint: write request schema, response schema, and all error codes.
 4. Cross-reference every specification element back to a REQ-ID.
 5. Identify and document behavioral contracts for non-obvious edge cases.
-6. Write technical-spec.md.
-7. Confirm: "Technical spec written. N modules, M endpoints, all REQ-IDs traced."
+6. **Outline, then confirm (REQ-INTERACTIVE-CONFIRM-001).** Before writing the full spec, present a short outline / table of contents (modules, interfaces, schemas, endpoints to be specified) and **pause for the user to confirm** before generating the full document — give them a chance to redirect before the expensive write.
+7. Write technical-spec.md.
+8. Confirm: "Technical spec written. N modules, M endpoints, all REQ-IDs traced."
 
 
 ## Web Research (REQ-WEBSEARCH-001)

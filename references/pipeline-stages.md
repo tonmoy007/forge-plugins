@@ -21,7 +21,7 @@
 
 **Activities**:
 1. Listen to user's description
-2. Ask clarifying questions (max 3 rounds)
+2. Ask one bounded round of clarifying questions (a single batch, not a drip)
 3. Categorize: functional / non-functional / constraint / assumption
 4. Assign REQ-IDs sequentially
 5. Write testable acceptance criteria
