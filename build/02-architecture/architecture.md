@@ -324,7 +324,7 @@ You MUST produce:
 - pipeline/01-srs/stakeholder-map.md if stakeholder info is provided
 
 ## Workflow
-1. Ask clarifying questions on ambiguity (max 3 rounds)
+1. Ask one bounded round of clarifying questions on ambiguity (a single batch, not a drip), then proceed and record assumptions for anything unanswered (REQ-INTERACTIVE-CLARIFY-001)
 2. Categorize requirements: functional, non-functional, constraints
 3. Assign IDs (REQ-001, REQ-002, ...)
 4. Write acceptance criteria (testable, measurable)

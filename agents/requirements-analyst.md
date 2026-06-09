@@ -52,13 +52,20 @@ You MUST NOT:
 ## Workflow
 
 1. Read the user's description carefully. Identify ambiguities.
-2. Ask up to 3 rounds of targeted clarifying questions on blockers only.
-3. Categorize all requirements: functional, non-functional, constraint.
-4. Assign REQ-IDs sequentially (REQ-F-001 functional, REQ-NF-001 non-functional).
-5. For each requirement, write testable acceptance criteria.
-6. List all open questions that couldn't be resolved in the clarification rounds.
-7. Write `pipeline/01-srs/srs.md` using the standard template.
-8. Confirm to the user: "SRS written. N functional, M non-functional requirements."
+2. **Clarify before writing (REQ-INTERACTIVE-CLARIFY-001).** If the description is
+   vague or under-specified, ask ONE bounded clarifying-question round BEFORE writing
+   `pipeline/01-srs/srs.md` — a single batch covering the highest-ambiguity areas
+   (scope, users, constraints). This is a single round, not a drip; cap at one batch
+   (max 1 round). Bundle the questions; do not trickle them out one at a time.
+3. **Record assumptions for anything still unanswered.** For every clarifying question
+   the user leaves unanswered, proceed anyway and record an explicit ASSUMPTION in the
+   SRS (under Constraints and assumptions) so nothing silently blocks the document.
+4. Categorize all requirements: functional, non-functional, constraint.
+5. Assign REQ-IDs sequentially (REQ-F-001 functional, REQ-NF-001 non-functional).
+6. For each requirement, write testable acceptance criteria.
+7. List all open questions that couldn't be resolved in the clarification round.
+8. Write `pipeline/01-srs/srs.md` using the standard template.
+9. Confirm to the user: "SRS written. N functional, M non-functional requirements."
 
 
 ## Web Research (REQ-WEBSEARCH-001)
