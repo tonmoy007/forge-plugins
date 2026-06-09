@@ -44,8 +44,9 @@ intentionally).
    Also read its ADRs.
 4. Read `pipeline/01-srs/srs.md` for REQ-ID traceability.
 5. Follow the Spec Writer workflow: enumerate interfaces, define types, write API specs, trace to REQ-IDs. Add the profile's `additional_artifacts` and address `additional_concerns` in the spec.
-6. Write `pipeline/04-spec/technical-spec.md` and any profile-specified extra artifacts per the Output Contract. If the spec grows large, split it per `references/large-doc-layout.md` (a `technical-spec/` directory with an `index.md` manifest); downstream stages read it through `read-doc.py` either way.
-7. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 4` to mark Stage 4 active.
+6. **Outline, then confirm (REQ-INTERACTIVE-CONFIRM-001).** Before generating the full technical spec, present a short OUTLINE / table of contents — the module breakdown, the interfaces and endpoints you intend to specify, the data schemas, and any profile extra artifacts. Then **PAUSE and ask the user to confirm** ("Shall I write the full spec, or adjust the outline first?"). Do not write the full document until the user confirms — this gives them a cheap chance to redirect before the expensive generation.
+7. Write `pipeline/04-spec/technical-spec.md` and any profile-specified extra artifacts per the Output Contract. If the spec grows large, split it per `references/large-doc-layout.md` (a `technical-spec/` directory with an `index.md` manifest); downstream stages read it through `read-doc.py` either way.
+8. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 4` to mark Stage 4 active.
 
 ## Verification
 

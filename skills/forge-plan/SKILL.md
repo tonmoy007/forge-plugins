@@ -38,8 +38,9 @@ intentionally).
 2. Adopt that persona — you are now the Planner.
 3. Read `pipeline/04-spec/technical-spec.md` and `pipeline/03-architecture/architecture.md`.
 4. Follow the Planner workflow: decompose into tasks, map dependencies, identify critical path, enumerate risks. Apply the profile's emphasis: under-emphasized stages get lighter task budgets, over-emphasized stages get explicit milestones.
-5. Write `pipeline/05-plan/task-dag.md` and `pipeline/05-plan/risk-register.md` per the Output Contract.
-6. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 5` to mark Stage 5 active.
+5. **Outline, then confirm (REQ-INTERACTIVE-CONFIRM-001).** Before generating the full task DAG, present a short OUTLINE / table of contents — the proposed milestones, the high-level task groups (and rough task count per group), and the top risks. Then **PAUSE and ask the user to confirm** ("Shall I write the full task DAG, or adjust the breakdown first?"). Do not write the full document until the user confirms — this gives them a cheap chance to redirect before the expensive generation.
+6. Write `pipeline/05-plan/task-dag.md` and `pipeline/05-plan/risk-register.md` per the Output Contract.
+7. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 5` to mark Stage 5 active.
 
 ## Verification
 
