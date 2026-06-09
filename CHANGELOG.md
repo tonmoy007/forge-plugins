@@ -210,6 +210,30 @@ auto-skill creation — validated end-to-end on the sample Todo API project (532
 
 ## [Unreleased]
 
+### Fixed
+- `tests/unit/test_force_advance.py` — replaced 4 `import frontmatter` calls with
+  `_state_lib.read_state()` / `_state_lib._split_frontmatter()`. No longer requires
+  `python-frontmatter` to run tests (EF-021).
+- `hooks/post-tool-use.py` — added `isinstance` guard for string `tool_input` / `tool_response`
+  payloads from Bash/Read events. Hook no longer crashes on non-Write tool events (EF-022).
+- `hooks/pre-tool-write.py` — added `isinstance` guard for string `tool_input` payloads
+  from inline Write events (EF-023).
+
+### Added
+- Comprehensive external test findings to `build/06-evaluation/v0.1.3.1-early-feedback.md`:
+  7 new entries (EF-021 through EF-027) covering 3 hotfixes and 4 fix-v0.1.5 items.
+
+### Changed
+- `build/06-evaluation/v0.1.3.1-early-feedback.md` — tally updated from 20 → 27 total
+  findings across all buckets.
+
+### Planned (v0.1.5 scope)
+- Stage boundary enforcement in `_state_lib.advance_stage()` — cap at [0, 12],
+  cycle wrapping after Release (EF-024)
+- Case-insensitive gate ID lookup in `scripts/why.py` (EF-025)
+- Global lessons TTL/expiry in `scripts/promote-lessons.py` (EF-026)
+- `--cwd` flag support for `scripts/extract-lessons.py` (EF-027)
+
 - Claude Code marketplace publication (pending marketplace availability)
 - CI/CD workflow for automated testing on pull requests
 - Additional project-type profiles (data-contract, mobile, monorepo)
