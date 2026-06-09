@@ -531,25 +531,54 @@ spec) needs current best-practice grounding. Planner excluded per OQ-3.
 
 ---
 
-### REQ-INTERACTIVE-001 — Decompose "agents should be more interactive"
+### REQ-INTERACTIVE-001 — DECOMPOSED (T-122, 2026-06-09)
 
-**Source**: EF-013 (vague, needs decomposition)
+**Source**: EF-013 (vague). **Status**: discharged by decomposition per
+AC-INTERACTIVE-001a — replaced by the three concrete REQs below. It is **not**
+implemented as a single REQ. The two testers' signal pointed at three distinct
+behaviors; each is now its own testable REQ. They are net-new behavior (not bug
+fixes), so they are **scheduled for v0.1.6**, not built in the locked v0.1.5
+bug-fix line — but they exist as concrete, acceptance-bearing REQs now so they
+can be scheduled rather than lost.
 
-**Trigger**: v0.1.4 dogfood probes this with a follow-up question.
+#### REQ-INTERACTIVE-CLARIFY-001 — Clarifying-question pattern (requirements-analyst)
 
-**Behavior** (sketch):
+**Trigger**: `/forge:srs` is run with a vague or under-specified project description.
 
-- Before v0.1.5 scope is locked, ≥2 concrete REQs are derived from the
-  dogfood signal. Candidates: clarifying-question pattern in
-  requirements-analyst, staged confirmation in spec/plan stages, progress
-  narration in builder.
-- This REQ's acceptance is "decomposed and removed," not "implemented."
+**Behavior**: Before writing the SRS, the requirements-analyst asks a **bounded
+batch** of clarifying questions (one round, not a drip) covering the highest-
+ambiguity areas (scope, users, constraints), then proceeds with stated
+assumptions for anything still unanswered.
 
-**Acceptance** (sketch):
+**Acceptance**: AC-INTERACTIVE-CLARIFY-001a — given a deliberately vague prompt,
+the agent emits ≥1 clarifying-question round before producing `srs.md`, and the
+SRS records explicit assumptions for unanswered items.
 
-- AC-INTERACTIVE-001a: This REQ is replaced in `srs-v0.1.5.md` by ≥2
-  specific REQs before v0.1.5 implementation starts. If it isn't, v0.1.5
-  ships without an "interactive" REQ.
+#### REQ-INTERACTIVE-CONFIRM-001 — Staged confirmation (spec / plan)
+
+**Trigger**: `/forge:spec` or `/forge:plan` is about to commit a large or
+irreversible artifact (full technical spec, full task DAG).
+
+**Behavior**: The agent presents a short outline / table of contents and pauses
+for confirmation before writing the full document, so the user can redirect
+before the expensive generation.
+
+**Acceptance**: AC-INTERACTIVE-CONFIRM-001a — the spec/plan skills present an
+outline and an explicit confirmation step before writing the full artifact.
+
+#### REQ-INTERACTIVE-NARRATE-001 — Progress narration (builder)
+
+**Trigger**: `/forge:build` works a task (or a `--milestone N` batch).
+
+**Behavior**: The builder narrates progress at task boundaries — which task it
+is starting, test/commit outcome, what's next — instead of working silently,
+so a long batch is observable.
+
+**Acceptance**: AC-INTERACTIVE-NARRATE-001a — a multi-task build emits a
+per-task start/result narration line.
+
+**Acceptance (parent)**: AC-INTERACTIVE-001a — satisfied: REQ-INTERACTIVE-001 is
+replaced by the three REQs above (≥2 required). ✅
 
 ---
 
@@ -696,7 +725,7 @@ project-relative `--cwd PATH` convention every other forge script uses.
 | REQ-SESSIONLOG-001      | EF-009, EF-015      | suggestion  |
 | REQ-STAGEREFLECT-001    | EF-010              | suggestion  |
 | REQ-WEBSEARCH-001       | EF-012              | suggestion  |
-| REQ-INTERACTIVE-001     | EF-013              | friction    |
+| REQ-INTERACTIVE-001     | EF-013              | decomposed (T-122) → CLARIFY/CONFIRM/NARRATE-001 |
 | REQ-DOCS-001            | EF-003              | bug (ext.)  |
 | REQ-PIPEBOUNDS-001      | EF-024              | bug         |
 | REQ-WHYCI-001           | EF-025              | friction    |
@@ -804,9 +833,11 @@ All of the following must be true before tagging v0.1.5:
    (both halves — fail-loud **and** all 15 scripts), REQ-BUILDBATCH-001,
    REQ-SESSIONLOG-001, REQ-STAGEREFLECT-001, REQ-WEBSEARCH-001,
    REQ-DOCS-001, REQ-PIPEBOUNDS-001, REQ-WHYCI-001, REQ-EXTRACT-CWD-001.
-2. **REQ-INTERACTIVE-001 is discharged by decomposition** — replaced by
-   ≥2 concrete REQs (T-124) *or* explicitly dropped from v0.1.5 with
-   rationale per AC-INTERACTIVE-001a. It is not "implemented."
+2. **REQ-INTERACTIVE-001 is discharged by decomposition** — DONE (T-122,
+   2026-06-09): replaced by REQ-INTERACTIVE-CLARIFY-001,
+   REQ-INTERACTIVE-CONFIRM-001, and REQ-INTERACTIVE-NARRATE-001 (≥2 required) per
+   AC-INTERACTIVE-001a. The three are net-new behavior scheduled for v0.1.6; they
+   are not "implemented" in v0.1.5.
 3. **The three hotfixes already on `develop`** (EF-021/022/023, PR #1)
    are merged to `main` as part of the v0.1.5 line.
 4. **No `script_returns_zero` gate criterion references a missing
