@@ -404,6 +404,81 @@ def check_hook_errors(cwd: Path) -> CheckResult:
         )
 
 
+# ---------- current-stage gate (REQ-DOCTOR-001) ----------
+
+def _current_stage(cwd: Path) -> Optional[int]:
+    """Read current_stage from state.md, or None if absent/unreadable/pre-stage."""
+    if not (cwd / "pipeline" / "state.md").exists():
+        return None
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import _state_lib as lib
+        state = lib.read_state(str(cwd))
+        v = state.get("current_stage")
+        return v if isinstance(v, int) else None
+    except (Exception, SystemExit):  # noqa: BLE001 - unreadable handled separately
+        return None
+
+
+def check_current_stage_gate(forge_root: Path, cwd: Path) -> Optional[CheckResult]:
+    """REQ-DOCTOR-001: run the current stage's exit gate inline so doctor cannot
+    report healthy while the stage is wedged. Returns a project check, or None
+    when there is no active stage to evaluate."""
+    stage = _current_stage(cwd)
+    if stage is None or stage < 1:
+        return None
+    check_gate = forge_root / "scripts" / "check-gate.py"
+    if not check_gate.exists():
+        return None
+    proc = subprocess.run(
+        [sys.executable, str(check_gate), "--stage", str(stage),
+         "--cwd", str(cwd), "--plugin-dir", str(forge_root)],
+        capture_output=True, text=True,
+    )
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return CheckResult(
+            "current_stage_gate", "project", "warn",
+            f"Could not evaluate the Stage {stage} gate",
+        )
+    if data.get("inconclusive"):
+        return CheckResult(
+            "current_stage_gate", "project", "fail",
+            f"Stage {stage} gate is inconclusive — state could not be read",
+            fix="Run /forge:status",
+        )
+    blockers = [
+        d for d in data.get("details", [])
+        if not d.get("passed") and d.get("severity") == "blocker"
+    ]
+    if blockers:
+        ids = ", ".join(d["id"] for d in blockers)
+        return CheckResult(
+            "current_stage_gate", "project", "fail",
+            f"Stage {stage} gate has {len(blockers)} blocker failure(s): {ids}",
+            fix="Run /forge:status and /forge:why <G-ID> for detail",
+        )
+    return CheckResult(
+        "current_stage_gate", "project", "pass",
+        f"Stage {stage} gate: all blockers pass",
+    )
+
+
+def overall_status(results: list[CheckResult]) -> str:
+    """REQ-DOCTOR-001 top-line: 'broken' (env/plugin failing), 'wedged' (env/plugin
+    fine but current-stage gate or project check failing), or 'healthy'. Warnings
+    never downgrade the verdict."""
+    def cat_failed(cat: str) -> bool:
+        return any(r.status == "fail" for r in results if r.category == cat)
+
+    if cat_failed("environment") or cat_failed("plugin"):
+        return "broken"
+    if cat_failed("project"):
+        return "wedged"
+    return "healthy"
+
+
 # ---------- driver ----------
 
 ICONS = {"pass": "✓", "fail": "✗", "warn": "⚠", "info": "·"}
@@ -439,6 +514,9 @@ def run_checks(forge_root: Path, cwd: Path) -> list[CheckResult]:
     if gi:
         results.append(gi)
     results.append(check_state_read_failures(cwd))
+    gate = check_current_stage_gate(forge_root, cwd)
+    if gate:
+        results.append(gate)
     results.append(check_global_forge())
     results.append(check_disk_space())
     results.append(check_hook_errors(cwd))
@@ -446,7 +524,13 @@ def run_checks(forge_root: Path, cwd: Path) -> list[CheckResult]:
 
 
 def format_text(results: list[CheckResult], quiet: bool = False) -> str:
-    lines: list[str] = ["Forge Doctor — diagnostic report", "=" * 33, ""]
+    status = overall_status(results)
+    lines: list[str] = [
+        "Forge Doctor — diagnostic report",
+        "=" * 33,
+        f"Status: {status}",
+        "",
+    ]
     by_cat: dict[str, list[CheckResult]] = {}
     for r in results:
         by_cat.setdefault(r.category, []).append(r)
@@ -496,6 +580,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     forge_root = find_forge_root()
     cwd = Path(args.cwd).resolve()
     results = run_checks(forge_root, cwd)
+
+    # REQ-DOCTOR-001: expose the top-line verdict as a check entry too, so JSON
+    # consumers and /forge:status read the same healthy/wedged/broken word.
+    status_entry = CheckResult(
+        "overall_status", "environment", "info", f"status: {overall_status(results)}",
+    )
+    results = [status_entry] + results
 
     if args.json:
         print(json.dumps([asdict(r) for r in results], indent=2))
