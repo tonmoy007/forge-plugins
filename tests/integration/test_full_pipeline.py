@@ -15,9 +15,13 @@ PLUGIN_DIR = Path(__file__).parent.parent.parent
 
 
 @pytest.mark.xfail(
-    reason="T-108 makes unimplemented gate scripts fail loud (REQ-GATESTUB-001); "
-    "the full pipeline goes green again once M4 (T-109..T-112) ships all 15 gate "
-    "scripts. Remove this marker in T-112.",
+    reason="All 15 gate scripts now exist (T-109..T-111) and the gate-criteria "
+    "audit is green (T-112, test_gate_criteria_audit.py). The end-to-end pipeline "
+    "is still red because the sample-todo-api fixtures use inconsistent ID schemes "
+    "(task-dag NFR-001/REQ-001 vs srs/eval REQ-NF-001/REQ-F-001) and lack a stage-9 "
+    "health-report.md, so the now-enforced traceability/NFR/health gates fail. "
+    "Harmonizing the fixture IDs is §6 Forge-on-Forge acceptance work (tracked for "
+    "the release task T-125); remove this marker once the fixtures are reconciled.",
     strict=False,
 )
 def test_full_pipeline_exits_zero():

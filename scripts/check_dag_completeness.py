@@ -15,28 +15,40 @@ import sys
 from pathlib import Path
 
 DAG = Path("pipeline/05-plan/task-dag.md")
-TASK_ID = re.compile(r"\bT-\d+\b")
 DONE = re.compile(r"done[\s\-]*when|done\s*:", re.IGNORECASE)
+# A task *definition* is a heading line carrying a T-id (not a passing mention in a
+# dependency graph), so a deps section listing the same ids doesn't create phantoms.
+TASK_HEADING = re.compile(r"^#{1,6}\s+.*?\b(T-\d+)\b.*$", re.MULTILINE)
+TASK_ANY = re.compile(r"^\s*[-*]?\s*\**(T-\d+)\b.*$", re.MULTILINE)
+
+
+def _task_blocks(text: str) -> list[tuple[str, str]]:
+    matches = list(TASK_HEADING.finditer(text)) or list(TASK_ANY.finditer(text))
+    blocks = []
+    for i, m in enumerate(matches):
+        start = m.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        blocks.append((m.group(1), text[start:end]))
+    return blocks
 
 
 def main() -> int:
     if not DAG.exists():
         print(f"task DAG not found: {DAG}", file=sys.stderr)
         return 1
-    text = DAG.read_text()
-    matches = list(TASK_ID.finditer(text))
-    if not matches:
+    blocks = _task_blocks(DAG.read_text())
+    if not blocks:
         print("no tasks (T-NNN) found in the DAG", file=sys.stderr)
         return 1
 
     missing: list[str] = []
-    for i, m in enumerate(matches):
-        start = m.start()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        if not DONE.search(text[start:end]):
-            missing.append(m.group(0))
     seen: set[str] = set()
-    missing = [t for t in missing if not (t in seen or seen.add(t))]
+    for tid, block in blocks:
+        if tid in seen:
+            continue
+        seen.add(tid)
+        if not DONE.search(block):
+            missing.append(tid)
     if missing:
         print(f"tasks without done criteria: {', '.join(missing)}", file=sys.stderr)
         return 1

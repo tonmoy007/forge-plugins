@@ -15,8 +15,11 @@ import sys
 from pathlib import Path
 
 TRIAGE = Path("pipeline/10-feedback/triage.md")
-RESOLVED = re.compile(r"\b(resolved|closed|fixed|done)\b", re.IGNORECASE)
-ITEM = re.compile(r"FB-\d+|^\s*[|\-*]")
+RESOLVED = re.compile(r"\b(resolved|closed|fixed|done|shipped)\b", re.IGNORECASE)
+# Only flag actual tracked items (FB-id or table row), and only when they carry an
+# explicit open status — so severity *legend* lines ("- **P0**: ...") aren't bugs.
+ITEM = re.compile(r"FB-\d+|^\s*\|")
+OPEN = re.compile(r"\b(open|unresolved|new|in[\s\-]?progress|todo|wip)\b", re.IGNORECASE)
 
 
 def main(argv: list[str]) -> int:
@@ -33,7 +36,7 @@ def main(argv: list[str]) -> int:
     for line in TRIAGE.read_text().splitlines():
         if not ITEM.search(line):
             continue
-        if sev_re.search(line) and not RESOLVED.search(line):
+        if sev_re.search(line) and OPEN.search(line) and not RESOLVED.search(line):
             open_items.append(line.strip()[:80])
     if open_items:
         print(f"{len(open_items)} unresolved {args.severity} item(s):", file=sys.stderr)
