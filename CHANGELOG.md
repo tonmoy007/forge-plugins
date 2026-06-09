@@ -10,10 +10,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- The three interactive REQs (CLARIFY / CONFIRM / NARRATE-001) implementation — v0.1.6
 - Claude Code marketplace publication (pending marketplace availability)
-- CI/CD workflow for automated testing on pull requests
 - Additional project-type profiles (data-contract, mobile, monorepo)
+
+---
+
+## [0.1.6] — 2026-06-09
+
+**Make Forge interactive.** The three interactive behaviors decomposed from
+REQ-INTERACTIVE-001 (T-122) and deferred from v0.1.5 are now implemented:
+clarify before scoping, confirm before expensive writes, narrate during builds.
+Acceptance is structural (the directive is present and bounded in the skill/agent
+instruction), consistent with the existing agent-content tests.
+
+### Added
+- **CLARIFY** (REQ-INTERACTIVE-CLARIFY-001, T-126) — `/forge:srs` asks one
+  bounded clarifying-question round (a single batch, not a drip) before writing
+  `srs.md`, and records explicit assumptions for anything left unanswered.
+- **CONFIRM** (REQ-INTERACTIVE-CONFIRM-001, T-127) — `/forge:spec` and
+  `/forge:plan` present a short outline / table of contents and pause for
+  confirmation before generating the full technical spec / task DAG, so the user
+  can redirect before the expensive write.
+- **NARRATE** (REQ-INTERACTIVE-NARRATE-001, T-128) — `/forge:build` narrates
+  progress at each task boundary (starting → result → next); `build-batch.py`
+  emits a per-task `[Forge] task T-XXX — starting` line to stderr so a
+  `--milestone N` batch is observable at the tool layer (stdout stays the
+  machine-readable id list).
+
+### Changed
+- Clarification bound reconciled repo-wide from "max 3 rounds" to "one bounded
+  round (a single batch, not a drip)" in `agents/requirements-analyst.md`,
+  `build/02-architecture/architecture.md`, `references/pipeline-stages.md`, and
+  `references/agent-format.md`, consistent with the new REQ.
+
+### Release infrastructure
+- CI gates (`.github/workflows/tests.yml`) are now hard fails: coverage is
+  measured with subprocess instrumentation (real ~72%, gated at 70) and
+  integration is no longer `continue-on-error`.
+- `scripts/bump-version.py` — one-command version bump across both manifests with
+  an auto-inserted, newest-on-top CHANGELOG skeleton (first used to cut this
+  release).
 
 ---
 
