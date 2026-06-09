@@ -136,6 +136,22 @@ producing all 12 stage artifacts with traceability intact. ✅
 
 ---
 
+## Post-1.0 Point Releases
+
+> M1–M7 above delivered v0.1.0. Subsequent point releases sand off dogfood
+> findings and add capability. CHANGELOG.md is the source of truth for per-release
+> detail; per-release scope lives in `build/01-srs/srs-vX.Y.Z.md` +
+> `build/04-plan/task-dag-vX.Y.Z.md`.
+
+| Release | Status | Theme |
+|---------|--------|-------|
+| v0.1.1 – v0.1.3.1 | 🟢 released | signal-quality patches, profile wiring, `python-frontmatter` drop |
+| v0.1.5 + v0.1.5.1 | 🟢 released | kill surface-healthy/substance-inert antipatterns (T-101–T-125); PyYAML fail-soft hotfix |
+| release-infra | 🟢 merged | hard CI gates w/ subprocess coverage (~72%), `scripts/bump-version.py` |
+| **v0.1.6** | 🟡 in progress | **Make Forge interactive** — CLARIFY (clarify before scoping), CONFIRM (outline+pause before spec/plan), NARRATE (per-task build narration). T-126–T-130. |
+
+---
+
 ## Critical Path
 
 ```

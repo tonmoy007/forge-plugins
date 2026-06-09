@@ -12,8 +12,10 @@ Usage (cwd = project root):
 
 Prints the ordered T-IDs (one per line) to stdout. With --resume, tasks already
 marked done in pipeline/06-implementation/progress.md are skipped. Warns on
-stderr when the batch is larger than --warn-over (default 10). Exit 1 if the
-milestone is not found.
+stderr when the batch is larger than --warn-over (default 10). Per task, emits a
+`[Forge] task T-XXX — starting` narration line to stderr so a batch run is
+observable at the tool layer (REQ-INTERACTIVE-NARRATE-001) without polluting the
+machine-readable stdout id list. Exit 1 if the milestone is not found.
 """
 
 from __future__ import annotations
@@ -127,6 +129,10 @@ def main(argv: list[str] | None = None) -> int:
         ordered = [t for t in ordered if t not in done]
 
     for tid in ordered:
+        # Narrate the start of each task to stderr so a batch run is observable
+        # at the tool layer (REQ-INTERACTIVE-NARRATE-001). stdout stays the
+        # machine-readable id list the skill walks.
+        print(f"[Forge] task {tid} — starting", file=sys.stderr)
         print(tid)
     return 0
 

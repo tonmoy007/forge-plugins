@@ -54,5 +54,6 @@ You MUST NOT:
 4. Identify the critical path (longest dependency chain).
 5. Define milestones (logical completion points, not arbitrary dates).
 6. Write risk register: what could go wrong, how bad, what mitigates it.
-7. Write task-dag.md and risk-register.md.
-8. Confirm: "Plan written. N tasks, M milestones, critical path identified."
+7. **Outline, then confirm (REQ-INTERACTIVE-CONFIRM-001).** Before writing the full task DAG, present a short outline / table of contents (proposed milestones, task groups, top risks) and **pause for the user to confirm** before generating the full document — give them a chance to redirect before the expensive write.
+8. Write task-dag.md and risk-register.md.
+9. Confirm: "Plan written. N tasks, M milestones, critical path identified."

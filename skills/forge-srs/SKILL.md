@@ -28,9 +28,11 @@ allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
    - What the system does
    - Who uses it
    - Key constraints (technology, timeline, compliance)
-4. Follow the Requirements Analyst workflow: clarify, categorize, assign REQ-IDs, write acceptance criteria. Honor any profile overrides loaded in pre-flight (extra concerns, skipped steps, additional NFR categories).
-5. Write `pipeline/01-srs/srs.md` per the Output Contract in the persona file.
-6. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 1` to mark Stage 1 active.
+4. **Clarify before writing (REQ-INTERACTIVE-CLARIFY-001).** If the description is vague or under-specified, ask ONE bounded clarifying-question round BEFORE writing `pipeline/01-srs/srs.md` — a single batch covering the highest-ambiguity areas (scope, users, constraints). This is a single round, not a drip; cap at one batch (max 1 round) and bundle the questions rather than trickling them out.
+5. Follow the Requirements Analyst workflow: clarify, categorize, assign REQ-IDs, write acceptance criteria. Honor any profile overrides loaded in pre-flight (extra concerns, skipped steps, additional NFR categories).
+6. **Record assumptions for unanswered items.** For any clarifying question the user leaves unanswered, proceed and record an explicit ASSUMPTION in the SRS (under Constraints and assumptions) instead of blocking.
+7. Write `pipeline/01-srs/srs.md` per the Output Contract in the persona file.
+8. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 1` to mark Stage 1 active.
 
 ## Verification
 

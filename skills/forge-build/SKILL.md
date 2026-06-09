@@ -43,6 +43,18 @@ intentionally).
 5. Mark the task complete in `build/05-implementation/progress.md`.
 6. If this is the first task: run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 6`.
 
+## Narrate Progress at Task Boundaries (REQ-INTERACTIVE-NARRATE-001)
+
+Do not work silently — a long task (or batch) must be observable. At every task
+boundary, narrate three things in one short line so the user can follow along:
+
+- **Starting**: which T-ID you are starting, e.g. `Starting T-207 — add auth middleware`.
+- **Result**: the test/commit outcome, e.g. `T-207 ✓ 4 tests pass, committed feat(T-207)`.
+- **Next**: what comes next, e.g. `Next: T-208` (or `Next: milestone done`).
+
+This applies to both single-task `/forge:build` and `--milestone N` batches; in a
+batch the tool layer also prints a `[Forge] task T-XXX — starting` line per task.
+
 ## Milestone Batch Mode (`--milestone N`)
 
 When invoked as `/forge:build --milestone N`, build every task in that milestone,

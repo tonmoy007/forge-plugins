@@ -5,18 +5,29 @@
 
 ## Current State
 
-- **Active release**: v0.1.5 — scope locked 2026-06-09 (`build/01-srs/srs-v0.1.5.md`, `build/04-plan/task-dag-v0.1.5.md`)
-- **v0.1.5 COMPLETE** — all 25 tasks done (T-101..T-125). 986 tests pass, 0 xfail;
-  validate-plugin.py exit 0; Forge-on-Forge full-pipeline passes all 12 gates;
-  plugin.json + marketplace.json at 0.1.5; CHANGELOG [0.1.5] written.
-- **Branch**: `feat/v0.1.5-rest` (off develop) holds T-114..T-125 → PR into develop.
-  Release tag `v0.1.5` is cut from `main` after the develop→main merge (per CONTRIBUTING).
-- **Session 2026-06-09**: completed T-103..T-113 + T-115 (12 tasks, 18 commits on develop), 930 tests green. Remaining: T-114, M6, M7, + full-pipeline fixture harmonization.
-- **Known follow-up**: full-pipeline.sh xfail — sample-todo-api fixtures use
-  inconsistent REQ/NFR ID schemes + no health-report.md; harmonize at T-125
-  (§6 Forge-on-Forge). All 15 gate scripts exist; audit green.
-- **Last session**: 2026-06-09 — merged PR #1 (EF-021..027 + 3 hotfixes) to main; locked v0.1.5; started M1.
-- **Last hotfix**: v0.1.3.1 — dropped `python-frontmatter` runtime dep (`scripts/_state_lib.py`, `scripts/load-profile.py`); 3 regression tests added. Resolves feedback/v0.1.3/feedback1.md `ModuleNotFoundError: frontmatter` reports.
+- **Active release**: v0.1.6 — "Make Forge interactive" — scope locked 2026-06-09
+  (`build/01-srs/srs-v0.1.6.md`, `build/04-plan/task-dag-v0.1.6.md`).
+- **v0.1.6 build COMPLETE (T-126..T-128)** — CLARIFY / CONFIRM / NARRATE landed via
+  a 3-agent parallel fan-out on `feat/v0.1.6-interactive`. 1026 tests pass, 0 xfail;
+  validate-plugin.py exit 0; full-pipeline 12/12. Remaining: T-129 (this wiring) +
+  T-130 (version bump 0.1.6 + CHANGELOG), then PR→develop→main→tag (interactive).
+- **v0.1.5 COMPLETE + RELEASED** — all 25 tasks (T-101..T-125); tag `v0.1.5` +
+  hotfix `v0.1.5.1` (PyYAML fail-soft) on both remotes; release-infra hardening on
+  main (hard CI gates w/ subprocess coverage ~72%, `scripts/bump-version.py`).
+  plugin.json + marketplace.json at 0.1.5.1; CHANGELOG current.
+- **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
+  → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
+- **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.1.6 Task Status
+
+| Task | Status | Completed | Commit | Notes |
+|------|--------|-----------|--------|-------|
+| T-126 | 🟢 done | 2026-06-09 | f8275bb | REQ-INTERACTIVE-CLARIFY-001: /forge:srs asks one bounded clarifying-question round (single batch, not a drip) before writing srs.md + records assumptions; reconciled "3 rounds"→"1 round" in architecture.md + 2 references; test_interactive_clarify.py; 1026 pass |
+| T-127 | 🟢 done | 2026-06-09 | 047a361 | REQ-INTERACTIVE-CONFIRM-001: /forge:spec + /forge:plan present an outline + pause for confirmation before the full artifact; spec-writer/planner reflect it; test_interactive_confirm.py asserts confirm-precedes-write ordering |
+| T-128 | 🟢 done | 2026-06-09 | 58483aa | REQ-INTERACTIVE-NARRATE-001: /forge:build narrates start/result/next per task; build-batch.py emits per-task `[Forge] task T-XXX — starting` on stderr (stdout id-list contract preserved); test_interactive_narrate.py (behavioral subprocess check) |
+| T-129 | 🟢 done | 2026-06-09 | (this commit) | Wiring: progress + ROADMAP + traceability for v0.1.6; ACs marked satisfied in srs-v0.1.6.md §6 |
+| T-130 | 🔲 todo | — | — | Release: bump-version.py 0.1.6 + CHANGELOG [0.1.6] + full pre-release verification |
 
 ## v0.1.5 Task Status
 
