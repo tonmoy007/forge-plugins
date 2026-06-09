@@ -422,6 +422,13 @@ stage_overrides:
     additional_artifacts:
       - "pipeline/03-architecture/package-graph.md"  # internal dependency graph
 
+  stage_5:
+    additional_steps:
+      - "Group tasks per package; order them by the internal dependency graph"
+      - "Call out shared-package changes that fan out to multiple consumers"
+    additional_concerns:
+      - "Cross-package change coordination (one PR vs staged per-package rollout)"
+
   stage_7:
     additional_criteria:
       - id: G7-MONO-001
