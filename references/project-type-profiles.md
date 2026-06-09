@@ -76,7 +76,38 @@ detection:
       - file_count_under: 20            # excluding hidden / .git / node_modules
       - language_subset: ["python", "shell", "javascript"]
     confidence_threshold: 0.75          # high bar — defaults to `unknown` if unsure
-    suggest_only: true                  # on match, prompt the user rather than auto-assign```
+    suggest_only: true                  # on match, prompt the user rather than auto-assign
+
+  monorepo:
+    # Checked FIRST — a monorepo wraps single-package signals (a Next.js app,
+    # an API, a library) inside workspaces, so it must win before those match.
+    indicators:
+      - file_exists: ["pnpm-workspace.yaml", "lerna.json", "turbo.json", "nx.json"]
+      - file_contains: { path: "package.json", pattern: "\"workspaces\"" }
+      - file_contains: { path: "Cargo.toml", pattern: "\\[workspace\\]" }
+      - dir_exists_all: ["packages/", "apps/"]
+    confidence_threshold: 0.85
+
+  mobile:
+    # Checked after monorepo but before fullstack/api: a React Native repo has a
+    # package.json and would otherwise be mistaken for fullstack.
+    indicators:
+      - file_exists: ["pubspec.yaml"]                      # Flutter
+      - file_exists: ["Podfile"]                           # iOS
+      - file_glob: ["*.xcodeproj", "*.xcworkspace"]        # iOS
+      - dir_with_file: { dir: "android/", file: "build.gradle" }  # Android
+      - file_contains: { path: "package.json", pattern: "react-native" }
+    confidence_threshold: 0.85
+
+  data-contract:
+    # After ml/fullstack but before api/library: a schema-first repo (.proto,
+    # schemas/, buf.yaml) with no server framework classifies here, not api.
+    indicators:
+      - file_glob: ["*.proto", "*.avsc", "*.graphql", "*.graphqls"]
+      - file_exists: ["buf.yaml", "dbt_project.yml"]
+      - dir_exists: ["schemas/", "contracts/"]
+      - no_app_framework: true   # a server dep makes it `api`, not data-contract
+    confidence_threshold: 0.8```
 
 ---
 
@@ -364,6 +395,127 @@ stage_overrides:
         severity: blocker
       - id: G12-LIB-003
         description: Migration guide for breaking changes
+        severity: blocker
+```
+
+---
+
+## Profile: monorepo
+
+```yaml
+name: monorepo
+description: Multi-package workspace (pnpm/yarn/npm workspaces, Turborepo, Nx,
+  Lerna, or a Cargo workspace) holding several apps and shared packages in one
+  repo. Emphasis shifts to cross-package architecture and build orchestration.
+
+stage_emphasis:
+  high: [architecture, plan]
+
+stage_overrides:
+  stage_3:
+    additional_concerns:
+      - "Package boundaries and ownership (who owns what; public vs internal packages)"
+      - "Shared-dependency strategy (single-version policy vs per-package versions)"
+      - "Build orchestration (Turborepo / Nx task graph, caching, affected-only builds)"
+      - "Versioning model (fixed/locked vs independent per-package versioning)"
+      - "Circular-dependency prevention between internal packages"
+    additional_artifacts:
+      - "pipeline/03-architecture/package-graph.md"  # internal dependency graph
+
+  stage_5:
+    additional_steps:
+      - "Group tasks per package; order them by the internal dependency graph"
+      - "Call out shared-package changes that fan out to multiple consumers"
+    additional_concerns:
+      - "Cross-package change coordination (one PR vs staged per-package rollout)"
+
+  stage_7:
+    additional_criteria:
+      - id: G7-MONO-001
+        description: Internal package dependency graph is acyclic
+        check: script_returns_zero
+        args: { script: "scripts/check_monorepo_graph.py" }
+        severity: blocker
+```
+
+---
+
+## Profile: mobile
+
+```yaml
+name: mobile
+description: Native or cross-platform mobile app (Flutter, React Native, native
+  iOS, or native Android). UI-heavy, so product-ux carries weight, and shipping
+  means clearing an app-store review — captured by a store-readiness release gate.
+
+stage_emphasis:
+  high: [product-ux, implementation, evaluation]
+
+stage_overrides:
+  stage_2:
+    design_system_mode: full
+    additional_steps:
+      - "Size touch targets for thumbs (min 44x44pt iOS / 48x48dp Android)"
+      - "Design offline, empty, loading, and error states for every screen"
+      - "Follow platform conventions (iOS Human Interface Guidelines / Material Design)"
+    additional_concerns:
+      - "Per-platform navigation patterns (tab bar vs bottom nav, back behavior)"
+      - "Safe-area / notch / gesture-bar handling"
+
+  stage_3:
+    additional_concerns:
+      - "Offline sync and local persistence strategy (conflict resolution)"
+      - "Push notification delivery and permission flow"
+      - "Deep link / universal link routing"
+      - "State restoration after process death / backgrounding"
+
+  stage_12:
+    additional_criteria:
+      - id: G12-MOBILE-001
+        description: App store metadata present (bundle id / version / signing config)
+        check: script_returns_zero
+        args: { script: "scripts/check_store_readiness.py" }
+        severity: blocker
+```
+
+---
+
+## Profile: data-contract
+
+```yaml
+name: data-contract
+description: Schema-first project whose deliverable is data contracts (Protobuf,
+  Avro, JSON Schema, GraphQL SDL, or dbt models), not a UI or a running service.
+  Emphasis shifts to precise schema definition and backward-compatibility.
+
+stage_emphasis:
+  high: [spec, architecture, evaluation]
+  low: [product-ux]
+
+stage_overrides:
+  stage_2:
+    skip_wireframes: true
+    skip_steps: ["visual_design", "wireframes", "component_specs"]
+
+  stage_4:
+    additional_steps:
+      - "Define every schema with explicit field/type semantics and required-ness"
+      - "Document the compatibility mode (backward / forward / full) per schema"
+      - "Define a versioning + deprecation policy (reserve field numbers, never reuse)"
+    additional_concerns:
+      - "Wire/serialization compatibility across producers and consumers"
+      - "Migration path for breaking changes (dual-publish, version negotiation)"
+
+  stage_7:
+    additional_artifacts:
+      - "pipeline/07-evaluation/compatibility-matrix.md"  # producer/consumer x version
+    additional_criteria:
+      - id: G7-DC-001
+        description: Schema hygiene + compatibility policy — no duplicate protobuf
+          field numbers; buf breaking-change policy present. Hygiene + policy,
+          NOT a semantic cross-version diff (which needs the prior schema version).
+        check: script_returns_zero
+        args: { script: "scripts/check_schema_compat.py" }
         severity: blocker
 ```
 
