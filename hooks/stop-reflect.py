@@ -363,6 +363,12 @@ def main() -> None:
             d for d in details
             if not d.get("passed") and d.get("severity") == "blocker"
         ]
+        # T-114: record the gate outcome so the pass->wedge producer can detect a
+        # stage that passed earlier in the session and later wedged.
+        _state_read.log_event(
+            forge_dir, "gate_outcome",
+            f"stage={current_stage} blockers={len(unmet_blockers)}", session_id,
+        )
 
         if user_done:
             if not unmet_blockers:
@@ -417,6 +423,17 @@ def main() -> None:
                 f"✅ Stage {current_stage} gate passed."
                 f" Advanced to stage {current_stage + 1}."
             )
+            # T-119: roll up the completed stage's sessions into reflection.md.
+            stage_reflect = _PLUGIN_DIR / "scripts" / "stage-reflect.py"
+            if stage_reflect.exists():
+                try:
+                    subprocess.run(
+                        [sys.executable, str(stage_reflect), "--stage", str(current_stage),
+                         "--cwd", str(cwd), "--gate-status", "pass"],
+                        capture_output=True, timeout=15,
+                    )
+                except Exception:  # noqa: BLE001 - rollup must never break the Stop hook
+                    pass
         else:
             _log_error(forge_dir, "advance_stage_failed", "")
 

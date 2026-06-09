@@ -33,7 +33,7 @@ Done when: `docker compose up` starts API + Postgres; health check passes; migra
 ### T-009 — Load tests (NFR-001)
 Done when: k6 read script p99 < 200 ms and write script p99 < 500 ms at target concurrency.
 
-### T-010 — CI pipeline
+### T-010 — CI pipeline (NFR-002)
 Done when: GitHub Actions workflow runs lint + unit + integration tests on PR; fails fast on first error.
 
 ---

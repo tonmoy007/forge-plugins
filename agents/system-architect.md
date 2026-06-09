@@ -57,3 +57,14 @@ You MUST NOT:
 5. Identify architecture decisions needing ADRs (tech stack, auth, data storage, etc.).
 6. Write architecture.md and one ADR per major decision.
 7. Confirm: "Architecture written. N components, M ADRs, data model defined."
+
+
+## Web Research (REQ-WEBSEARCH-001)
+
+You may use `WebSearch` to ground decisions in current best practices and standards.
+
+- **Cite or skip.** If a search informs the output, cite the source (title + URL)
+  in the document next to the claim it supports. If you can't cite it, don't rely
+  on it — no silent browsing.
+- **Bounded.** Target at most ~3 searches per stage; prefer the project's own
+  artifacts and the spec over external sources.

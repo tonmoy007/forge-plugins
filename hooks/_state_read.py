@@ -60,15 +60,24 @@ def count_state_read_failures(forge_dir: Path, session_id: str = "") -> int:
     return n
 
 
-def _log_state_read_failure(forge_dir: Path, detail: str, session_id: str = "") -> None:
+def log_event(forge_dir: Path, kind: str, detail: str = "", session_id: str = "") -> None:
+    """Append one `{ts, kind, detail, session}` row to .forge/errors.log.
+
+    Shared event sink for hooks — feeds the implicit lesson-signal producers
+    (scripts/_signal_producers.py / T-114) as well as state-read surfacing.
+    """
     try:
         forge_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        row = {"ts": ts, "kind": STATE_READ_FAILED, "detail": str(detail), "session": session_id}
+        row = {"ts": ts, "kind": kind, "detail": str(detail), "session": session_id}
         with _errors_log(forge_dir).open("a") as f:
             f.write(json.dumps(row) + "\n")
     except OSError:
         pass
+
+
+def _log_state_read_failure(forge_dir: Path, detail: str, session_id: str = "") -> None:
+    log_event(forge_dir, STATE_READ_FAILED, detail, session_id)
 
 
 def read_state_safe(cwd, session_id: str = "") -> tuple[dict, str | None]:

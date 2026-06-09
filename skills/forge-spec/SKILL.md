@@ -36,10 +36,15 @@ intentionally).
 
 1. Read `agents/spec-writer.md` to load the Spec Writer persona.
 2. Adopt that persona — you are now the Spec Writer.
-3. Read `pipeline/03-architecture/architecture.md` and its ADRs.
+3. Read the architecture in **either layout** (single-file or split per
+   REQ-LARGEDOC-001) via the resolver — never hard-code the `.md` path:
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/03-architecture/architecture
+   ```
+   Also read its ADRs.
 4. Read `pipeline/01-srs/srs.md` for REQ-ID traceability.
 5. Follow the Spec Writer workflow: enumerate interfaces, define types, write API specs, trace to REQ-IDs. Add the profile's `additional_artifacts` and address `additional_concerns` in the spec.
-6. Write `pipeline/04-spec/technical-spec.md` and any profile-specified extra artifacts per the Output Contract.
+6. Write `pipeline/04-spec/technical-spec.md` and any profile-specified extra artifacts per the Output Contract. If the spec grows large, split it per `references/large-doc-layout.md` (a `technical-spec/` directory with an `index.md` manifest); downstream stages read it through `read-doc.py` either way.
 7. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 4` to mark Stage 4 active.
 
 ## Verification

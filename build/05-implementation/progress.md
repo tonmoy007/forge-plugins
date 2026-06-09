@@ -6,7 +6,11 @@
 ## Current State
 
 - **Active release**: v0.1.5 — scope locked 2026-06-09 (`build/01-srs/srs-v0.1.5.md`, `build/04-plan/task-dag-v0.1.5.md`)
-- **Current task**: T-114 next (M5: T-113/T-115 done). Then M6 (T-116–121), M7 (T-122–125).
+- **v0.1.5 COMPLETE** — all 25 tasks done (T-101..T-125). 986 tests pass, 0 xfail;
+  validate-plugin.py exit 0; Forge-on-Forge full-pipeline passes all 12 gates;
+  plugin.json + marketplace.json at 0.1.5; CHANGELOG [0.1.5] written.
+- **Branch**: `feat/v0.1.5-rest` (off develop) holds T-114..T-125 → PR into develop.
+  Release tag `v0.1.5` is cut from `main` after the develop→main merge (per CONTRIBUTING).
 - **Session 2026-06-09**: completed T-103..T-113 + T-115 (12 tasks, 18 commits on develop), 930 tests green. Remaining: T-114, M6, M7, + full-pipeline fixture harmonization.
 - **Known follow-up**: full-pipeline.sh xfail — sample-todo-api fixtures use
   inconsistent REQ/NFR ID schemes + no health-report.md; harmonize at T-125
@@ -29,12 +33,20 @@
 | T-109 | 🟢 done | 2026-06-09 | 220a320 | 5 req+spec scripts: check_srs_acceptance, traceability-check, spec-coverage, check_dag_completeness, check_dag_completion; test_gate_scripts_req_spec.py; 883 pass |
 | T-110 | 🟢 done | 2026-06-09 | 2d22e21 | 5 build+eval scripts: token-audit, check_coverage, check_todos, check_progress_sync, check_nfr_coverage; test_gate_scripts_build_eval.py; 901 pass |
 | T-111 | 🟢 done | 2026-06-09 | d1541b4 | 5 release+health scripts: check_open_bugs, check_health, check_hotfix_tests, check_git_tag; some_check.py = doc-example only (justified); 917 pass |
-| T-112 | 🟡 audit done | 2026-06-09 | 387192f | AC-GATESTUB-001b audit green (test_gate_criteria_audit.py); traceability all argv modes; heading-based task detection. Full-pipeline xfail pending fixture ID harmonization (→ T-125). 920 pass |
+| T-112 | 🟢 done | 2026-06-09 | 387192f (+T-125 fixtures) | AC-GATESTUB-001b audit green; traceability all argv modes; heading-based task detection. Fixture harmonization landed in T-125 → full-pipeline xfail removed, passes 12/12 |
 | T-113 | 🟢 done | 2026-06-09 | f049195 | REQ-EXTRACT-CWD-001: extract-lessons.py --cwd derives input/output; explicit overrides; test_extract_lessons_cwd.py; 923 pass |
-| T-114 | 🔲 todo | | | 5 implicit lesson-signal producers (_signal_producers.py); depends T-106/107/108 (done) |
+| T-114 | 🟢 done | 2026-06-09 | feat/t-114-lesson-signals | REQ-LESSON-SOURCES-001: _signal_producers.py (5 producers reading .forge/errors.log); _state_read.log_event sink; pre-tool-write logs violations, post-tool-use logs heredoc bypass, stop-reflect logs gate_outcome, session-end runs producers + materializes via extract/sync; test_lesson_signals.py (12); 942 pass |
 | T-115 | 🟢 done | 2026-06-09 | 7aeed8a | REQ-LESSON-SOURCES-001 EF-026: promote freq≥2 gate + 30-day TTL recall in session-start; is_stale(); test_promote_ttl.py + isolation guard; 930 pass |
-| T-116..121 | 🔲 todo | | | M6 UX nudges (build --milestone, why CI, session log, stage reflection, pattern bus, WebSearch) |
-| T-122..125 | 🔲 todo | | | M7 conventions/docs/decompose/release |
+| T-116 | 🟢 done | 2026-06-09 | d40b5a4 | REQ-BUILDBATCH-001: build-batch.py (ordered tasks, --resume, large-batch warn); forge-build Milestone Batch Mode; test_build_batch.py; 950 pass |
+| T-117 | 🟢 done | 2026-06-09 | cb9f185 | REQ-WHYCI-001: why.py _GATE_PATTERN IGNORECASE + target.upper(); test_why additions; 953 pass |
+| T-118 | 🟢 done | 2026-06-09 | a58cb12 | REQ-SESSIONLOG-001: session-end appends .forge/session.jsonl (commands/tokens/reflection_ref, PII-free, versioned); test_session_log.py; 957 pass |
+| T-119 | 🟢 done | 2026-06-09 | a24a7b8 | REQ-STAGEREFLECT-001: stage-reflect.py rollup → pipeline/0X/reflection.md; stop-reflect spawns on advance; test_stage_reflect.py; 961 pass |
+| T-120 | 🟢 done | 2026-06-09 | e3b675b | REQ-PATTERN-001: schema_version on patterns; references/pattern-schema.md; test_pattern_bus.py (schema-valid + 3-use proposal); 963 pass |
+| T-121 | 🟢 done | 2026-06-09 | a86445d | REQ-WEBSEARCH-001: spec-writer gains WebSearch; cite-or-skip rule on 4 research/spec agents; planner excluded; test_agent_tools.py; 972 pass |
+| T-122 | 🟢 done | 2026-06-09 | 2ce8b9c | AC-INTERACTIVE-001a: REQ-INTERACTIVE-001 → CLARIFY/CONFIRM/NARRATE-001 (v0.1.6); test_interactive_decomposition.py |
+| T-123 | 🟢 done | 2026-06-09 | c971d32 | REQ-LARGEDOC-001: large-doc-layout.md + read-doc.py resolver (single/multi-file); forge-spec uses it; test_large_doc.py |
+| T-124 | 🟢 done | 2026-06-09 | aa9183a | REQ-DOCS-001 + REQ-FEEDBACK-001: third-party-hook troubleshooting + README entry + issue template; test_docs_troubleshooting.py |
+| T-125 | 🟢 done | 2026-06-09 | (this commit) | Release: CHANGELOG [0.1.5] + version bump 0.1.5; sample-todo-api fixture harmonization → full-pipeline passes 12/12, xfail removed; 986 pass |
 
 ## Task Status
 
