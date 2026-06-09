@@ -346,3 +346,61 @@ class TestDetectCLI:
         assert "project_type" in data
         assert data["project_type"] == "unknown"
         assert data.get("suggested_profile") == "script"
+
+
+# ---------- detect: monorepo (T-131 / REQ-PROFILE-MONOREPO-001) ----------
+
+class TestMonorepoDetection:
+    def test_pnpm_workspace_classifies_monorepo(self, tmp_path):
+        (tmp_path / "pnpm-workspace.yaml").write_text("packages:\n  - 'packages/*'\n")
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "monorepo"
+        assert result["confidence"] >= 0.85
+
+    def test_workspaces_field_in_package_json_classifies_monorepo(self, tmp_path):
+        (tmp_path / "package.json").write_text(
+            '{"name": "root", "private": true, "workspaces": ["packages/*"]}'
+        )
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "monorepo"
+
+    def test_turbo_json_classifies_monorepo(self, tmp_path):
+        (tmp_path / "turbo.json").write_text('{"pipeline": {}}')
+        assert detect_mod.detect(str(tmp_path))["type"] == "monorepo"
+
+    def test_cargo_workspace_classifies_monorepo(self, tmp_path):
+        (tmp_path / "Cargo.toml").write_text("[workspace]\nmembers = [\"crates/*\"]\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "monorepo"
+
+    def test_packages_and_apps_dirs_classify_monorepo(self, tmp_path):
+        (tmp_path / "packages").mkdir()
+        (tmp_path / "apps").mkdir()
+        assert detect_mod.detect(str(tmp_path))["type"] == "monorepo"
+
+    def test_monorepo_with_nextjs_app_wins_over_fullstack(self, tmp_path):
+        # A monorepo that contains a Next.js app at the root must still be
+        # classified `monorepo` — the wrapper signal takes precedence.
+        (tmp_path / "pnpm-workspace.yaml").write_text("packages:\n  - 'apps/*'\n")
+        (tmp_path / "package.json").write_text(
+            '{"name": "root", "workspaces": ["apps/*"], "dependencies": {"next": "14.0.0"}}'
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = {}\n")
+        result = detect_mod.detect(str(tmp_path))
+        assert result["type"] == "monorepo"
+
+    def test_plain_fullstack_not_monorepo(self, tmp_path):
+        # Single-package Next.js app must NOT be mistaken for a monorepo.
+        (tmp_path / "package.json").write_text(
+            '{"name": "app", "dependencies": {"next": "14.0.0"}}'
+        )
+        (tmp_path / "next.config.js").write_text("module.exports = {}\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "fullstack"
+
+    def test_plain_api_not_monorepo(self, tmp_path):
+        (tmp_path / "requirements.txt").write_text("fastapi\n")
+        assert detect_mod.detect(str(tmp_path))["type"] == "api"
+
+    def test_only_packages_dir_not_monorepo(self, tmp_path):
+        # packages/ alone (without apps/ or a workspace manifest) is not enough.
+        (tmp_path / "packages").mkdir()
+        assert detect_mod.detect(str(tmp_path))["type"] != "monorepo"

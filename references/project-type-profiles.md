@@ -76,7 +76,17 @@ detection:
       - file_count_under: 20            # excluding hidden / .git / node_modules
       - language_subset: ["python", "shell", "javascript"]
     confidence_threshold: 0.75          # high bar — defaults to `unknown` if unsure
-    suggest_only: true                  # on match, prompt the user rather than auto-assign```
+    suggest_only: true                  # on match, prompt the user rather than auto-assign
+
+  monorepo:
+    # Checked FIRST — a monorepo wraps single-package signals (a Next.js app,
+    # an API, a library) inside workspaces, so it must win before those match.
+    indicators:
+      - file_exists: ["pnpm-workspace.yaml", "lerna.json", "turbo.json", "nx.json"]
+      - file_contains: { path: "package.json", pattern: "\"workspaces\"" }
+      - file_contains: { path: "Cargo.toml", pattern: "\\[workspace\\]" }
+      - dir_exists_all: ["packages/", "apps/"]
+    confidence_threshold: 0.85```
 
 ---
 
@@ -364,6 +374,39 @@ stage_overrides:
         severity: blocker
       - id: G12-LIB-003
         description: Migration guide for breaking changes
+        severity: blocker
+```
+
+---
+
+## Profile: monorepo
+
+```yaml
+name: monorepo
+description: Multi-package workspace (pnpm/yarn/npm workspaces, Turborepo, Nx,
+  Lerna, or a Cargo workspace) holding several apps and shared packages in one
+  repo. Emphasis shifts to cross-package architecture and build orchestration.
+
+stage_emphasis:
+  high: [architecture, plan]
+
+stage_overrides:
+  stage_3:
+    additional_concerns:
+      - "Package boundaries and ownership (who owns what; public vs internal packages)"
+      - "Shared-dependency strategy (single-version policy vs per-package versions)"
+      - "Build orchestration (Turborepo / Nx task graph, caching, affected-only builds)"
+      - "Versioning model (fixed/locked vs independent per-package versioning)"
+      - "Circular-dependency prevention between internal packages"
+    additional_artifacts:
+      - "pipeline/03-architecture/package-graph.md"  # internal dependency graph
+
+  stage_7:
+    additional_criteria:
+      - id: G7-MONO-001
+        description: Internal package dependency graph is acyclic
+        check: script_returns_zero
+        args: { script: "scripts/check_monorepo_graph.py" }
         severity: blocker
 ```
 
