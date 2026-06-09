@@ -1,18 +1,24 @@
-# SRS — Forge v0.1.5 (delta, stub)
+# SRS — Forge v0.1.5 (delta, locked)
 
-> **Status**: Stub. Composes with `srs.md`, `srs-v0.1.3.md`, `srs-v0.1.4.md`.
-> Created 2026-05-24 to capture `fix-v0.1.5`-bucket items from triage in
-> `build/06-evaluation/v0.1.3.1-early-feedback.md` (pre-dogfood) so they
-> don't get lost between releases.
+> **Status**: **Scope locked 2026-06-09.** Composes with `srs.md`,
+> `srs-v0.1.3.md`, `srs-v0.1.4.md`. Created 2026-05-24 to capture
+> `fix-v0.1.5`-bucket items from triage in
+> `build/06-evaluation/v0.1.3.1-early-feedback.md` so they don't get lost
+> between releases; locked once the second on-project tester's findings
+> (EF-021…027, PR #1) corroborated and extended tester 1.
 >
-> **Posture**: REQ shells with acceptance bars sketched but not finalized.
-> Each REQ will be tightened — and possibly merged or split — when v0.1.4
-> dogfood adds more findings and the v0.1.5 scope is locked in.
+> **Lock basis**: OQ-4 required v0.1.4 dogfood signal before locking. Two
+> verified on-project testers now exist — tester 1 (`feedback1.md`) and
+> tester 2 (PR #1, EF-021…027). The heavyweight v0.1.4 §9 dogfood
+> ceremony was amended on 2026-06-09 (see `srs-v0.1.4.md` §9 Amendment
+> and OQ-4 below); the N=2 *intent* is satisfied, so v0.1.5 scope is
+> locked.
 >
-> **Theme** (provisional): "Sand off the v0.1.3 sharp edges surfaced by
-> external eyes." Bug-fix-heavy, plus small UX nudges (next-step hint,
-> session log enrichment, WebSearch for research stages). No new
-> pipeline stages, no agent orchestration, no daemons.
+> **Theme**: "Sand off the v0.1.3 sharp edges surfaced by external eyes,
+> and kill the surface-healthy / substance-inert antipattern family."
+> Bug-fix-heavy, plus small UX nudges (next-step hint, session log
+> enrichment, WebSearch for research stages). No new pipeline stages, no
+> agent orchestration, no daemons.
 
 ---
 
@@ -29,6 +35,10 @@
   (EF-006, EF-009/015, EF-010, EF-012).
 - Decomposition of "agents should be more interactive" into ≥2 concrete
   REQs based on v0.1.4 dogfood probing (EF-013).
+- State-machine bound enforcement + cycle-wrap, case-insensitive gate-ID
+  lookup in `/forge:why`, `--cwd` flag for `extract-lessons.py`, and a
+  global-lessons TTL/min-frequency gate — the second-tester findings
+  (EF-024, EF-025, EF-027, EF-026).
 
 **Out of scope (firm)**:
 
@@ -323,6 +333,30 @@ explicit correction prompt.
 Producer (1) hook-error cluster N=5; producer (2) repeated `PreToolUse`
 block M=2; producers (3) (4) (5) binary on first occurrence.
 
+**Global-store hygiene (added 2026-06-09, source EF-026)**: The global
+lessons store (`~/.forge/global-lessons.yaml`) currently retains stale
+lessons indefinitely, and lessons with empty filter lists
+(`stage: []`, `project_types: []`) match every project at every stage —
+so a lesson scraped from a pytest `tmp_path` run surfaces in unrelated
+production sessions. Two fixes ship together:
+
+- **Promotion gate**: `scripts/promote-lessons.py` only promotes a
+  lesson to the global store when it has fired ≥ **2** times (reuses the
+  cluster count it already computes) — a one-shot test artifact never
+  reaches the global store.
+- **TTL on recall**: a global lesson whose `last_used` is older than
+  **30 days** is skipped at recall/promotion time (not deleted; just not
+  surfaced), so abandoned entries decay out.
+- **Test isolation**: tests that exercise `promote-lessons.py` must point
+  `HOME`/the global path at a `tmp_path`, never the real
+  `~/.forge/global-lessons.yaml`. A grep test asserts no test writes to
+  the real home global store.
+
+- AC-LESSON-SOURCES-001d (EF-026): A lesson seeded with a `tmp_path`
+  body and frequency 1 is **not** promoted; a lesson with `last_used`
+  > 30 days old is **not** surfaced at recall; the test suite leaves the
+  real `~/.forge/global-lessons.yaml` untouched.
+
 ---
 
 ### REQ-BUILDBATCH-001 — `/forge:build` supports milestone-scoped batches
@@ -497,25 +531,54 @@ spec) needs current best-practice grounding. Planner excluded per OQ-3.
 
 ---
 
-### REQ-INTERACTIVE-001 — Decompose "agents should be more interactive"
+### REQ-INTERACTIVE-001 — DECOMPOSED (T-122, 2026-06-09)
 
-**Source**: EF-013 (vague, needs decomposition)
+**Source**: EF-013 (vague). **Status**: discharged by decomposition per
+AC-INTERACTIVE-001a — replaced by the three concrete REQs below. It is **not**
+implemented as a single REQ. The two testers' signal pointed at three distinct
+behaviors; each is now its own testable REQ. They are net-new behavior (not bug
+fixes), so they are **scheduled for v0.1.6**, not built in the locked v0.1.5
+bug-fix line — but they exist as concrete, acceptance-bearing REQs now so they
+can be scheduled rather than lost.
 
-**Trigger**: v0.1.4 dogfood probes this with a follow-up question.
+#### REQ-INTERACTIVE-CLARIFY-001 — Clarifying-question pattern (requirements-analyst)
 
-**Behavior** (sketch):
+**Trigger**: `/forge:srs` is run with a vague or under-specified project description.
 
-- Before v0.1.5 scope is locked, ≥2 concrete REQs are derived from the
-  dogfood signal. Candidates: clarifying-question pattern in
-  requirements-analyst, staged confirmation in spec/plan stages, progress
-  narration in builder.
-- This REQ's acceptance is "decomposed and removed," not "implemented."
+**Behavior**: Before writing the SRS, the requirements-analyst asks a **bounded
+batch** of clarifying questions (one round, not a drip) covering the highest-
+ambiguity areas (scope, users, constraints), then proceeds with stated
+assumptions for anything still unanswered.
 
-**Acceptance** (sketch):
+**Acceptance**: AC-INTERACTIVE-CLARIFY-001a — given a deliberately vague prompt,
+the agent emits ≥1 clarifying-question round before producing `srs.md`, and the
+SRS records explicit assumptions for unanswered items.
 
-- AC-INTERACTIVE-001a: This REQ is replaced in `srs-v0.1.5.md` by ≥2
-  specific REQs before v0.1.5 implementation starts. If it isn't, v0.1.5
-  ships without an "interactive" REQ.
+#### REQ-INTERACTIVE-CONFIRM-001 — Staged confirmation (spec / plan)
+
+**Trigger**: `/forge:spec` or `/forge:plan` is about to commit a large or
+irreversible artifact (full technical spec, full task DAG).
+
+**Behavior**: The agent presents a short outline / table of contents and pauses
+for confirmation before writing the full document, so the user can redirect
+before the expensive generation.
+
+**Acceptance**: AC-INTERACTIVE-CONFIRM-001a — the spec/plan skills present an
+outline and an explicit confirmation step before writing the full artifact.
+
+#### REQ-INTERACTIVE-NARRATE-001 — Progress narration (builder)
+
+**Trigger**: `/forge:build` works a task (or a `--milestone N` batch).
+
+**Behavior**: The builder narrates progress at task boundaries — which task it
+is starting, test/commit outcome, what's next — instead of working silently,
+so a long batch is observable.
+
+**Acceptance**: AC-INTERACTIVE-NARRATE-001a — a multi-task build emits a
+per-task start/result narration line.
+
+**Acceptance (parent)**: AC-INTERACTIVE-001a — satisfied: REQ-INTERACTIVE-001 is
+replaced by the three REQs above (≥2 required). ✅
 
 ---
 
@@ -540,6 +603,100 @@ errors that don't reference Forge file paths.
   Forge-vs-third-party distinction.
 - AC-DOCS-001b: Section is linked from the README's top-level "If
   something looks wrong" entry point.
+
+---
+
+### REQ-PIPEBOUNDS-001 — State machine enforces stage bounds and cycle-wrap
+
+**Source**: EF-024 (tester 2, PR #1)
+
+**Trigger**: `state-manager.py advance`, `force-advance.py`, or
+`state-manager.py set --field current_stage` moves the pipeline stage.
+
+**Behavior**:
+
+- `scripts/_state_lib.py:advance_stage` enforces the valid range. The
+  pipeline defines stages **0–12**; advancing past 12 or to a negative
+  stage is rejected, not warned. (Today it only `print`s a warning to
+  stderr and writes the out-of-range value anyway.)
+- `cmd_set` validates `current_stage` value type and range — a non-int
+  or out-of-[0,12] value exits non-zero with a clear message, rather
+  than silently persisting `-1`.
+- **Cycle-wrap**: advancing past stage 12 (Release) does **not** land on
+  a phantom stage 13. It either (a) wraps to `cycle + 1, stage 0` if the
+  `cycle` field exists, or (b) blocks with a message pointing at
+  `/forge:retro` for the release→next-cycle handoff. The chosen
+  semantics are documented in the stage-order table (T-101) so the
+  next-step hint and the bound check agree.
+- The intentional-skip path (`to > old + 1`) remains owned by
+  `/forge:force-advance` per REQ-GATE-ENTRY-001 — this REQ governs the
+  *upper/lower bound and wrap*, REQ-GATE-ENTRY-001 governs the *skip*.
+
+**Acceptance**:
+
+- AC-PIPEBOUNDS-001a: `advance` from stage 12 with no `--to` either
+  wraps to (cycle+1, stage 0) or exits non-zero with the retro hint —
+  never produces `current_stage: 13`. One test per chosen semantics.
+- AC-PIPEBOUNDS-001b: `set --field current_stage --value -1` and
+  `--value 99` both exit non-zero and leave `state.md` unchanged.
+- AC-PIPEBOUNDS-001c: The state-layer bound check and the gate-layer
+  check (`force-advance --to 13` already errors "no gate criteria for
+  stage 13") agree — a regression test asserts both reject stage 13.
+
+**Relation to antipattern family**: The gate layer already validates
+stage bounds; the state layer did not. Same surface-healthy /
+substance-inert shape as [[req-silentstate-001]] — fixed at the state
+layer here.
+
+---
+
+### REQ-WHYCI-001 — `/forge:why` gate-ID lookup is case-insensitive
+
+**Source**: EF-025 (tester 2, PR #1)
+
+**Trigger**: User runs `/forge:why <gate-id>` (e.g. `why g1-001`).
+
+**Behavior**:
+
+- `scripts/why.py` `_GATE_PATTERN` is case-sensitive (`^G\d+`), while
+  the sibling `_STAGE_PATTERN` one line above already uses
+  `re.IGNORECASE`. Normalize gate-ID input to uppercase before lookup so
+  `g1-001`, `G1-001`, and mixed case all resolve to the same criterion.
+- No behavior change for already-uppercase IDs; this only stops the
+  confusing "no match found" on lowercase input.
+
+**Acceptance**:
+
+- AC-WHYCI-001a: `why.py g1-001` and `why.py G1-001` produce identical
+  output for an existing criterion.
+- AC-WHYCI-001b: A genuinely unknown gate ID (any case) still produces
+  the not-found message — case-normalization must not mask real misses.
+
+---
+
+### REQ-EXTRACT-CWD-001 — `extract-lessons.py` accepts `--cwd`
+
+**Source**: EF-027 (tester 2, PR #1)
+
+**Trigger**: User or hook runs `scripts/extract-lessons.py` expecting the
+project-relative `--cwd PATH` convention every other forge script uses.
+
+**Behavior**:
+
+- `extract-lessons.py` adds `--cwd PATH` (default `.`) and derives its
+  default `--input` (`.forge/correction-flags.jsonl`) and `--output`
+  (`tasks/lessons.md` / `.forge/lessons.yaml`) relative to it, matching
+  the discovery pattern in `state-manager.py`, `check-gate.py`, etc.
+- Explicit `--input` / `--output` still override the derived paths
+  (backward compatible).
+
+**Acceptance**:
+
+- AC-EXTRACT-CWD-001a: `extract-lessons.py --cwd <proj>` discovers the
+  flags file and writes lessons under `<proj>` with no `--input` /
+  `--output` given.
+- AC-EXTRACT-CWD-001b: Passing both `--cwd` and explicit `--input`
+  honors the explicit path. Existing invocations keep working.
 
 ---
 
@@ -568,12 +725,19 @@ errors that don't reference Forge file paths.
 | REQ-SESSIONLOG-001      | EF-009, EF-015      | suggestion  |
 | REQ-STAGEREFLECT-001    | EF-010              | suggestion  |
 | REQ-WEBSEARCH-001       | EF-012              | suggestion  |
-| REQ-INTERACTIVE-001     | EF-013              | friction    |
+| REQ-INTERACTIVE-001     | EF-013              | decomposed (T-122) → CLARIFY/CONFIRM/NARRATE-001 |
 | REQ-DOCS-001            | EF-003              | bug (ext.)  |
+| REQ-PIPEBOUNDS-001      | EF-024              | bug         |
+| REQ-WHYCI-001           | EF-025              | friction    |
+| REQ-EXTRACT-CWD-001     | EF-027              | friction    |
+| REQ-LESSON-SOURCES-001  | EF-018, **EF-026**  | bug         |
 
 (EF-007 promoted to REQ-SILENTSTATE-001 on 2026-05-24 after the tester's
 `error_logs.jsonl` showed 28 silent state-read failures over 24 hours;
-no longer pending re-verification.)
+no longer pending re-verification. EF-026 folded into REQ-LESSON-SOURCES-001
+on 2026-06-09 as the global-store-hygiene half — same lesson subsystem,
+different layer. EF-021/022/023 were resolved in-session on `develop`
+(PR #1) and need no v0.1.5 REQ.)
 
 ---
 
@@ -597,10 +761,22 @@ no longer pending re-verification.)
   spec only. Planner's job is structural; cite-or-skip doesn't fit and
   the tool budget is better spent upstream. Revisit if v0.1.6 dogfood
   shows planner agents want benchmarking data.
-- **OQ-4** *(resolved 2026-06-01 → wait for dogfood)* — Does v0.1.5
-  wait for v0.1.4 dogfood to complete before locking scope, or can it
-  start in parallel? **Decision**: wait. EF-013 decomposition and any
-  new findings land in the same SRS pass; tighter scope, slower cadence.
+- **OQ-4** *(resolved 2026-06-01 → wait; closed 2026-06-09 → intent met,
+  scope locked)* — Does v0.1.5 wait for v0.1.4 dogfood to complete before
+  locking scope, or can it start in parallel? **Decision (2026-06-01)**:
+  wait. **Closure (2026-06-09)**: the *intent* of the wait — N=2
+  independent on-project signals before committing scope — is satisfied.
+  Tester 1 (`feedback1.md`) and tester 2 (PR #1, EF-021…027) both tested
+  the real plugin and their findings were verified against source. The
+  heavyweight v0.1.4 §9 dogfood **ceremony** (split engineer/vibes
+  personas, recruitment log, traceability screenshot, formal v0.1.4 tag)
+  was **amended** rather than executed — see `srs-v0.1.4.md` §9
+  Amendment. This is a deliberate, documented amendment of a previously
+  "no-waiver" bar, not a silent skip: the substance OQ-4 cared about
+  (two real testers, corroborated + extended findings) exists; the
+  process artifacts that would only restate it do not. v0.1.5 scope is
+  therefore **locked 2026-06-09**. EF-013 (REQ-INTERACTIVE-001)
+  decomposition draws on the two testers' signal as planned (T-124).
 - **OQ-6** *(resolved 2026-06-01 → all 5 producers enabled with
   recommended thresholds)* — Which implicit lesson-capture signals are
   worth flagging, and at what threshold? **Decision**: enable all five
@@ -645,14 +821,35 @@ no longer pending re-verification.)
 
 ---
 
-## 6. Acceptance Definition (placeholder)
+## 6. Acceptance Definition (locked 2026-06-09)
 
-To be written when v0.1.4 dogfood is complete and the full v0.1.5 scope
-is known. At minimum will include:
+All of the following must be true before tagging v0.1.5:
 
-- Every `fix-v0.1.5` REQ above either implemented with AC met, or
-  explicitly deferred to v0.1.6 with rationale.
-- All v0.1.4 dogfood `fix-v0.1.5` findings folded into this SRS.
-- CHANGELOG `[0.1.5]` entry + version bump.
-- Forge-on-Forge: the v0.1.5 pipeline run inside this repo passes its
-  own gates (continued meta-validation).
+1. **All 17 implementable REQs** have their acceptance criteria met
+   (REQ-INTERACTIVE-001 is the 18th, handled by item 2 below):
+   REQ-NEXTHINT-001, REQ-GATE-ENTRY-001, REQ-PATHS-001, REQ-LARGEDOC-001,
+   REQ-PATTERN-001, REQ-SILENTSTATE-001, REQ-DOCTOR-001,
+   REQ-LESSON-SOURCES-001 (incl. AC-…-001d / EF-026), REQ-GATESTUB-001
+   (both halves — fail-loud **and** all 15 scripts), REQ-BUILDBATCH-001,
+   REQ-SESSIONLOG-001, REQ-STAGEREFLECT-001, REQ-WEBSEARCH-001,
+   REQ-DOCS-001, REQ-PIPEBOUNDS-001, REQ-WHYCI-001, REQ-EXTRACT-CWD-001.
+2. **REQ-INTERACTIVE-001 is discharged by decomposition** — DONE (T-122,
+   2026-06-09): replaced by REQ-INTERACTIVE-CLARIFY-001,
+   REQ-INTERACTIVE-CONFIRM-001, and REQ-INTERACTIVE-NARRATE-001 (≥2 required) per
+   AC-INTERACTIVE-001a. The three are net-new behavior scheduled for v0.1.6; they
+   are not "implemented" in v0.1.5.
+3. **The three hotfixes already on `develop`** (EF-021/022/023, PR #1)
+   are merged to `main` as part of the v0.1.5 line.
+4. **No `script_returns_zero` gate criterion references a missing
+   script** at tag time (AC-GATESTUB-001b audit, T-112).
+5. **Full unit + integration suite green** (currently 707 tests) with new
+   tests for every REQ above; `validate-plugin.py` exits 0.
+6. **CHANGELOG `[0.1.5]` entry** + `plugin.json` / `marketplace.json`
+   version bump to `0.1.5` (note: v0.1.4 was amended, not tagged — see
+   §3 of the v0.1.5 release notes for the version-history explanation).
+7. **Forge-on-Forge**: the v0.1.5 pipeline run inside this repo passes
+   its own gates (continued meta-validation), and the canonical-path fix
+   (REQ-PATHS-001) is exercised by `tests/integration/full-pipeline.sh`.
+
+Anything that cannot be met ships as an explicit **defer-to-v0.1.6**
+entry with rationale — there is no silent drop.

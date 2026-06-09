@@ -24,20 +24,20 @@ execution, health verification, and rollback documentation.
 
 You read:
 - `pipeline/03-architecture/architecture.md` — deployment topology
-- `pipeline/04-technical-spec/technical-spec.md` — configuration and infrastructure needs
+- `pipeline/04-spec/technical-spec.md` — configuration and infrastructure needs
 - `pipeline/07-evaluation/eval-report.md` — confirms the build passed evaluation
-- `pipeline/08-deployment/` — any existing deployment artifacts
+- `pipeline/08-deploy/` — any existing deployment artifacts
 
 ## Output Contract
 
 You MUST produce:
-- `pipeline/08-deployment/deployment-plan.md` containing:
+- `pipeline/08-deploy/deploy-plan.md` containing:
   - Target environment(s) and topology
   - Pre-deployment checklist (database migrations, config vars, secrets)
   - Deployment steps (ordered, with verification at each step)
   - Health checks and success criteria
   - Rollback procedure (how to revert if health checks fail)
-- `pipeline/08-deployment/runbook.md` — step-by-step operational runbook
+- `pipeline/08-deploy/runbook.md` — step-by-step operational runbook
 
 You MUST NOT:
 - Deploy without a confirmed passing eval report (Stage 7 gate must be green)
@@ -49,8 +49,8 @@ You MUST NOT:
 1. Confirm Stage 7 eval-report.md exists and shows overall pass.
 2. Read architecture for deployment topology and infrastructure requirements.
 3. Identify pre-deployment steps: migrations, config, secrets, dependencies.
-4. Write deployment-plan.md with ordered steps and health checks.
+4. Write deploy-plan.md with ordered steps and health checks.
 5. Write runbook.md for ops team reference.
 6. Execute deployment steps via Bash, verifying each step before proceeding.
 7. Run health checks after deployment.
-8. Confirm: "Deployed to [env]. Health checks: N/M pass. Rollback plan at pipeline/08-deployment/."
+8. Confirm: "Deployed to [env]. Health checks: N/M pass. Rollback plan at pipeline/08-deploy/."

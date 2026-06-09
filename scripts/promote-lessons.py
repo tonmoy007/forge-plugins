@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime
 import difflib
 import logging
 import os
@@ -32,6 +33,12 @@ logger = logging.getLogger(__name__)
 _SCHEMA_VERSION = 1
 _DEFAULT_THRESHOLD = 3
 _SIMILARITY_RATIO = 0.8
+# EF-026 global-store hygiene: a concept must have fired at least this many times
+# (summed across the cluster) before it reaches the global store — a one-shot
+# test artifact (frequency 1) never gets promoted.
+_MIN_FREQUENCY = 2
+# Global lessons older than this (by last_used) decay out of recall.
+_GLOBAL_TTL_DAYS = 30
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +127,23 @@ def _similar(a: str, b: str) -> bool:
     if not a or not b:
         return False
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() >= _SIMILARITY_RATIO
+
+
+def is_stale(last_used: Optional[str], *, today: Optional[datetime.date] = None,
+             max_age_days: int = _GLOBAL_TTL_DAYS) -> bool:
+    """EF-026: True if `last_used` (YYYY-MM-DD or ISO) is older than max_age_days.
+
+    A missing/unparseable date is treated as NOT stale (kept) — we only decay
+    entries we can positively date as old.
+    """
+    if not last_used:
+        return False
+    try:
+        date = datetime.date.fromisoformat(str(last_used)[:10])
+    except ValueError:
+        return False
+    today = today or datetime.date.today()
+    return (today - date).days > max_age_days
 
 
 def cluster_lessons(all_lessons: list[ProjectLesson]) -> list[list[ProjectLesson]]:
@@ -252,7 +276,14 @@ def promote(
         all_lessons.extend(load_project_lessons(proj))
 
     clusters = cluster_lessons(all_lessons)
-    promotable = [c for c in clusters if len(_distinct_projects(c)) >= threshold]
+    def _cluster_freq(cluster: list[ProjectLesson]) -> int:
+        return sum(x.lesson.get("frequency", 0) or 0 for x in cluster)
+
+    # EF-026: require both cross-project breadth AND that the concept fired ≥2×.
+    promotable = [
+        c for c in clusters
+        if len(_distinct_projects(c)) >= threshold and _cluster_freq(c) >= _MIN_FREQUENCY
+    ]
     new_records = [_make_global_record(c) for c in promotable]
 
     existing = _load_global(global_dir)

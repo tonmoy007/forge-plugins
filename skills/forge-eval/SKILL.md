@@ -16,8 +16,19 @@ allowed-tools: [Read, Write, Bash, Grep, Glob]
 
 ## Pre-flight Check
 
+**Entry gate (REQ-GATE-ENTRY-001)** — before adopting the persona, verify the
+prior stage's artifact exists:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py preflight --stage 7
+```
+
+If it exits non-zero, **STOP**: present its message verbatim and do not proceed —
+the prior stage must be completed first (or use `/forge:force-advance` to skip
+intentionally).
+
 1. Read `pipeline/state.md` — confirm Forge project.
-2. Confirm `pipeline/01-srs/srs.md` and `pipeline/04-technical-spec/technical-spec.md` exist.
+2. Confirm `pipeline/01-srs/srs.md` and `pipeline/04-spec/technical-spec.md` exist.
 3. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage 6` to see Stage 6 status.
    If critical criteria fail, warn the user before proceeding.
 4. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 7` to load project-type evaluation criteria. **Every** profile criterion in `additional_criteria` (e.g., ML: model accuracy, GPU memory, drift detection; API: contract tests, load test, auth bypass; fullstack: Lighthouse, WCAG AA, responsive breakpoints; CLI: --help text, exit codes; library: API surface, semver, doc coverage) **must appear as a row in the eval matrix** with a pass/fail verdict and evidence.
@@ -40,4 +51,13 @@ After running, confirm:
 
 ## Next Step
 
-"Evaluation complete. If all requirements pass: `/forge:deploy`. If gaps found: fix and re-run `/forge:eval`."
+Derive the hint from the canonical stage table — never hardcode it
+(REQ-NEXTHINT-001, single source of truth). Run the helper and present its
+output to the user verbatim:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py next-hint --stage 7
+```
+
+(If the eval found gaps, fix them and re-run this stage before advancing; the
+hint above is the handoff once all requirements pass.)

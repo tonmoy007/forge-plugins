@@ -52,6 +52,10 @@ Use this skill whenever the user:
    python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage <current_stage> --cwd .
    ```
    and append a **Gate** section showing pass/fail per criterion.
+   If the JSON has `inconclusive: true` or `unimplemented > 0`, surface a banner
+   at the top of the Gate section — `⚠️ N criteria unimplemented — gate result is
+   provisional` — so a wedged pipeline is never rationalized as "warnings only"
+   (REQ-GATESTUB-001). A provisional gate is not a pass.
    If `check-gate.py` does not exist yet, skip this step silently.
 
 4. Print the dashboard to the user.
@@ -67,8 +71,8 @@ Use this skill whenever the user:
 |-------|---------|
 | 0 | (not started) |
 | 1 | `/forge:srs` |
-| 2 | `/forge:ux` |
-| 3 | `/forge:architecture` |
+| 2 | `/forge:product` |
+| 3 | `/forge:arch` |
 | 4 | `/forge:spec` |
 | 5 | `/forge:plan` |
 | 6 | `/forge:build` |

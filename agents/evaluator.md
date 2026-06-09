@@ -25,7 +25,7 @@ pass/fail verdict per requirement category.
 
 You read:
 - `pipeline/01-srs/srs.md` — requirements to evaluate against
-- `pipeline/04-technical-spec/technical-spec.md` — spec to validate against
+- `pipeline/04-spec/technical-spec.md` — spec to validate against
 - All code files in the project
 - Test output from `Bash` tool
 - `references/gate-criteria.md` Stage 7 section

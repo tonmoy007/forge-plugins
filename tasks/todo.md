@@ -4,16 +4,66 @@
 
 ---
 
-## Active Task: T-032
+## v0.1.5 — COMPLETE (2026-06-09)
 
-**Goal**: End-to-end integration test — full pipeline run on `examples/sample-todo-api/`. All 12 stages produce artifacts.
+All 25 tasks done (T-101..T-125). 986 tests pass, 0 xfail; validate-plugin.py
+exit 0; Forge-on-Forge full-pipeline passes 12/12; plugin at 0.1.5.
+Branch `feat/v0.1.5-rest` (T-114..T-125, off develop) → open PR into `develop`;
+T-101..T-113 already on develop. Tag `v0.1.5` from `main` after develop→main merge.
 
-**Context**:
-- Done when: `tests/integration/full-pipeline.sh` exits 0 with all artifacts present and traceability chain holds
-- See `build/04-plan/task-dag.md` T-032.
-- REQ-IDs: NFR-011, NFR-012
-- Depends on: All previous tasks (T-031 now done)
-- Note: T-030 (README.md) and T-033 (package/publish) both block on this.
+---
+
+## Active Task: T-103 — Next-step hint derived from the table (DONE — archived below)
+
+**Goal**: Stage skills / `state-manager` read the next-step hint from the T-101
+canonical table instead of hardcoded strings. After `01-srs` the hint names
+**product/UX**, not architecture. (REQ-NEXTHINT-001 · v0.1.5 M1)
+
+**The bug**: all 12 stage skills hardcode their `## Next Step` hint. Two name
+commands that don't exist:
+- `forge-srs` → `/forge:ux` (canonical: `/forge:product`)
+- `forge-product` → `/forge:architecture` (canonical: `/forge:arch`)
+
+`stage-order.md` invariant: no component may hardcode a next-step string.
+
+**Steps**:
+- [x] Write `tests/unit/test_next_hint.py` first (TDD) — failed before impl
+- [x] Add `next-hint` subcommand to `scripts/state-manager.py` (reads `_stage_table`)
+- [x] Replace `## Next Step` literal in all 12 stage SKILL.md with helper invocation
+- [x] Fixed forge-status stage→command table (rows 2/3 named dead commands)
+- [x] Targeted test green (57) → full suite green (810) → plugin validates
+- [x] Update `progress.md` (T-103 done) + `CHANGELOG.md` + lesson captured
+- [ ] Commit `feat(T-103): derive next-step hint from canonical stage table`
+
+**Done when**: a test enumerates each transition and asserts the hint names the
+correct next stage; grep test finds no hardcoded next-step strings (incl.
+`/forge:ux`, `/forge:architecture`) outside the helper.
+
+**Out of scope** (noted): `forge-status` embedded stage→command table + Example
+Output block — status-dashboard mapping, not a stage-transition hint.
+
+**Depends on**: T-101 ✅, T-102 ✅
+
+---
+
+## v0.1.5 progress (2026-06-09 session)
+
+Done + committed on `develop` (930 tests green, 1 xfail, validate exit 0):
+T-103, T-104, T-105, T-106, T-107, T-108, T-109, T-110, T-111, T-112(audit), T-113, T-115.
+
+**Resume here — remaining v0.1.5 work, in order:**
+- **T-114** [L] — 5 implicit lesson-signal producers (`scripts/_signal_producers.py`),
+  evaluated at session-end. Needs raw-event logging added: pre-tool-write blocks
+  + stop-reflect gate-outcome → `.forge/errors.log`; detectors read errors.log +
+  session-log.jsonl. Thresholds: hook-error N=5, repeated-block M=2, others binary.
+- **M6** — T-116 `/forge:build --milestone N`; T-117 `why.py` case-insensitive;
+  T-118 session.jsonl enrichment; T-119 per-stage reflection rollup; T-120
+  pattern.jsonl schema; T-121 WebSearch for SRS/product/arch/spec agents.
+- **M7** — T-122 decompose REQ-INTERACTIVE-001; T-123 large-doc split convention;
+  T-124 third-party-hook troubleshooting doc + issue template; T-125 release
+  (CHANGELOG 0.1.5, version bump) **+ harmonize sample-todo-api fixture IDs**
+  (REQ-NF/REQ-F vs NFR/REQ, add health-report.md) so `test_full_pipeline` passes
+  and its xfail marker is removed.
 
 ---
 

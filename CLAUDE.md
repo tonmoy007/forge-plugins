@@ -155,10 +155,14 @@ Ref: T-XXX
 
 ### Branches
 
-- `main` — releasable plugin
-- `develop` — current integration branch (work here by default)
-- `t-XXX-short-description` — per-task branches when working on something risky
-- Never push directly to `main` without `develop → main` PR approved
+- `main` — stable, releasable plugin; branch off it and tag releases from it
+- `develop` — integration + testing branch; PRs land here first
+- Feature branches — created **from `main`**, named for the change
+  (`<type>/<short-description>`, e.g. `feat/batch-inference`, `fix/login-loop`)
+- Flow: branch from `main` → PR into `develop` → test on `develop` →
+  merge `develop → main` → release on version bump (tag `vX.Y.Z`)
+- Never commit directly to `main` or `develop`; never push directly to `main`
+  without a tested `develop → main` merge
 
 ---
 

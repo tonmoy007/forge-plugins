@@ -517,6 +517,43 @@ The acceptance definition was deliberately written *before* the testers
 ran. Items 1–6 are objective and defined; items 7–10 are mechanical.
 This is the discharge of D-V13-11.
 
+### §9 Amendment — 2026-06-09 (dogfood ceremony superseded by real testers)
+
+**Decision**: The v0.1.4 release was never tagged. The §9 bar above
+required a structured dogfood ceremony (split disciplined-engineer +
+vibes-coder personas, a recruitment log, a traceability screenshot, a
+formal v0.1.4 tag). That ceremony was **amended, not executed**, because
+the substance it was meant to produce — independent on-project signal
+before locking v0.1.5 — already arrived through a lighter channel:
+
+- **Tester 1** — `feedback/v0.1.3/feedback1.md` → EF-001…020.
+- **Tester 2** — PR #1 (`develop`), EF-021…027, with 3 hotfixes applied
+  in-session. Findings verified against real source on 2026-06-09.
+
+Two independent testers exercised the real plugin, hit gate/state
+failures, and produced findings triaged into
+`build/06-evaluation/v0.1.3.1-early-feedback.md` (27 findings) and folded
+into `srs-v0.1.5.md`. That meets the **intent** of items 1–4 (N=2, a
+findings doc, a real gate/state failure exercised, lessons captured),
+even though the specific v0.1.4 artifact paths
+(`v0.1.4-dogfood-log.md`, `v0.1.4-dogfood-findings.md`, the screenshot,
+the `dogfood-v0.1.4` lesson tag, the `0.1.4` version bump) were never
+created.
+
+**Why this is an amendment and not a silent skip**: D-V13-11 made §9 a
+"no-waiver" bar to prevent shipping unvalidated. The risk it guarded
+against (no external validation) did **not** materialize — we have two
+verified external testers. Re-running the ceremony would only restate
+findings we already hold. This amendment is recorded here, cross-linked
+from `srs-v0.1.5.md` OQ-4, so the version history stays honest:
+**v0.1.4 is folded into the v0.1.5 line; there is no standalone v0.1.4
+tag, and the next release tag is `0.1.5`.**
+
+**Carried forward into v0.1.5** (not dropped): the GitHub issue template
+(item 5, REQ-FEEDBACK-001) and the README troubleshooting entry point
+are picked up by REQ-DOCS-001 and the v0.1.5 docs tasks. The
+traceability screenshot (item 6) moves to the v0.1.5 release notes.
+
 ---
 
 ## 10. Two-Phase SRS Marker

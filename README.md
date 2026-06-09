@@ -194,6 +194,19 @@ Hooks never block your work unless a blocker gate fires (exit code 2).
 
 ---
 
+## If something looks wrong
+
+1. Run **`/forge:doctor`** — it reports environment, plugin, and current-stage
+   gate health (`healthy` / `wedged` / `broken`) and usually names the exact fix.
+2. Seeing a cryptic `PreToolUse` / `Stop` hook error that doesn't mention a Forge
+   path? It's probably from **another plugin's hook**, not Forge — see
+   [Troubleshooting third-party plugin hooks](docs/getting-feedback.md#troubleshooting-third-party-plugin-hooks).
+   (Forge's only `PreToolUse` hook is `hooks/pre-tool-write.py`.)
+3. Found a real Forge bug? File it with the
+   [feedback issue template](.github/ISSUE_TEMPLATE/forge-feedback.md).
+
+---
+
 ## Project Structure (After Init)
 
 ```

@@ -16,7 +16,9 @@ from pathlib import Path
 
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib
+import _state_read
 from _hook_runner import run_hook
 
 # /forge:<command> → stage number (aliases keep backward compat; last alias wins _STAGE_NAMES)
@@ -124,11 +126,10 @@ def main() -> None:
     if detected is None:
         sys.exit(0)
 
-    try:
-        state = lib.read_state(str(cwd))
-        current_stage = state.get("current_stage", 0)
-    except Exception:  # noqa: BLE001
-        sys.exit(0)
+    state, warning = _state_read.read_state_safe(str(cwd), payload.get("session_id", ""))
+    if warning:
+        print(warning)
+    current_stage = state.get("current_stage", 0)
 
     if detected == current_stage:
         sys.exit(0)  # already on this stage

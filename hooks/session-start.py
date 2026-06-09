@@ -14,6 +14,7 @@ Ref: T-007 (original), T-100 (resilience wrap)
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
@@ -29,7 +30,9 @@ import yaml
 # Resolve plugin root and make _state_lib + _hook_runner importable
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib  # noqa: E402
+import _state_read  # noqa: E402
 from _hook_runner import run_hook  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
@@ -96,8 +99,25 @@ def _register_and_promote(cwd: Path) -> None:
         _LOG.warning("promote-lessons failed: %s", exc)
 
 
-def _load_lessons(path: Path, stage: int, project_type: str) -> list[dict]:
-    """Load and filter lessons from a YAML file. Returns [] on any failure."""
+def _is_stale(last_used: object, max_age_days: int) -> bool:
+    """EF-026: True if last_used (YYYY-MM-DD/ISO) is older than max_age_days.
+    Missing/unparseable dates are kept (not stale)."""
+    if not last_used:
+        return False
+    try:
+        date = datetime.date.fromisoformat(str(last_used)[:10])
+    except ValueError:
+        return False
+    return (datetime.date.today() - date).days > max_age_days
+
+
+def _load_lessons(path: Path, stage: int, project_type: str,
+                  max_age_days: Optional[int] = None) -> list[dict]:
+    """Load and filter lessons from a YAML file. Returns [] on any failure.
+
+    When max_age_days is set (global store, EF-026), lessons whose last_used is
+    older than that are skipped so abandoned entries decay out of recall.
+    """
     if not path.exists():
         return []
     try:
@@ -107,6 +127,8 @@ def _load_lessons(path: Path, stage: int, project_type: str) -> list[dict]:
         def _matches(lesson: dict) -> bool:
             stages = lesson.get("stage", []) or []
             types = lesson.get("project_types", []) or []
+            if max_age_days is not None and _is_stale(lesson.get("last_used"), max_age_days):
+                return False
             return (not stages or stage in stages) and (
                 not types or project_type in types
             )
@@ -196,19 +218,16 @@ def _compose(
     return "\n".join(lines)
 
 
-def run(cwd: Path) -> Optional[str]:
+def run(cwd: Path, session_id: str = "") -> Optional[str]:
     """Return context string, or None to exit silently."""
     state_path = cwd / "pipeline" / "state.md"
     if not state_path.exists():
         return None  # not a Forge project
 
-    try:
-        state = lib.read_state(str(cwd))
-    except SystemExit:
-        return "[Forge] Warning: pipeline/state.md is unreadable — run /forge:init."
-    except Exception as exc:
-        _LOG.warning("session-start: state read failed: %s", exc)
-        return None
+    # REQ-SILENTSTATE-001: surface read failures instead of swallowing them.
+    state, warning = _state_read.read_state_safe(str(cwd), session_id)
+    if not state:
+        return warning or "[Forge] Warning: pipeline/state.md is unreadable — run /forge:doctor."
 
     stage = state.get("current_stage", 0)
     project_type = state.get("project_type", "unknown")
@@ -221,7 +240,8 @@ def run(cwd: Path) -> Optional[str]:
         cwd / ".forge" / "lessons.yaml", stage, project_type
     )[:5]
     global_lessons = _load_lessons(
-        Path.home() / ".forge" / "global-lessons.yaml", stage, project_type
+        Path.home() / ".forge" / "global-lessons.yaml", stage, project_type,
+        max_age_days=30,  # EF-026: stale global lessons decay out of recall
     )[:3]
     lessons = project_lessons + global_lessons
 
@@ -250,7 +270,7 @@ def main() -> None:
         payload = {}
 
     cwd = Path(payload.get("cwd", os.getcwd()))
-    result = run(cwd)
+    result = run(cwd, payload.get("session_id", ""))
     if result is not None:
         print(result)
     sys.exit(0)

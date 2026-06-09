@@ -16,8 +16,19 @@ allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 
 ## Pre-flight Check
 
+**Entry gate (REQ-GATE-ENTRY-001)** — before adopting the persona, verify the
+prior stage's artifact exists:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py preflight --stage 11
+```
+
+If it exits non-zero, **STOP**: present its message verbatim and do not proceed —
+the prior stage must be completed first (or use `/forge:force-advance` to skip
+intentionally).
+
 1. Read `pipeline/state.md` — confirm Forge project.
-2. Confirm `pipeline/10-feedback/triage-report.md` exists. If not: "Complete Stage 10 first (`/forge:feedback`)."
+2. Confirm `pipeline/10-feedback/triage.md` exists. If not: "Complete Stage 10 first (`/forge:feedback`)."
 3. Read the triage report and surface the critical/high items to the user before starting.
 4. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 11` to surface any project-type resolution overrides (e.g., library projects: every fix must consider semver impact and backward compatibility).
 
@@ -25,19 +36,27 @@ allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
 
 1. Read `agents/resolver.md` to load the Resolver persona.
 2. Adopt that persona — you are now the Resolver.
-3. Read `pipeline/10-feedback/triage-report.md`. Start with the highest severity item.
+3. Read `pipeline/10-feedback/triage.md`. Start with the highest severity item.
 4. Follow the Resolver workflow: reproduce → root cause → targeted fix → regression test → commit. Apply profile-specific constraints (e.g., for library projects, classify each fix as patch/minor/major and document any breaking-change migration).
-5. Update `pipeline/11-resolution/resolution-log.md` with each resolved item.
+5. Update `pipeline/11-resolve/hotfixes.md` with each resolved item, and record any
+   deferred (P2/P3) items in `pipeline/11-resolve/backlog-updates.md`.
 6. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 11` after first resolution.
 
 ## Verification
 
 After each resolution, confirm:
-- Root cause documented in resolution-log.md
+- Root cause documented in `pipeline/11-resolve/hotfixes.md`
+- Deferred items recorded in `pipeline/11-resolve/backlog-updates.md`
 - Regression test added and passing
 - Full test suite passing
 - Commit uses `fix(FB-XXX):` format
 
 ## Next Step
 
-"All critical/high items resolved. Run `/forge:release` to cut a versioned release."
+Derive the hint from the canonical stage table — never hardcode it
+(REQ-NEXTHINT-001, single source of truth). Run the helper and present its
+output to the user verbatim:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py next-hint --stage 11
+```

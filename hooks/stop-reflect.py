@@ -27,6 +27,7 @@ sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 import _state_lib as lib
+import _state_read
 from _hook_runner import run_hook
 import _event_log as event_log
 import _executor as executor
@@ -195,7 +196,10 @@ def _run_gate_check(cwd: Path, stage: int, plugin_dir: Path) -> dict:
             text=True,
             timeout=10,
         )
-        if result.returncode == 0 and result.stdout.strip():
+        # Parse the JSON whenever it is present — check-gate exits non-zero on an
+        # inconclusive/unimplemented gate (REQ-GATESTUB-001) but still emits a
+        # meaningful report we must act on, not discard as "no gate".
+        if result.stdout.strip().startswith("{"):
             return json.loads(result.stdout)
     except (subprocess.TimeoutExpired, json.JSONDecodeError):
         pass
@@ -262,10 +266,11 @@ def main() -> None:
 
     forge_dir = cwd / ".forge"
 
-    try:
-        state = lib.read_state(str(cwd))
-    except Exception as e:
-        _log_error(forge_dir, "state_read_failed", str(e))
+    state, warning = _state_read.read_state_safe(str(cwd), session_id)
+    if not state:
+        # REQ-SILENTSTATE-001: surface the failure (read_state_safe already logged it).
+        if warning:
+            print(warning)
         sys.exit(0)
 
     # --- Step 0: Pre-flight ---
@@ -358,6 +363,12 @@ def main() -> None:
             d for d in details
             if not d.get("passed") and d.get("severity") == "blocker"
         ]
+        # T-114: record the gate outcome so the pass->wedge producer can detect a
+        # stage that passed earlier in the session and later wedged.
+        _state_read.log_event(
+            forge_dir, "gate_outcome",
+            f"stage={current_stage} blockers={len(unmet_blockers)}", session_id,
+        )
 
         if user_done:
             if not unmet_blockers:
@@ -412,6 +423,17 @@ def main() -> None:
                 f"✅ Stage {current_stage} gate passed."
                 f" Advanced to stage {current_stage + 1}."
             )
+            # T-119: roll up the completed stage's sessions into reflection.md.
+            stage_reflect = _PLUGIN_DIR / "scripts" / "stage-reflect.py"
+            if stage_reflect.exists():
+                try:
+                    subprocess.run(
+                        [sys.executable, str(stage_reflect), "--stage", str(current_stage),
+                         "--cwd", str(cwd), "--gate-status", "pass"],
+                        capture_output=True, timeout=15,
+                    )
+                except Exception:  # noqa: BLE001 - rollup must never break the Stop hook
+                    pass
         else:
             _log_error(forge_dir, "advance_stage_failed", "")
 

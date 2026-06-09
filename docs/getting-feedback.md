@@ -126,6 +126,34 @@ criterion mean."
 
 ---
 
+## Troubleshooting third-party plugin hooks
+
+Sometimes a cryptic `PreToolUse` / `PreToolWrite` / `Stop` hook error appears that
+**doesn't reference any Forge file path**. That almost always means the error is
+from *another installed plugin's* hook, not Forge.
+
+**Forge's only `PreToolUse` hook is `hooks/pre-tool-write.py`** (the design-system
+check). Any other `PreToolUse` warning — especially one mentioning a script that
+isn't under Forge's `hooks/` — is owned by a different plugin.
+
+To find the owner of a misbehaving hook:
+
+1. Run `/plugin list` to see every installed plugin and its hooks.
+2. Note the hook **script name** from the error message, then grep your plugins
+   directory for it:
+   ```bash
+   grep -rl "<hook-script-name>" ~/.claude/plugins/
+   ```
+   The directory it lives in is the owning plugin.
+3. If it's not under a Forge directory, it's not a Forge bug — report it to that
+   plugin, or disable that plugin to confirm. Run `/forge:doctor` to verify Forge
+   itself is healthy.
+
+(If the hook script *is* Forge's `pre-tool-write.py`, then it is a Forge issue —
+please file it, see below.)
+
+---
+
 ## How they should report back
 
 Three reporting modes, in increasing effort. Don't ask for all three.

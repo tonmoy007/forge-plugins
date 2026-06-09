@@ -17,7 +17,9 @@ from pathlib import Path
 
 _PLUGIN_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib
+import _state_read
 from _hook_runner import run_hook
 
 _UI_EXTENSIONS = {".tsx", ".jsx", ".ts", ".js", ".vue", ".svelte", ".css", ".scss", ".html"}
@@ -115,11 +117,10 @@ def main() -> None:
     # Only enforce after Stage 6
     if not (cwd / "pipeline" / "state.md").exists():
         sys.exit(0)
-    try:
-        state = lib.read_state(str(cwd))
-        if state.get("current_stage", 0) < 6:
-            sys.exit(0)
-    except Exception:  # noqa: BLE001
+    state, warning = _state_read.read_state_safe(str(cwd), payload.get("session_id", ""))
+    if warning:
+        print(warning)
+    if state.get("current_stage", 0) < 6:
         sys.exit(0)
 
     # Only enforce when a design system has been authored
@@ -134,6 +135,12 @@ def main() -> None:
     violations = _scan_violations(content)
     if not violations:
         sys.exit(0)
+
+    # T-114: record the violation so the repeated-block / heredoc-bypass producers
+    # can see a pattern of fighting the design-system check on the same files.
+    _state_read.log_event(
+        cwd / ".forge", "pretool_violation", file_path, payload.get("session_id", "")
+    )
 
     capped = violations[:10]
     suffix = (

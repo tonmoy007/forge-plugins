@@ -257,8 +257,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     _append_to_lessons_yaml(cwd, lesson)
     _append_to_lessons_md(cwd, lesson)
 
-    # Advance stage
-    new_state = lib.advance_stage(str(cwd), to=args.to)
+    # Advance stage (force=True: force-advance is the documented multi-stage-skip path)
+    new_state = lib.advance_stage(str(cwd), to=args.to, force=True)
     new_stage = new_state["current_stage"]
 
     # Annotate history

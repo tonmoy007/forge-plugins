@@ -8,13 +8,21 @@ All NFR targets met. No P0/P1 bugs open. Ready to advance to Stage 8 (Deploy).
 
 | Feature | Test File | Result |
 |---------|-----------|--------|
-| Registration (REQ-F-001) | test_auth_routes.py | PASS |
-| Authentication (REQ-F-002) | test_auth_routes.py | PASS |
-| Todo CRUD (REQ-F-003) | test_todo_routes.py | PASS |
-| Filtering (REQ-F-004) | test_todo_routes.py | PASS |
-| Rate limiting (REQ-F-005) | test_auth_routes.py | PASS |
+| Registration (REQ-001) | test_auth_routes.py | PASS |
+| Authentication (REQ-002) | test_auth_routes.py | PASS |
+| Todo CRUD (REQ-003) | test_todo_routes.py | PASS |
+| Filtering (REQ-004) | test_todo_routes.py | PASS |
+| Rate limiting (REQ-005) | test_auth_routes.py | PASS |
 
-## Performance (REQ-NF-001)
+## Non-Functional Coverage
+
+| NFR | Target | Result |
+|-----|--------|--------|
+| NFR-001 (performance) | p99 < targets under load | PASS (see below) |
+| NFR-002 (packaging/deploy) | Docker image builds + runs healthchecks | PASS |
+| NFR-003 (structured logging) | JSON log line per request with request/user/status | PASS |
+
+## Performance (NFR-001)
 
 Load test results (k6, 100 VUs, 60s against staging):
 

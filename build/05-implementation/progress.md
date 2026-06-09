@@ -5,10 +5,48 @@
 
 ## Current State
 
-- **Active milestone**: M7 — Polish + Documentation
-- **Current task**: — (all 33 tasks complete; v0.1.3.1 tagged)
-- **Last session ended**: 2026-05-24
+- **Active release**: v0.1.5 — scope locked 2026-06-09 (`build/01-srs/srs-v0.1.5.md`, `build/04-plan/task-dag-v0.1.5.md`)
+- **v0.1.5 COMPLETE** — all 25 tasks done (T-101..T-125). 986 tests pass, 0 xfail;
+  validate-plugin.py exit 0; Forge-on-Forge full-pipeline passes all 12 gates;
+  plugin.json + marketplace.json at 0.1.5; CHANGELOG [0.1.5] written.
+- **Branch**: `feat/v0.1.5-rest` (off develop) holds T-114..T-125 → PR into develop.
+  Release tag `v0.1.5` is cut from `main` after the develop→main merge (per CONTRIBUTING).
+- **Session 2026-06-09**: completed T-103..T-113 + T-115 (12 tasks, 18 commits on develop), 930 tests green. Remaining: T-114, M6, M7, + full-pipeline fixture harmonization.
+- **Known follow-up**: full-pipeline.sh xfail — sample-todo-api fixtures use
+  inconsistent REQ/NFR ID schemes + no health-report.md; harmonize at T-125
+  (§6 Forge-on-Forge). All 15 gate scripts exist; audit green.
+- **Last session**: 2026-06-09 — merged PR #1 (EF-021..027 + 3 hotfixes) to main; locked v0.1.5; started M1.
 - **Last hotfix**: v0.1.3.1 — dropped `python-frontmatter` runtime dep (`scripts/_state_lib.py`, `scripts/load-profile.py`); 3 regression tests added. Resolves feedback/v0.1.3/feedback1.md `ModuleNotFoundError: frontmatter` reports.
+
+## v0.1.5 Task Status
+
+| Task | Status | Completed | Commit | Notes |
+|------|--------|-----------|--------|-------|
+| T-101 | 🟢 done | 2026-06-09 | — | `references/stage-order.md` + `scripts/_stage_table.py` loader + 38 tests; single source of truth (dirs, prereqs, next-hints, bounds, cycles); resolves EF-005 dir-name drift; 745/745 pass |
+| T-102 | 🟢 done | 2026-06-09 | — | canonicalized ALL stage paths (broader than EF-005: stages 4/8/9/10/11 wedged). 17 files (7 skills + 9 agents + CHANGELOG); dir+filename renames to match gates; added feedback-log.md & backlog-updates.md (gate blockers skills never wrote); test_canonical_paths.py guard; 753/753 pass |
+| T-103 | 🟢 done | 2026-06-09 | 1 commit | `next-hint` subcommand reads canonical hint from stage table; all 12 stage skills invoke it; fixed 2 dead-command hints + forge-status table; test_next_hint.py (57 tests); 810 pass |
+| T-104 | 🟢 done | 2026-06-09 | 442c2af | REQ-PIPEBOUNDS-001: advance rejects out-of-range, cycle-wraps past 12 to (cycle+1,0); validate_frontmatter range-checks current_stage; set -1/99/13 rejected, state intact; test_pipebounds.py; 821 pass |
+| T-105 | 🟢 done | 2026-06-09 | df811ea | REQ-GATE-ENTRY-001: check_prerequisite + `preflight --stage N` (exit 2); advance skips need --force; 10 stage skills gated; force-advance routes via force=True; test_entry_gates.py; 847 pass |
+| T-106 | 🟢 done | 2026-06-09 | 51a843a | REQ-SILENTSTATE-001: hooks/_state_read.py helper; 6 hook read-sites route through it (warn + log to .forge/errors.log); check-gate inconclusive+exit2 on unreadable state; doctor check_state_read_failures; session-end footer; test_silentstate.py (9); 856 pass |
+| T-107 | 🟢 done | 2026-06-09 | 2a5d0e9 | REQ-DOCTOR-001: doctor runs current-stage gate inline; overall_status healthy/wedged/broken; JSON carries overall_status; test_doctor_gate.py; 864 pass |
+| T-108 | 🟢 done | 2026-06-09 | 1d1bb47 | REQ-GATESTUB-001 fail-loud: missing script → inconclusive + blocker-promoted + exit2; doctor/status banner; stop-reflect parses gate JSON regardless of exit; test_gatestub.py; full-pipeline xfail until M4; 866 pass |
+| T-109 | 🟢 done | 2026-06-09 | 220a320 | 5 req+spec scripts: check_srs_acceptance, traceability-check, spec-coverage, check_dag_completeness, check_dag_completion; test_gate_scripts_req_spec.py; 883 pass |
+| T-110 | 🟢 done | 2026-06-09 | 2d22e21 | 5 build+eval scripts: token-audit, check_coverage, check_todos, check_progress_sync, check_nfr_coverage; test_gate_scripts_build_eval.py; 901 pass |
+| T-111 | 🟢 done | 2026-06-09 | d1541b4 | 5 release+health scripts: check_open_bugs, check_health, check_hotfix_tests, check_git_tag; some_check.py = doc-example only (justified); 917 pass |
+| T-112 | 🟢 done | 2026-06-09 | 387192f (+T-125 fixtures) | AC-GATESTUB-001b audit green; traceability all argv modes; heading-based task detection. Fixture harmonization landed in T-125 → full-pipeline xfail removed, passes 12/12 |
+| T-113 | 🟢 done | 2026-06-09 | f049195 | REQ-EXTRACT-CWD-001: extract-lessons.py --cwd derives input/output; explicit overrides; test_extract_lessons_cwd.py; 923 pass |
+| T-114 | 🟢 done | 2026-06-09 | feat/t-114-lesson-signals | REQ-LESSON-SOURCES-001: _signal_producers.py (5 producers reading .forge/errors.log); _state_read.log_event sink; pre-tool-write logs violations, post-tool-use logs heredoc bypass, stop-reflect logs gate_outcome, session-end runs producers + materializes via extract/sync; test_lesson_signals.py (12); 942 pass |
+| T-115 | 🟢 done | 2026-06-09 | 7aeed8a | REQ-LESSON-SOURCES-001 EF-026: promote freq≥2 gate + 30-day TTL recall in session-start; is_stale(); test_promote_ttl.py + isolation guard; 930 pass |
+| T-116 | 🟢 done | 2026-06-09 | d40b5a4 | REQ-BUILDBATCH-001: build-batch.py (ordered tasks, --resume, large-batch warn); forge-build Milestone Batch Mode; test_build_batch.py; 950 pass |
+| T-117 | 🟢 done | 2026-06-09 | cb9f185 | REQ-WHYCI-001: why.py _GATE_PATTERN IGNORECASE + target.upper(); test_why additions; 953 pass |
+| T-118 | 🟢 done | 2026-06-09 | a58cb12 | REQ-SESSIONLOG-001: session-end appends .forge/session.jsonl (commands/tokens/reflection_ref, PII-free, versioned); test_session_log.py; 957 pass |
+| T-119 | 🟢 done | 2026-06-09 | a24a7b8 | REQ-STAGEREFLECT-001: stage-reflect.py rollup → pipeline/0X/reflection.md; stop-reflect spawns on advance; test_stage_reflect.py; 961 pass |
+| T-120 | 🟢 done | 2026-06-09 | e3b675b | REQ-PATTERN-001: schema_version on patterns; references/pattern-schema.md; test_pattern_bus.py (schema-valid + 3-use proposal); 963 pass |
+| T-121 | 🟢 done | 2026-06-09 | a86445d | REQ-WEBSEARCH-001: spec-writer gains WebSearch; cite-or-skip rule on 4 research/spec agents; planner excluded; test_agent_tools.py; 972 pass |
+| T-122 | 🟢 done | 2026-06-09 | 2ce8b9c | AC-INTERACTIVE-001a: REQ-INTERACTIVE-001 → CLARIFY/CONFIRM/NARRATE-001 (v0.1.6); test_interactive_decomposition.py |
+| T-123 | 🟢 done | 2026-06-09 | c971d32 | REQ-LARGEDOC-001: large-doc-layout.md + read-doc.py resolver (single/multi-file); forge-spec uses it; test_large_doc.py |
+| T-124 | 🟢 done | 2026-06-09 | aa9183a | REQ-DOCS-001 + REQ-FEEDBACK-001: third-party-hook troubleshooting + README entry + issue template; test_docs_troubleshooting.py |
+| T-125 | 🟢 done | 2026-06-09 | (this commit) | Release: CHANGELOG [0.1.5] + version bump 0.1.5; sample-todo-api fixture harmonization → full-pipeline passes 12/12, xfail removed; 986 pass |
 
 ## Task Status
 

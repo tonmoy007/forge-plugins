@@ -7,6 +7,140 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Planned
+- The three interactive REQs (CLARIFY / CONFIRM / NARRATE-001) implementation — v0.1.6
+- Claude Code marketplace publication (pending marketplace availability)
+- CI/CD workflow for automated testing on pull requests
+- Additional project-type profiles (data-contract, mobile, monorepo)
+
+---
+
+## [0.1.5] — 2026-06-09
+
+Bug-fix-heavy release driven by two on-project testers (EF-001…027). Theme: sand
+off the v0.1.3 sharp edges and kill the **surface-healthy / substance-inert**
+antipattern family at every layer (state, hook, doctor, gate-config, lesson-store),
+plus small UX nudges. 25 tasks across 7 milestones; full unit + integration suite
+green and the Forge-on-Forge pipeline passes its own gates.
+
+> **Version history note**: there is no `0.1.4` tag. v0.1.4's scope (the dogfood
+> ceremony) was **amended, not executed** — see `build/01-srs/srs-v0.1.4.md` §9
+> Amendment — once two real testers existed. v0.1.5 supersedes it directly from
+> v0.1.3.1.
+
+### Fixed
+- `tests/unit/test_force_advance.py` — replaced 4 `import frontmatter` calls with
+  `_state_lib.read_state()` / `_state_lib._split_frontmatter()`. No longer requires
+  `python-frontmatter` to run tests (EF-021).
+- `hooks/post-tool-use.py` — added `isinstance` guard for string `tool_input` / `tool_response`
+  payloads from Bash/Read events. Hook no longer crashes on non-Write tool events (EF-022).
+- `hooks/pre-tool-write.py` — added `isinstance` guard for string `tool_input` payloads
+  from inline Write events (EF-023).
+- **Stage path collision (EF-005, REQ-PATHS-001, T-102)** — stage skills and agent
+  personas wrote/read artifacts at directories and filenames the gates never checked,
+  silently wedging stages 4, 8, 9, 10, and 11. Canonicalized every stage path to the
+  single source of truth (`references/stage-order.md` + `gate-criteria.md`):
+  `04-technical-spec/`→`04-spec/`, `08-deployment/`→`08-deploy/`,
+  `09-monitoring/`→`09-monitor/`, `11-resolution/`→`11-resolve/`;
+  `deployment-plan.md`→`deploy-plan.md`, `slo-definition.md`→`observability.md`,
+  `resolution-log.md`→`hotfixes.md`, `triage-report.md`→`triage.md`. `/forge:feedback`
+  now also writes `feedback-log.md` and `/forge:resolve` now also writes
+  `backlog-updates.md` (both are gate blockers that were never produced).
+  `tests/unit/test_canonical_paths.py` guards against re-drift.
+
+  > **Migration note**: projects created with v0.1.3.x may have artifacts under the
+  > old directories (`pipeline/04-technical-spec/`, `08-deployment/`, `09-monitoring/`,
+  > `11-resolution/`) or old filenames. Move them to the canonical names above so the
+  > gate checks find them; otherwise the affected stage gate will report the artifact
+  > missing.
+- **Wrong / dead next-step hints (REQ-NEXTHINT-001, T-103)** — every stage skill
+  hardcoded its `## Next Step` hint; two named commands that don't exist:
+  `/forge:srs` pointed at `/forge:ux` and `/forge:product` pointed at
+  `/forge:architecture` (canonical commands are `/forge:product` and `/forge:arch`).
+  After `01-srs` the hint now correctly names **product/UX**, not architecture.
+  Added a `next-hint` subcommand to `scripts/state-manager.py` that reads the
+  canonical hint from `references/stage-order.md`; all 12 stage skills now invoke
+  it instead of embedding a literal string. Also corrected the `forge-status`
+  stage→command table (stage 2/3 named the same dead commands).
+  `tests/unit/test_next_hint.py` enumerates all 12 transitions and guards against
+  re-drift.
+
+### Added
+- Comprehensive external test findings to `build/06-evaluation/v0.1.3.1-early-feedback.md`:
+  7 new entries (EF-021 through EF-027) covering 3 hotfixes and 4 fix-v0.1.5 items.
+
+### Changed
+- `build/06-evaluation/v0.1.3.1-early-feedback.md` — tally updated from 20 → 27 total
+  findings across all buckets.
+
+### Added — state machine & entry gates (M2)
+- **Stage bounds + cycle-wrap (REQ-PIPEBOUNDS-001, T-104)** —
+  `_state_lib.advance_stage` rejects out-of-range jumps and wraps past stage 12 to
+  `(cycle+1, stage 0)`; `set current_stage` to `-1/99/13` is rejected, never
+  persisted. (EF-024)
+- **Pre-flight entry gates for stages 2–11 (REQ-GATE-ENTRY-001, T-105)** — each
+  stage refuses to start when its prior-stage artifact is missing
+  (`state-manager.py preflight`); multi-stage skips require `/forge:force-advance`.
+
+### Added — fail-loud surfacing (M3)
+- **State-read failures surface (REQ-SILENTSTATE-001, T-106)** — hooks stop
+  swallowing `read_state` errors; visible warning, `inconclusive` gate output,
+  `/forge:doctor` callout, and a session-end footer. (EF-007)
+- **Doctor runs the current-stage gate inline (REQ-DOCTOR-001, T-107)** — top-line
+  status is `healthy` / `wedged` / `broken`; doctor can't contradict status. (EF-017)
+- **check-gate fails loud on missing scripts (REQ-GATESTUB-001, T-108)** — a
+  criterion pointing at a missing script is `inconclusive`, promoted to blocker,
+  and exits non-zero; doctor/status show an "N criteria unimplemented" banner. (EF-019)
+
+### Added — gate scripts (M4)
+- **All 15 gate scripts implemented (REQ-GATESTUB-001, T-109–T-111)**:
+  `check_srs_acceptance`, `traceability-check`, `spec-coverage`,
+  `check_dag_completeness`, `check_dag_completion`, `token-audit`, `check_coverage`,
+  `check_todos`, `check_progress_sync`, `check_nfr_coverage`, `check_open_bugs`,
+  `check_health`, `check_hotfix_tests`, `check_git_tag`. `some_check.py` is a
+  doc-only format example (not a real criterion).
+- **Gate-criteria audit (T-112)** — `test_gate_criteria_audit.py` fails if any
+  `script_returns_zero` criterion references a missing script.
+
+### Added — lesson capture (M5)
+- **`extract-lessons.py --cwd` (REQ-EXTRACT-CWD-001, T-113)** — derives input/output
+  from `--cwd`. (EF-027)
+- **Implicit lesson-signal producers (REQ-LESSON-SOURCES-001, T-114)** — five
+  producers turn hook-error clusters, repeated design violations, heredoc bypass,
+  gate pass→wedge, and state-read regressions into lessons automatically. (EF-018)
+- **Global-lessons TTL + promotion gate (REQ-LESSON-SOURCES-001 / EF-026, T-115)** —
+  promote only at frequency ≥ 2; stale (> 30-day) global lessons decay out of recall.
+
+### Added — UX nudges (M6)
+- **`/forge:build --milestone N` (REQ-BUILDBATCH-001, T-116)** — milestone-scoped
+  batch builds with per-task commits, pause-on-failure, and `--resume`. (EF-020)
+- **Case-insensitive `/forge:why` gate-ID lookup (REQ-WHYCI-001, T-117)**. (EF-025)
+- **`session.jsonl` enrichment (REQ-SESSIONLOG-001, T-118)** — versioned, PII-free
+  rows with commands, tokens, and `reflection_ref`.
+- **Per-stage reflection rollup (REQ-STAGEREFLECT-001, T-119)** —
+  `pipeline/0X-stage/reflection.md` on stage exit.
+- **Pattern-bus schema (REQ-PATTERN-001, T-120)** — versioned `patterns.jsonl` +
+  `references/pattern-schema.md`. (EF-008)
+- **WebSearch for research/spec agents (REQ-WEBSEARCH-001, T-121)** — cite-or-skip
+  rule; planner excluded.
+
+### Added — conventions & docs (M7)
+- **REQ-INTERACTIVE-001 decomposed (T-122)** into CLARIFY / CONFIRM / NARRATE-001
+  (scheduled for v0.1.6). (EF-013)
+- **Large-document split convention (REQ-LARGEDOC-001, T-123)** —
+  `references/large-doc-layout.md` + `scripts/read-doc.py` resolver. (EF-006)
+- **Third-party-hook troubleshooting (REQ-DOCS-001, T-124)** +
+  `.github/ISSUE_TEMPLATE/forge-feedback.md` (REQ-FEEDBACK-001). (EF-003)
+
+### Changed — fixtures
+- Harmonized the `sample-todo-api` fixture IDs (eval-report `REQ-F`/`REQ-NF` → canonical
+  `REQ`/`NFR`; stray `REQ-NF-003` in architecture; added a stage-9 `health-report.md`)
+  so the Forge-on-Forge `full-pipeline` passes all 12 gates.
+
+---
+
 ## [0.1.3.1] — 2026-05-24
 
 Hotfix release. Removes the runtime dependency on the `python-frontmatter` PyPI
@@ -35,6 +169,8 @@ runtime dep checked by `/forge:doctor`.
   in every `state-manager.py` invocation (SessionStart, UserPromptSubmit, Stop hooks,
   and `/forge:init` post-setup). v0.1.3.1 makes a clean install work end-to-end with
   only PyYAML installed.
+
+---
 
 ---
 
@@ -102,6 +238,8 @@ never break the user's Claude Code session.
 
 ---
 
+---
+
 ## [0.1.2] — 2026-05-14
 
 Patch release: skill-miner noise filter and `--cwd` positional fix for AI-callable CLIs.
@@ -124,6 +262,8 @@ Patch release: skill-miner noise filter and `--cwd` positional fix for AI-callab
 
 ---
 
+---
+
 ## [0.1.1] — 2026-05-14
 
 Patch release: corrected plugin manifest, added marketplace support, updated install docs.
@@ -142,6 +282,8 @@ Patch release: corrected plugin manifest, added marketplace support, updated ins
 ### Removed
 - `docs/superpowers/specs/2026-05-11-extract-lessons-design.md` — vendored Superpowers spec
   removed; plugin now uses the installed Superpowers plugin directly
+
+---
 
 ---
 
@@ -207,33 +349,3 @@ auto-skill creation — validated end-to-end on the sample Todo API project (532
 532 unit + integration tests. Coverage spans all hooks, scripts, and integration paths.
 
 ---
-
-## [Unreleased]
-
-### Fixed
-- `tests/unit/test_force_advance.py` — replaced 4 `import frontmatter` calls with
-  `_state_lib.read_state()` / `_state_lib._split_frontmatter()`. No longer requires
-  `python-frontmatter` to run tests (EF-021).
-- `hooks/post-tool-use.py` — added `isinstance` guard for string `tool_input` / `tool_response`
-  payloads from Bash/Read events. Hook no longer crashes on non-Write tool events (EF-022).
-- `hooks/pre-tool-write.py` — added `isinstance` guard for string `tool_input` payloads
-  from inline Write events (EF-023).
-
-### Added
-- Comprehensive external test findings to `build/06-evaluation/v0.1.3.1-early-feedback.md`:
-  7 new entries (EF-021 through EF-027) covering 3 hotfixes and 4 fix-v0.1.5 items.
-
-### Changed
-- `build/06-evaluation/v0.1.3.1-early-feedback.md` — tally updated from 20 → 27 total
-  findings across all buckets.
-
-### Planned (v0.1.5 scope)
-- Stage boundary enforcement in `_state_lib.advance_stage()` — cap at [0, 12],
-  cycle wrapping after Release (EF-024)
-- Case-insensitive gate ID lookup in `scripts/why.py` (EF-025)
-- Global lessons TTL/expiry in `scripts/promote-lessons.py` (EF-026)
-- `--cwd` flag support for `scripts/extract-lessons.py` (EF-027)
-
-- Claude Code marketplace publication (pending marketplace availability)
-- CI/CD workflow for automated testing on pull requests
-- Additional project-type profiles (data-contract, mobile, monorepo)

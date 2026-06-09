@@ -354,7 +354,9 @@ def _render_current_blockers(a: dict) -> str:
 # ---------- driver ----------
 
 _STAGE_PATTERN = re.compile(r"^(?:stage-)?([1-9]|1[0-2])$", re.IGNORECASE)
-_GATE_PATTERN = re.compile(r"^G\d+")
+# REQ-WHYCI-001: gate IDs are matched case-insensitively (sibling _STAGE_PATTERN
+# already is); the target is upper-cased before the gate-criteria lookup.
+_GATE_PATTERN = re.compile(r"^G\d+", re.IGNORECASE)
 
 
 def _classify(target: str) -> str:
@@ -394,7 +396,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         target = args.target.strip()
         kind = _classify(target)
         if kind == "gate":
-            answer = _explain_gate(target, plugin_dir)
+            answer = _explain_gate(target.upper(), plugin_dir)  # REQ-WHYCI-001
         elif kind == "stage":
             m = _STAGE_PATTERN.match(target)
             stage_num = int(m.group(1)) if m else None

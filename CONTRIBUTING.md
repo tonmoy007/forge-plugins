@@ -44,7 +44,10 @@ New hooks must be added to the `hooks` array in `plugin.json`.
 
 ## Development Workflow
 
-1. Work from `develop`, not `main`.
+1. Branch off `main` (it's the stable base). Name the branch for what you're
+   building, `<type>/<short-description>` — e.g. `fix/login-redirect-loop`,
+   `feat/batch-inference`, `docs/contributing-workflow`. Do not commit directly
+   to `main` or `develop`.
 2. Pick the next task from `build/04-plan/task-dag.md`.
 3. Read (don't guess) every file before editing it.
 4. Add or update tests for every code change.
@@ -133,8 +136,26 @@ Ref: T-XXX
 
 ## Pull Requests
 
+- Branch from `main`, named for the change (`<type>/<short-description>`).
 - One PR per task or logical milestone.
 - PR description references T-IDs and REQ-IDs.
 - All tests must pass; `validate-plugin.py` must exit 0.
 - Update `CHANGELOG.md` for any user-visible change.
-- Target `develop`; `develop → main` merges require a passing e2e test.
+- **Target `develop`, not `main`.** Maintainers merge approved PRs into
+  `develop`, test there, and then merge `develop → main` once green.
+
+## Branching & Release Flow
+
+```
+main ──────●────────────────────────────●──────▶   (stable; tagged releases)
+            \                           ↗
+             └─ feat/your-change ─▶ PR ─┘ develop  (integration + testing)
+```
+
+1. **Branch from `main`** — the stable base — with a descriptive name.
+2. **Open the PR against `develop`.** That's where integration testing happens.
+3. **Maintainers test on `develop`**, then merge `develop → main` when it's green.
+4. **Releases come from `main`**, cut whenever the version is bumped: update
+   `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` to the new
+   `X.Y.Z`, add the matching `## [X.Y.Z]` entry to `CHANGELOG.md`, then tag
+   `vX.Y.Z` on `main`. Versioning follows SemVer.

@@ -88,7 +88,7 @@ class TestAdvanceCommand:
 
     def test_to_flag_jumps_to_stage(self, tmp_path):
         _make_state(tmp_path)
-        r = run(["--cwd", str(tmp_path), "advance", "--to", "6"])
+        r = run(["--cwd", str(tmp_path), "advance", "--to", "6", "--force"])
         assert r.returncode == 0
         data = json.loads(r.stdout)
         assert data["current_stage"] == 6
@@ -220,7 +220,7 @@ class TestNoFrontmatterDependency:
     def test_advance_works_without_python_frontmatter(self, tmp_path):
         _make_state(tmp_path)
         shim = self._shim_dir(tmp_path)
-        r = self._run_with_shim(["--cwd", str(tmp_path), "advance", "--to", "4"], shim)
+        r = self._run_with_shim(["--cwd", str(tmp_path), "advance", "--to", "4", "--force"], shim)
         assert r.returncode == 0, f"stderr: {r.stderr}"
         data = json.loads(r.stdout)
         assert data["current_stage"] == 4
@@ -243,7 +243,7 @@ class TestCwdPositioning:
 
     def test_cwd_after_subcommand_with_its_own_flag(self, tmp_path):
         _make_state(tmp_path)
-        r = run(["advance", "--to", "3", "--cwd", str(tmp_path)])
+        r = run(["advance", "--to", "3", "--force", "--cwd", str(tmp_path)])
         assert r.returncode == 0
         data = json.loads(r.stdout)
         assert data["current_stage"] == 3

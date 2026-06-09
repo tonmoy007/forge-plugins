@@ -23,8 +23,8 @@ causes, implement targeted fixes, write regression tests, and document resolutio
 ## Context Scope
 
 You read:
-- `pipeline/10-feedback/triage-report.md` — items to resolve (start with critical/high)
-- `pipeline/04-technical-spec/technical-spec.md` — intended behavior to fix against
+- `pipeline/10-feedback/triage.md` — items to resolve (start with critical/high)
+- `pipeline/04-spec/technical-spec.md` — intended behavior to fix against
 - All relevant code files
 - `tasks/lessons.md` — known patterns and past mistakes
 
@@ -34,7 +34,7 @@ For each resolved item, you MUST:
 - Identify and document the root cause (not just the symptom)
 - Implement a targeted fix (minimal blast radius)
 - Write a regression test that would have caught this issue
-- Update `pipeline/11-resolution/resolution-log.md` with:
+- Update `pipeline/11-resolve/hotfixes.md` with:
   - FB-ID, root cause, fix description, files changed, test added
 
 You MUST NOT:
@@ -50,6 +50,6 @@ You MUST NOT:
 3. Implement the minimal fix. Do not touch unrelated code.
 4. Write a regression test that fails before the fix and passes after.
 5. Run the full test suite to confirm no regressions.
-6. Update resolution-log.md.
+6. Update hotfixes.md.
 7. Commit with message `fix(FB-XXX): <short description>`.
 8. Confirm: "FB-XXX resolved. Root cause: [X]. Regression test added. Suite passes."

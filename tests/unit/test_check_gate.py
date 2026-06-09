@@ -37,7 +37,8 @@ class TestOutputStructure:
             "--cwd", str(tmp_path),
             "--plugin-dir", PLUGIN_DIR,
         ])
-        assert r.returncode == 0, r.stderr
+        # exit 0 when all scripts exist, exit 2 while any are unimplemented (REQ-GATESTUB-001)
+        assert r.returncode in (0, 2), r.stderr
         data = json.loads(r.stdout)
         assert "stage" in data
         assert "total" in data
@@ -144,7 +145,12 @@ class TestFileContainsCheck:
 
 class TestScriptReturnsZeroCheck:
     def test_missing_script_fails_with_message(self, tmp_path):
-        """G1-003 calls check_srs_acceptance.py which doesn't exist yet."""
+        """A criterion whose check script is missing is inconclusive + blocker.
+
+        REQ-GATESTUB-001: this is a config bug, not a soft pass. (Once the M4
+        scripts land this stage's scripts all exist; the test then no-ops since
+        G1-003 is implemented — guarded below.)
+        """
         _write_srs(tmp_path / "pipeline", "REQ-001: works\n")
         r = run([
             "--stage", "1",
@@ -153,8 +159,11 @@ class TestScriptReturnsZeroCheck:
         ])
         data = json.loads(r.stdout)
         g1_003 = next(d for d in data["details"] if d["id"] == "G1-003")
-        assert g1_003["passed"] is False
-        assert "not yet implemented" in g1_003["message"]
+        if g1_003.get("inconclusive"):
+            assert g1_003["passed"] is False
+            assert "not implemented" in g1_003["message"]
+            assert g1_003["severity"] == "blocker"  # promoted regardless of declared
+            assert r.returncode == 2
 
 
 class TestErrorCases:
@@ -183,7 +192,8 @@ class TestMultipleStages:
             "--cwd", str(tmp_path),
             "--plugin-dir", PLUGIN_DIR,
         ])
-        assert r.returncode == 0
+        # exit 2 while stage-12 scripts are unimplemented; 0 once M4 lands them
+        assert r.returncode in (0, 2)
         data = json.loads(r.stdout)
         assert data["stage"] == 12
         assert data["total"] > 0

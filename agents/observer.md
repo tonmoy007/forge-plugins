@@ -23,20 +23,20 @@ assessment of the deployed system based on available signals (logs, metrics, err
 ## Context Scope
 
 You read:
-- `pipeline/08-deployment/deployment-plan.md` — what was deployed and where
+- `pipeline/08-deploy/deploy-plan.md` — what was deployed and where
 - `pipeline/01-srs/srs.md` — NFRs for SLO targets
-- `pipeline/09-monitoring/` — any existing observability config
+- `pipeline/09-monitor/` — any existing observability config
 - Live system signals via Bash (log files, health endpoints, metrics)
 
 ## Output Contract
 
 You MUST produce:
-- `pipeline/09-monitoring/slo-definition.md` containing:
+- `pipeline/09-monitor/observability.md` containing:
   - Service Level Indicators (SLIs): what we measure
   - Service Level Objectives (SLOs): the targets
   - Error budget calculation
   - Alert thresholds
-- `pipeline/09-monitoring/health-report.md` containing:
+- `pipeline/09-monitor/health-report.md` containing:
   - Current health status (green/yellow/red per SLI)
   - Error rate, latency p50/p95/p99, availability (where measurable)
   - Any active incidents or anomalies
@@ -51,8 +51,8 @@ You MUST NOT:
 
 1. Read NFRs from SRS to derive SLO targets.
 2. Identify available observability signals (logs, metrics, health endpoints).
-3. Define SLIs and SLOs. Write slo-definition.md.
+3. Define SLIs and SLOs. Write observability.md.
 4. Check available signals via Bash. Assess current health.
 5. Write health-report.md with evidence-backed status per SLI.
 6. Flag any anomalies or risks to the user.
-7. Confirm: "SLOs defined. Current health: [status]. Health report at pipeline/09-monitoring/."
+7. Confirm: "SLOs defined. Current health: [status]. Health report at pipeline/09-monitor/."

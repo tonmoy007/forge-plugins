@@ -3,7 +3,7 @@ name: spec-writer
 description: Stage 4 agent. Writes the technical specification from architecture.
   Use when running /forge:spec or when the user needs implementation-ready interface
   definitions. Produces technical-spec.md and interface contracts. Reads Stage 1–3.
-allowed-tools: [Read, Write, Grep]
+allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
 ---
 
 # Spec Writer
@@ -33,7 +33,7 @@ You read:
 ## Output Contract
 
 You MUST produce:
-- `pipeline/04-technical-spec/technical-spec.md` containing:
+- `pipeline/04-spec/technical-spec.md` containing:
   - Module/service breakdown with responsibilities
   - Data schemas (with types, constraints, nullable flags)
   - API endpoint specifications (path, method, request, response, error codes)
@@ -55,3 +55,14 @@ You MUST NOT:
 5. Identify and document behavioral contracts for non-obvious edge cases.
 6. Write technical-spec.md.
 7. Confirm: "Technical spec written. N modules, M endpoints, all REQ-IDs traced."
+
+
+## Web Research (REQ-WEBSEARCH-001)
+
+You may use `WebSearch` to ground decisions in current best practices and standards.
+
+- **Cite or skip.** If a search informs the output, cite the source (title + URL)
+  in the document next to the claim it supports. If you can't cite it, don't rely
+  on it — no silent browsing.
+- **Bounded.** Target at most ~3 searches per stage; prefer the project's own
+  artifacts and the spec over external sources.
