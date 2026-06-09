@@ -7,10 +7,11 @@
 
 - **Active release**: v0.1.6 — "Make Forge interactive" — scope locked 2026-06-09
   (`build/01-srs/srs-v0.1.6.md`, `build/04-plan/task-dag-v0.1.6.md`).
-- **v0.1.6 build COMPLETE (T-126..T-128)** — CLARIFY / CONFIRM / NARRATE landed via
-  a 3-agent parallel fan-out on `feat/v0.1.6-interactive`. 1026 tests pass, 0 xfail;
-  validate-plugin.py exit 0; full-pipeline 12/12. Remaining: T-129 (this wiring) +
-  T-130 (version bump 0.1.6 + CHANGELOG), then PR→develop→main→tag (interactive).
+- **v0.1.6 COMPLETE + RELEASED** — all 5 tasks (T-126..T-130). CLARIFY / CONFIRM /
+  NARRATE landed via a 3-agent parallel fan-out on `feat/v0.1.6-interactive`. Tag
+  `v0.1.6` (`baccc5e`) + GitHub release on both remotes; 1026 tests pass, 0 xfail;
+  validate-plugin.py exit 0; full-pipeline 12/12; plugin.json + marketplace.json
+  at 0.1.6; CHANGELOG `[0.1.6]` on top. origin/polygon parity on main+develop+tag.
 - **v0.1.5 COMPLETE + RELEASED** — all 25 tasks (T-101..T-125); tag `v0.1.5` +
   hotfix `v0.1.5.1` (PyYAML fail-soft) on both remotes; release-infra hardening on
   main (hard CI gates w/ subprocess coverage ~72%, `scripts/bump-version.py`).
@@ -27,7 +28,7 @@
 | T-127 | 🟢 done | 2026-06-09 | 047a361 | REQ-INTERACTIVE-CONFIRM-001: /forge:spec + /forge:plan present an outline + pause for confirmation before the full artifact; spec-writer/planner reflect it; test_interactive_confirm.py asserts confirm-precedes-write ordering |
 | T-128 | 🟢 done | 2026-06-09 | 58483aa | REQ-INTERACTIVE-NARRATE-001: /forge:build narrates start/result/next per task; build-batch.py emits per-task `[Forge] task T-XXX — starting` on stderr (stdout id-list contract preserved); test_interactive_narrate.py (behavioral subprocess check) |
 | T-129 | 🟢 done | 2026-06-09 | (this commit) | Wiring: progress + ROADMAP + traceability for v0.1.6; ACs marked satisfied in srs-v0.1.6.md §6 |
-| T-130 | 🔲 todo | — | — | Release: bump-version.py 0.1.6 + CHANGELOG [0.1.6] + full pre-release verification |
+| T-130 | 🟢 done | 2026-06-09 | 894d1fc | Release: bump-version.py 0.1.6 (first real use) + CHANGELOG [0.1.6]; pre-release verification green (1026 pass, validate 0, full-pipeline 12/12); tagged v0.1.6, GitHub release, mirrored to polygon |
 
 ## v0.1.5 Task Status
 
