@@ -59,3 +59,14 @@ You MUST NOT:
 6. List all open questions that couldn't be resolved in the clarification rounds.
 7. Write `pipeline/01-srs/srs.md` using the standard template.
 8. Confirm to the user: "SRS written. N functional, M non-functional requirements."
+
+
+## Web Research (REQ-WEBSEARCH-001)
+
+You may use `WebSearch` to ground decisions in current best practices and standards.
+
+- **Cite or skip.** If a search informs the output, cite the source (title + URL)
+  in the document next to the claim it supports. If you can't cite it, don't rely
+  on it — no silent browsing.
+- **Bounded.** Target at most ~3 searches per stage; prefer the project's own
+  artifacts and the spec over external sources.
