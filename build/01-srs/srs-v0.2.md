@@ -70,8 +70,11 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
   background-agent capability and writes `.forge/capabilities.json`
   (`{"forge_background_available": bool}`). No error on machines without it.
 - **REQ-F-002 — Background adapter module.** A single `hooks/_background_agent.py`
-  wraps **every** `claude --bg` / `/bg` / `/tasks` call; no other file invokes the
-  API directly (so a Research-Preview API change touches one file).
+  wraps **every** `claude agents …` / `claude -p` call; no other file invokes the
+  background API directly (so a host-API change touches one file). *(The spike
+  corrected the surface from the draft's assumed `claude --bg`/`/bg`/`/tasks` to the
+  shipped `claude agents`; the probe half of this module is already built — see
+  `build/06-evaluation/spike-background-agents.md`.)*
 - **REQ-F-003 — Degraded no-ops.** When capability is false, every adapter call
   returns `{"status":"unavailable","reason":...}` and never raises.
 - **REQ-F-004 — Daily cost cap.** `hooks/_cost_cap.py` enforces a configurable
@@ -285,6 +288,7 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
 | OQ-005 | Exact identity of the v0.1 proposal/validator/executor boundary modules (`_proposals.py` / `_validator.py`?) the daemons must use | High |
 | OQ-006 | Brownfield: how deep does REQ inference go — headings/docstrings only, or full code analysis? Bounded by cost. | Medium |
 | OQ-007 | Duplicate/contradiction token-overlap threshold (80% assumed) | Low |
+| OQ-008 | **Headless dispatch** — can a hook spawn a *new* background agent non-interactively (`claude agents` dispatch vs. detached `claude -p`), and how is the spawned session correlated back via `--cwd`/`--json`? (Spike O-1.) | **High** |
 
 ---
 
