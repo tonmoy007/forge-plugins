@@ -336,3 +336,34 @@ class TestCLI:
         data = json.loads(out)
         assert data["kind"] == "gate"
         assert data["id"] == "G1-001"
+
+class TestCaseInsensitiveGateLookup:
+    """T-117 / REQ-WHYCI-001: gate-ID lookup is case-insensitive."""
+
+    def test_lowercase_equals_uppercase(self, tmp_path, capsys):
+        pd = _make_plugin_dir(tmp_path)
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        assert why.main(["g1-001", "--cwd", str(proj), "--plugin-dir", str(pd), "--json"]) == 0
+        lower = json.loads(capsys.readouterr().out)
+        assert why.main(["G1-001", "--cwd", str(proj), "--plugin-dir", str(pd), "--json"]) == 0
+        upper = json.loads(capsys.readouterr().out)
+
+        assert lower == upper
+        assert lower["kind"] == "gate"
+        assert lower["id"] == "G1-001"
+
+    def test_mixed_case_resolves(self, tmp_path, capsys):
+        pd = _make_plugin_dir(tmp_path)
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        assert why.main(["g1-001", "--cwd", str(proj), "--plugin-dir", str(pd)]) == 0
+
+    def test_unknown_gate_still_not_found_any_case(self, tmp_path, capsys):
+        pd = _make_plugin_dir(tmp_path)
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        # case-normalization must not mask a genuine miss
+        assert why.main(["g9-999", "--cwd", str(proj), "--plugin-dir", str(pd)]) == 1
+        assert why.main(["G9-999", "--cwd", str(proj), "--plugin-dir", str(pd)]) == 1
