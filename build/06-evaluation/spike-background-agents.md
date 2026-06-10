@@ -142,3 +142,28 @@ sit safely inside P0.
 - **New design rule → REQ + ADR:** daemons reuse one session (`--resume`) to avoid
   the ~$0.05 per-fresh-dispatch cache-creation tax (≈10× cost). Reflected in
   REQ-F-004/006/020 and ADR-005/007.
+
+---
+
+## O-2 completion-rate — measurement harness (T-139, shipped 2026-06-10)
+
+The cost half of O-2 is settled. The **completion-rate** half (≥90% over ≥5 real
+sessions) is, by construction, data that **accrues over real use** — it cannot be
+honestly produced in a single authoring session, so it is **instrumented now and
+left to fill in**:
+
+- `stop-reflect.py` Step 4 now offloads skill-mining to a background subagent via
+  `scripts/skill_miner_bg.py` **when** `.forge/capabilities.json` reports background
+  available (else the inline deterministic `mine-skills.py` fallback; `FORGE_NO_BACKGROUND`
+  forces the fallback). Both paths are detached — the Stop hook never waits.
+- Every background run appends one marker to `.forge/skill-miner-runs.jsonl`
+  (`ts, session, status ∈ {completed,failed,skipped}, cost_usd`). `skipped` =
+  deliberate cost-cap no-op (excluded from the rate).
+- **Reader**: `skill_miner_bg.completion_stats(forge_dir)` →
+  `{n, completed, failed, skipped, completion_rate, total_cost_usd, avg_cost_usd}`.
+
+**Verdict — PENDING (accumulating).** Gate: `completion_rate ≥ 0.90` with `n ≥ 5`.
+Re-read `completion_stats` after ~5 real Forge sessions; if it clears, P1 (M2 daemons)
+unlocks. If it stalls below 0.90, ship `v0.2.0` as foundation-only (this is exactly
+the SRS §6 contingency). **No run here is fabricated** — each marker is one real
+dispatch recorded by a real session.

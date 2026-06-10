@@ -46,7 +46,7 @@
 | T-136 | 🟢 done | 2026-06-10 | (this commit) | `hooks/_cost_cap.py` — hard-prereq spend gate (ADR-007): caps from config.yaml (fail-soft), ledger `cost-ledger.jsonl` (actual_usd from API), precheck `spent+floor` vs daily/monthly, over-cap → events.jsonl skip, never raises. test_cost_cap.py (13 cases) |
 | T-137 | 🟢 done | 2026-06-10 | (this commit) | `_background_agent.dispatch()` — synchronous `claude -p --output-format json [--resume]`, captures session_id/total_cost_usd/usage/result, cost-gated via _cost_cap (precheck→skip event on over-cap; record actual after), never raises. +7 dispatch tests (ok/resume-flags/over-cap/missing-bin/nonzero/non-json/timeout) |
 | T-138 | 🟢 done | 2026-06-10 | (this commit) | Probe wired into session-start: cached `.forge/capabilities.json` + **detached refresh** (TTL 24h; claude absent → sync `available:false`; present → fire-and-forget Popen — never blocks, NF-004). `FORGE_NO_BACKGROUND=1` kill switch. Unread-findings note (dormant till M2). _background_agent gains write/read_capabilities + CLI entry. +7 tests |
-| T-139 | 🔲 todo | — | — | Spike O-2 completion-rate measurement (the P1 gate) |
+| T-139 | 🟡 code shipped / gate PENDING | 2026-06-10 | (this commit) | `scripts/skill_miner_bg.py` — capability-gated background skill-miner (session reuse, cost-gated) + completion/cost markers in `.forge/skill-miner-runs.jsonl`; `completion_stats()` reader. stop-reflect Step 4 branches bg↔inline. **Gate (≥90%/≥5 sessions) accrues over real use — not fabricated.** +7 tests |
 | T-140 | 🔲 todo | — | — | `/forge:set-profile` runtime switch |
 | T-141 | 🔲 todo | — | — | Release v0.2.0 |
 
