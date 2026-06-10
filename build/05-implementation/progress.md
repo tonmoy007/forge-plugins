@@ -59,7 +59,7 @@
 |------|--------|-----------|--------|-------|
 | T-148 | 🟢 done | 2026-06-10 | 07263a2 | `scripts/_orchestrate.py` — deterministic bounded fan-out: index-ordered (parallel==sequential, NF-009), delegates each call to `_background_agent.dispatch` (NF-010), parse+validate+retry-once+drop-with-reason, max_parallel/max_total bounds, dedup. ADR-006 corrected (script can't drive in-session Agent tool → delegates to claude -p). +8 tests |
 | T-149 | 🟢 done | 2026-06-10 | (this commit) | `/forge:review` — `scripts/review_synthesize.py` fans 4 dimensions (correctness/security/performance/conventions) out via `_orchestrate.fan_out`, validates each reviewer's structured findings, drops malformed dims without sinking the review, synthesizes a deduped severity-sorted Markdown report. `skills/forge-review/SKILL.md`. First E2E consumer of T-148. +5 tests |
-| T-150 | 🔲 todo | — | — | `/forge:adopt` brownfield onboarding (EF-014) |
+| T-150 | 🟢 done | 2026-06-10 | (this commit) | `/forge:adopt` brownfield onboarding (EF-014) — `scripts/adopt.py`: reuse `detect()`, bounded deterministic file sampling (excludes meta dirs, prioritizes manifests; `adopt.max_files` default 40), fan out requirements+architecture extractors via `_orchestrate`, write INFERRED srs.md/architecture.md drafts (confidence + provenance) + seeded state.md (Stage 1). **Read-only to user source** (only pipeline/+.forge/), `--dry-run` (no spend), refuses if already initialized, tolerates dropped aspects. `skills/forge-adopt/SKILL.md`. +7 tests |
 | T-151 | 🔲 todo | — | — | `/forge:why` LLM fallback |
 | T-152 | 🔲 todo | — | — | Release v0.2.2 |
 
