@@ -149,7 +149,9 @@ producing all 12 stage artifacts with traceability intact. ✅
 | v0.1.5 + v0.1.5.1 | 🟢 released | kill surface-healthy/substance-inert antipatterns (T-101–T-125); PyYAML fail-soft hotfix |
 | release-infra | 🟢 merged | hard CI gates w/ subprocess coverage (~72%), `scripts/bump-version.py` |
 | v0.1.6 | 🟢 released | Make Forge interactive — CLARIFY (clarify before scoping), CONFIRM (outline+pause before spec/plan), NARRATE (per-task build narration). T-126–T-130. |
-| **v0.1.7** | 🟡 in progress | **Three more project-type profiles** — monorepo (dep-graph gate), mobile (store-readiness gate), data-contract (schema-hygiene gate). Each profile + detection + a real gate. T-131–T-135. |
+| v0.1.7 | 🟢 released | **Three more project-type profiles** — monorepo (dep-graph gate), mobile (store-readiness gate), data-contract (schema-hygiene gate). Each profile + detection + a real gate. T-131–T-135. |
+| **v0.2.0** | 🟢 released | **v0.2 foundation (P0)** — cost cap + ledger, background-agent dispatch (`claude -p`, session reuse), capability probe wiring, background skill-miner instrumentation, `/forge:set-profile`. Spike PASS; O-2 completion-rate accruing. T-136–T-141. |
+| v0.2.1–v0.2.3 | ⚪ planned | Daemons (spike-gated), orchestration + brownfield, sprint. T-142–T-156, see `build/04-plan/task-dag-v0.2.md`. |
 
 ---
 
