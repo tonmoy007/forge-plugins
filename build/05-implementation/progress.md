@@ -53,7 +53,10 @@
 | T-140 | 🟢 done | 2026-06-10 | (this commit) | `/forge:set-profile <type>` — `scripts/set-profile.py` validates against the 10 `## Profile:` names, updates project_type in state.md atomically (read-modify-write via _state_lib), `--dry-run` preview; `skills/forge-set-profile/SKILL.md`. +6 tests |
 | T-141 | 🟢 done | 2026-06-10 | (this commit) | Release v0.2.0 — `bump-version.py 0.2.0`, CHANGELOG `[0.2.0]` (P0 foundation + spike PASS); pre-release green (1124 pass, validate 0, full-pipeline 12/12, manifests 0.2.0). PR→develop→main→tag→mirror follows. |
 
-### M3 — Orchestration + brownfield (v0.2.2, NOT spike-gated) — branch `feat/v0.2.2-orchestration`
+### M3 — Orchestration + brownfield (released as **v0.2.1**, NOT spike-gated) — branch `feat/v0.2.2-orchestration`
+
+> Shipped as v0.2.1 (contiguous) ahead of the spike-gated daemons (originally planned
+> v0.2.1); daemons land in a later version once T-139's O-2 gate clears.
 
 | Task | Status | Completed | Commit | Notes |
 |------|--------|-----------|--------|-------|
@@ -61,7 +64,7 @@
 | T-149 | 🟢 done | 2026-06-10 | (this commit) | `/forge:review` — `scripts/review_synthesize.py` fans 4 dimensions (correctness/security/performance/conventions) out via `_orchestrate.fan_out`, validates each reviewer's structured findings, drops malformed dims without sinking the review, synthesizes a deduped severity-sorted Markdown report. `skills/forge-review/SKILL.md`. First E2E consumer of T-148. +5 tests |
 | T-150 | 🟢 done | 2026-06-10 | (this commit) | `/forge:adopt` brownfield onboarding (EF-014) — `scripts/adopt.py`: reuse `detect()`, bounded deterministic file sampling (excludes meta dirs, prioritizes manifests; `adopt.max_files` default 40), fan out requirements+architecture extractors via `_orchestrate`, write INFERRED srs.md/architecture.md drafts (confidence + provenance) + seeded state.md (Stage 1). **Read-only to user source** (only pipeline/+.forge/), `--dry-run` (no spend), refuses if already initialized, tolerates dropped aspects. `skills/forge-adopt/SKILL.md`. +7 tests |
 | T-151 | 🟢 done | 2026-06-10 | (this commit) | `/forge:why` LLM fallback (REQ-F-050) — on a deterministic miss, if background capability available + not opted out, dispatch one orchestrated explainer (`_orchestrate`, cost-gated) and return a clearly-marked best-effort answer (exit 0); unchanged `not found`/exit 1 otherwise. `_should_try_fallback` + `_llm_fallback` in why.py; skill note. +3 tests |
-| T-152 | 🔲 todo | — | — | Release v0.2.2 |
+| T-152 | 🟢 done | 2026-06-10 | (this commit) | Release **v0.2.1** (M3, contiguous) — `bump-version.py 0.2.1`, CHANGELOG `[0.2.1]`, ROADMAP re-map (daemons deferred). Pre-release green. PR→develop→main→tag→mirror. |
 
 ## v0.1.7 Task Status
 
