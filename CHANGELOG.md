@@ -14,6 +14,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] — 2026-06-10
+
+**Orchestration + brownfield (v0.2 Milestone 3).** In-session, deterministic
+multi-agent fan-out and the features it unlocks. Not spike-gated — it builds only on
+the v0.2.0 cost cap, so it ships ahead of the background daemons (which remain gated
+on the O-2 completion-rate and will land in a later release).
+
+### Added
+- **Orchestration primitive** (`scripts/_orchestrate.py`, T-148): fan a work-list out
+  across bounded parallel agent dispatches and return results **ordered by input
+  index**, so the parallel and sequential paths are byte-identical (determinism is a
+  test invariant). Each call delegates to the single `_background_agent.dispatch`
+  wrapper (cost-gated); malformed output is retried once then dropped with a logged
+  reason — never silently truncated. Bounded by `max_parallel` (4) + `max_total` (64),
+  with key-based dedup.
+- **`/forge:review`** (`scripts/review_synthesize.py`, T-149): the first consumer —
+  fans four reviewers (correctness, security, performance, conventions) out in
+  parallel over a diff/file and synthesizes one deduplicated, severity-sorted report.
+  A malformed dimension is dropped without sinking the review.
+- **`/forge:adopt`** (`scripts/adopt.py`, T-150) — **brownfield onboarding** (closes
+  tester finding EF-014): detect the project type, sample a bounded file set, fan out
+  extractors to infer SRS + architecture drafts (marked **INFERRED** with confidence +
+  provenance), seed `state.md`, and enter the pipeline at Stage 1 for confirmation.
+  Read-only to user source (writes only under `pipeline/` + `.forge/`); `--dry-run`
+  previews without spending; refuses an already-initialized project.
+- **`/forge:why` LLM fallback** (T-151): when deterministic ID lookup misses and
+  background capability is available, one orchestrated subagent offers a best-effort
+  explanation, clearly marked as non-authoritative. Behavior is unchanged without
+  capability.
+
+### Changed
+- ADR-006 corrected: a `scripts/` primitive cannot drive Claude's in-session Agent
+  tool, so the orchestration primitive delegates each call to `claude -p` (keeping a
+  single host call site). Synchronous orchestration stays decoupled from the daemon
+  spike gate.
+
+---
+
 ## [0.2.0] — 2026-06-10
 
 **v0.2 foundation — background intelligence groundwork.** The first phase of the
