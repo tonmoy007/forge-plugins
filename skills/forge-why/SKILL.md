@@ -64,6 +64,13 @@ human-readable explanation. Four input modes:
      to see what's been recorded so far"
    - For an out-of-range stage: "Stages are 1-12; you may have meant a different number"
 
+   **LLM fallback (REQ-F-050):** when the deterministic lookup misses AND background
+   capability is available (and `FORGE_NO_BACKGROUND` is unset), `why.py` automatically
+   dispatches one orchestrated subagent to offer a best-effort explanation, printed with
+   a clear "not a recognized Forge ID — best-effort inference" banner (exit 0). It is
+   cost-gated and never authoritative — present it as a guess, not a fact. With no
+   capability, behavior is unchanged (the `not found` error above, exit 1).
+
 ## Verification
 
 After running, all of these should be true:
