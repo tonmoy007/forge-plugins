@@ -53,6 +53,16 @@
 | T-140 | 🟢 done | 2026-06-10 | (this commit) | `/forge:set-profile <type>` — `scripts/set-profile.py` validates against the 10 `## Profile:` names, updates project_type in state.md atomically (read-modify-write via _state_lib), `--dry-run` preview; `skills/forge-set-profile/SKILL.md`. +6 tests |
 | T-141 | 🟢 done | 2026-06-10 | (this commit) | Release v0.2.0 — `bump-version.py 0.2.0`, CHANGELOG `[0.2.0]` (P0 foundation + spike PASS); pre-release green (1124 pass, validate 0, full-pipeline 12/12, manifests 0.2.0). PR→develop→main→tag→mirror follows. |
 
+### M3 — Orchestration + brownfield (v0.2.2, NOT spike-gated) — branch `feat/v0.2.2-orchestration`
+
+| Task | Status | Completed | Commit | Notes |
+|------|--------|-----------|--------|-------|
+| T-148 | 🟢 done | 2026-06-10 | 07263a2 | `scripts/_orchestrate.py` — deterministic bounded fan-out: index-ordered (parallel==sequential, NF-009), delegates each call to `_background_agent.dispatch` (NF-010), parse+validate+retry-once+drop-with-reason, max_parallel/max_total bounds, dedup. ADR-006 corrected (script can't drive in-session Agent tool → delegates to claude -p). +8 tests |
+| T-149 | 🟢 done | 2026-06-10 | (this commit) | `/forge:review` — `scripts/review_synthesize.py` fans 4 dimensions (correctness/security/performance/conventions) out via `_orchestrate.fan_out`, validates each reviewer's structured findings, drops malformed dims without sinking the review, synthesizes a deduped severity-sorted Markdown report. `skills/forge-review/SKILL.md`. First E2E consumer of T-148. +5 tests |
+| T-150 | 🔲 todo | — | — | `/forge:adopt` brownfield onboarding (EF-014) |
+| T-151 | 🔲 todo | — | — | `/forge:why` LLM fallback |
+| T-152 | 🔲 todo | — | — | Release v0.2.2 |
+
 ## v0.1.7 Task Status
 
 | Task | Status | Completed | Commit | Notes |
