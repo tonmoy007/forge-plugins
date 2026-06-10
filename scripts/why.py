@@ -368,6 +368,50 @@ def _classify(target: str) -> str:
     return "tag"
 
 
+def _should_try_fallback(forge_dir: Path) -> bool:
+    """True when the background capability is available and not opted out (REQ-F-050)."""
+    if os.environ.get("FORGE_NO_BACKGROUND") == "1":
+        return False
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+        import _background_agent  # noqa: PLC0415
+        caps = _background_agent.read_capabilities(Path(forge_dir)) or {}
+        return caps.get("forge_background_available") is True
+    except Exception:  # noqa: BLE001 — capability check must never break `why`
+        return False
+
+
+def _llm_fallback(target: str, *, forge_dir: Path, dispatch_fn=None) -> Optional[str]:
+    """Best-effort explanation of an unknown ID via one orchestrated subagent
+    (REQ-F-050, uses REQ-F-031). Returns clearly-marked text, or None if the agent
+    is unavailable / its output was dropped. Never raises."""
+    try:
+        import _orchestrate  # noqa: PLC0415
+
+        def _validate(d: dict) -> dict:
+            if not isinstance(d, dict) or not isinstance(d.get("explanation"), str) \
+                    or not d["explanation"].strip():
+                raise ValueError("no explanation")
+            return d
+
+        prompt = (
+            f"A user ran `/forge:why {target}` but it is not a known Forge gate ID, "
+            f"lesson tag, or stage (1-12). Briefly explain what it most likely refers to "
+            f"in a Forge SDLC pipeline, and state plainly that it is not a recognized "
+            f'Forge identifier. Reply with JSON: {{"explanation": "<2-4 sentences>"}}.'
+        )
+        fan = _orchestrate.fan_out([target], lambda _t: prompt, forge_dir=Path(forge_dir),
+                                   feature="why", validate=_validate, max_parallel=1,
+                                   dispatch_fn=dispatch_fn)
+        if not fan.results:
+            return None
+        explanation = fan.results[0]["explanation"].strip()
+        return (f"⚠️  '{target}' is not a recognized Forge ID — best-effort inference:\n\n"
+                f"{explanation}\n\n(Not authoritative — verify against references/.)")
+    except Exception:  # noqa: BLE001 — fallback is advisory; never crash `why`
+        return None
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="why.py",
@@ -405,6 +449,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             answer = _explain_lesson_tag(target, cwd)
 
     if answer is None:
+        # REQ-F-050: when deterministic lookup misses, fall back to a single
+        # orchestrated subagent — but only if background capability is available.
+        if args.target and _should_try_fallback(cwd / ".forge"):
+            inferred = _llm_fallback(args.target.strip(), forge_dir=cwd / ".forge")
+            if inferred:
+                print(inferred)
+                return 0
         msg = f"error: '{args.target}' not found "
         if args.target and _GATE_PATTERN.match(args.target.strip()):
             msg += "(no such gate criterion in references/gate-criteria.md)"

@@ -28,8 +28,15 @@ return one validated JSON object; the primitive collects them index-ordered, ded
 and returns deterministically. Parallel where the host supports agent-teams,
 identical-output sequential fallback otherwise.**
 
-- **One adapter per mechanism** (REQ-NF-010): `_orchestrate.py` is the only call site
-  for in-session fan-out, mirroring `_background_agent.py`'s discipline.
+- **One adapter per mechanism** (REQ-NF-010): a Python `scripts/` primitive cannot
+  reach Claude's in-session Agent/Task tool (that is the *model's* tool, not callable
+  from a subprocess), so `_orchestrate.py` **delegates each single agent call to
+  `_background_agent.dispatch`** (the sole `claude -p` wrapper) and layers the
+  deterministic fan-out on top. There is still exactly one place that touches the host
+  binary. *(Correction, 2026-06-10: an earlier draft of this ADR said the primitive
+  "wraps the in-session subagent mechanism" and rejected `claude -p`. That was not
+  buildable from a script; REQ-F-031 explicitly has the **script** spawn the subagents,
+  which means `claude -p`. The decision below is corrected accordingly.)*
 - **Structured-output contract**: malformed subagent output is retried at the call
   layer; on repeated failure the item drops to `null` and is `log()`ged — never
   silently truncated.
@@ -53,9 +60,13 @@ identical-output sequential fallback otherwise.**
 
 ## Alternatives considered
 
-- **Shell out to `claude -p` per item** (i.e. reuse the background adapter).
-  Rejected: couples P2 to the gated background path and to per-process startup cost;
-  in-session subagents are the right mechanism for synchronous fan-out.
+- **Drive Claude's in-session Agent tool from the script.** Not possible — that tool
+  belongs to the model loop, not to a subprocess. (This is why the original "in-session
+  subagent" framing was corrected above.)
+- **Couple to the spike gate.** Using `claude -p` does *not* re-couple P2 to the daemon
+  spike gate: that gate (O-2 completion-rate) is about *detached, fire-and-forget*
+  reliability. Orchestration is **synchronous** — it awaits and validates each result,
+  retrying on failure — so daemon reliability is irrelevant. P2 stays decoupled from P1.
 - **Free-text subagent results parsed heuristically.** Rejected: non-deterministic,
   brittle, and at odds with the existing structured-proposal discipline.
 - **Unbounded parallelism.** Rejected: cost and host limits; bounded fan-out with a
