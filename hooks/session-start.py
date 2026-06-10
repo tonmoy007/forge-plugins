@@ -23,7 +23,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import shutil
 import subprocess
+import time
 
 # v0.1.5.1: fail soft when PyYAML is missing — a hook must never crash-spam the
 # session with an import traceback (_state_lib and others require PyYAML).
@@ -43,6 +45,7 @@ sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib  # noqa: E402
 import _state_read  # noqa: E402
+import _background_agent  # noqa: E402  (capability cache — REQ-F-001)
 from _hook_runner import run_hook  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
@@ -65,6 +68,53 @@ STAGE_NAMES: dict[int, str] = {
 
 _MAX_TOKENS = 2000
 _CHARS_PER_TOKEN = 4  # rough approximation; avoids tiktoken dependency
+_CAP_TTL_SECONDS = 86400  # re-probe background capability at most once/day
+
+
+def _ensure_capabilities(cwd: Path) -> None:
+    """Keep .forge/capabilities.json fresh without blocking (REQ-F-001, NF-004).
+
+    The probe shells to `claude agents` (~0.3s) — too slow for the session-start
+    budget — so it is offloaded to a detached refresh and this hook only reads the
+    cached file. Refresh only when the cache is missing or older than the TTL.
+    Never raises (startup must not break on capability maintenance).
+    """
+    if os.environ.get("FORGE_NO_BACKGROUND") == "1":
+        return  # kill switch — no background work at all (also keeps tests hermetic)
+    forge = cwd / ".forge"
+    cap_file = forge / "capabilities.json"
+    try:
+        if cap_file.exists() and (time.time() - cap_file.stat().st_mtime) < _CAP_TTL_SECONDS:
+            return  # fresh enough
+        if shutil.which("claude") is None:
+            # No CLI: write the negative result directly — cheap, no subprocess.
+            _background_agent.write_capabilities(forge, cwd=str(cwd))
+            return
+        # CLI present: offload the slow probe; never wait (fire-and-forget).
+        subprocess.Popen(
+            [sys.executable, str(_PLUGIN_DIR / "hooks" / "_background_agent.py"),
+             "--write-capabilities", "--forge-dir", str(forge), "--cwd", str(cwd)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception:  # noqa: BLE001 — capability upkeep must never break startup
+        return
+
+
+def _unread_findings_note(cwd: Path) -> str:
+    """One-line note when the Observer (M2) has left unread findings; '' otherwise.
+
+    The findings file does not exist until the Observer daemon ships (T-142), so
+    this is dormant (and output-neutral) until then.
+    """
+    path = cwd / ".forge" / "observer-findings.jsonl"
+    try:
+        if not path.exists():
+            return ""
+        count = sum(1 for ln in path.read_text().splitlines() if ln.strip())
+        return f"\n[Forge] {count} unread Observer finding(s) — see /forge:status" if count else ""
+    except OSError:
+        return ""
 
 
 def _token_estimate(text: str) -> int:
@@ -244,6 +294,7 @@ def run(cwd: Path, session_id: str = "") -> Optional[str]:
 
     _sync_lessons_if_stale(cwd)
     _register_and_promote(cwd)
+    _ensure_capabilities(cwd)  # REQ-F-001 — refresh the cached capability probe
 
     # Lessons: up to 5 project-level + 3 global
     project_lessons = _load_lessons(
@@ -269,6 +320,9 @@ def run(cwd: Path, session_id: str = "") -> Optional[str]:
     if _token_estimate(context) > _MAX_TOKENS:
         lessons = lessons[:2]
         context = _compose(state, lessons, design, gate)
+
+    # REQ-F-012: surface unread Observer findings (dormant until M2 ships)
+    context += _unread_findings_note(cwd)
 
     return context
 

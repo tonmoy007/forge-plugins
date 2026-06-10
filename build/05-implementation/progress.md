@@ -5,8 +5,20 @@
 
 ## Current State
 
-- **Active release**: v0.1.7 — "Three more project-type profiles" — scope locked
-  2026-06-09 (`build/01-srs/srs-v0.1.7.md`, `build/04-plan/task-dag-v0.1.7.md`).
+- **Active program: v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
+  you": daemons, orchestration, brownfield, sprint. **Pipeline Stages 1–5 done**:
+  - Stage 1 SRS **reviewed** (`build/01-srs/srs-v0.2.md`, 52 FRs / 10 NFRs, phased).
+  - P0 spike **PASS** (`build/06-evaluation/spike-background-agents.md`) — **O-1
+    dispatch + O-2 cost RESOLVED** live (2026-06-10): `claude -p --output-format json`
+    headless, correlate via the returned `session_id`, **session reuse `--resume`**
+    cuts cost 10× ($0.053 fresh → $0.0046 resumed). Only **O-2 completion-rate**
+    remains (T-139, gates P1).
+  - Stage 3 architecture (`build/02-architecture/architecture-v0.2.md` + ADR-005/006/007)
+    — all OQ-001..008 resolved.
+  - Stage 5 task DAG **drafted** (`build/04-plan/task-dag-v0.2.md`, **T-136..T-156**,
+    4 milestones). **Pending sign-off before build.**
+- **Active release** (prior): v0.1.7 — "Three more project-type profiles" — scope
+  locked 2026-06-09 (`build/01-srs/srs-v0.1.7.md`, `build/04-plan/task-dag-v0.1.7.md`).
 - **v0.1.7 COMPLETE + RELEASED** — all 5 tasks (T-131..T-135). monorepo / mobile /
   data-contract profiles, each with auto-detection + a real gate
   (check_monorepo_graph.py, check_store_readiness.py, check_schema_compat.py).
@@ -23,6 +35,20 @@
 - **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.2 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.2.md` (T-136..T-156, 4 phased milestones).
+> M1 (v0.2.0) is the current build target; M2 is gated on T-139 (≥90% completion).
+
+| Task | Status | Completed | Commit | Notes |
+|------|--------|-----------|--------|-------|
+| T-136 | 🟢 done | 2026-06-10 | (this commit) | `hooks/_cost_cap.py` — hard-prereq spend gate (ADR-007): caps from config.yaml (fail-soft), ledger `cost-ledger.jsonl` (actual_usd from API), precheck `spent+floor` vs daily/monthly, over-cap → events.jsonl skip, never raises. test_cost_cap.py (13 cases) |
+| T-137 | 🟢 done | 2026-06-10 | (this commit) | `_background_agent.dispatch()` — synchronous `claude -p --output-format json [--resume]`, captures session_id/total_cost_usd/usage/result, cost-gated via _cost_cap (precheck→skip event on over-cap; record actual after), never raises. +7 dispatch tests (ok/resume-flags/over-cap/missing-bin/nonzero/non-json/timeout) |
+| T-138 | 🟢 done | 2026-06-10 | (this commit) | Probe wired into session-start: cached `.forge/capabilities.json` + **detached refresh** (TTL 24h; claude absent → sync `available:false`; present → fire-and-forget Popen — never blocks, NF-004). `FORGE_NO_BACKGROUND=1` kill switch. Unread-findings note (dormant till M2). _background_agent gains write/read_capabilities + CLI entry. +7 tests |
+| T-139 | 🟡 code shipped / gate PENDING | 2026-06-10 | (this commit) | `scripts/skill_miner_bg.py` — capability-gated background skill-miner (session reuse, cost-gated) + completion/cost markers in `.forge/skill-miner-runs.jsonl`; `completion_stats()` reader. stop-reflect Step 4 branches bg↔inline. **Gate (≥90%/≥5 sessions) accrues over real use — not fabricated.** +7 tests |
+| T-140 | 🟢 done | 2026-06-10 | (this commit) | `/forge:set-profile <type>` — `scripts/set-profile.py` validates against the 10 `## Profile:` names, updates project_type in state.md atomically (read-modify-write via _state_lib), `--dry-run` preview; `skills/forge-set-profile/SKILL.md`. +6 tests |
+| T-141 | 🟢 done | 2026-06-10 | (this commit) | Release v0.2.0 — `bump-version.py 0.2.0`, CHANGELOG `[0.2.0]` (P0 foundation + spike PASS); pre-release green (1124 pass, validate 0, full-pipeline 12/12, manifests 0.2.0). PR→develop→main→tag→mirror follows. |
 
 ## v0.1.7 Task Status
 

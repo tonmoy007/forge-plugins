@@ -45,6 +45,7 @@ import _event_log as event_log
 import _executor as executor
 import _session_meta as session_meta_mod
 import _validator as validator
+import _background_agent  # T-139 — capability-gated background skill-miner
 from _proposals import (
     GateProposal,
     LessonProposal,
@@ -400,8 +401,26 @@ def main() -> None:
                 print(f"⚠️ Stage {current_stage}: {passed}/{total} gate criteria met.")
 
     # --- Step 4: Skill Miner (async fire-and-forget) ---
+    # T-139/REQ-F-027: when background capability is available, offload mining to a
+    # background subagent via skill_miner_bg.py (instrumented for the spike's O-2
+    # completion-rate). The inline, deterministic mine-skills.py is the fallback;
+    # FORGE_NO_BACKGROUND forces it. Either path is detached — the hook never waits.
+    caps = _background_agent.read_capabilities(forge_dir) or {}
+    bg_available = caps.get("forge_background_available") is True
+    bg_script = _PLUGIN_DIR / "scripts" / "skill_miner_bg.py"
     mine_script = _PLUGIN_DIR / "scripts" / "mine-skills.py"
-    if mine_script.exists():
+    if bg_available and os.environ.get("FORGE_NO_BACKGROUND") != "1" and bg_script.exists():
+        try:
+            subprocess.Popen(
+                [sys.executable, str(bg_script), "--forge-dir", str(forge_dir),
+                 "--session", session_id, "--cwd", str(cwd)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception as e:
+            _log_error(forge_dir, "skill_mining_bg_spawn_failed", str(e))
+    elif mine_script.exists():
         try:
             subprocess.Popen(
                 [sys.executable, str(mine_script), "--session", session_id],

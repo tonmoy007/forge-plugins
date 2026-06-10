@@ -2,6 +2,8 @@
 
 > System architecture for the Forge Claude Code plugin.
 > References: `01-srs/srs.md` for requirements.
+> **v0.2 delta**: see `architecture-v0.2.md` (daemons, orchestration, brownfield,
+> sprint) — it composes with this base and resolves OQ-001…OQ-008.
 
 ---
 
@@ -398,6 +400,12 @@ ADRs live in `02-architecture/adr/`. Initial decisions:
 - ADR-002: Lessons stored as both Markdown and YAML — see `adr/002-dual-lesson-format.md`
 - ADR-003: Cross-stage agents are hook-triggered, not user-invoked — see `adr/003-cross-stage-agents.md`
 - ADR-004: Stop hook does sequential pipeline (not parallel) — see `adr/004-stop-hook-sequential.md`
+
+**v0.2 additions** (see the delta `architecture-v0.2.md`):
+
+- ADR-005: Daemons are detached one-shot dispatches, not resident processes — see `adr/005-daemon-execution-model.md`
+- ADR-006: Orchestration primitive wraps in-session subagents with a structured contract — see `adr/006-orchestration-primitive.md`
+- ADR-007: Cost cap is a hard prerequisite gate on a two-phase ledger — see `adr/007-cost-cap-hard-gate.md`
 
 ---
 
