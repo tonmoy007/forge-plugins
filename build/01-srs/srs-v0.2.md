@@ -1,6 +1,7 @@
 # SRS — Forge v0.2 (program scope, phased)
 
-> **Status**: **Draft for review** (2026-06-09). Composes with `srs.md` and the
+> **Status**: **Reviewed — ready for Stage 3** (validated 2026-06-10; P0 spike folded
+> in). Composes with `srs.md` and the
 > v0.1.x deltas. Formalized into `build/` from the abandoned dogfood draft on
 > branch `v0.2-background-daemons` (`pipeline/01-srs/srs.md`, 2026-05-14),
 > refreshed to the current baseline and broadened to the **full v0.2 backlog**.
@@ -94,8 +95,12 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
   completion rate < 90% **or** est. cost > $0.10/session typical, the gate fails
   and all [SPIKE-GATED] (P1) requirements defer. Report:
   `build/06-evaluation/spike-background-agents.md` (sessions, completion rate,
-  cost/session, verdict). **Re-run against current Claude Code — the API may have
-  changed since the 2026-05-14 draft.**
+  cost/session, verdict). **Status (2026-06-09): spike RAN — verdict PASS
+  (capability).** `claude agents --json` lists/monitors headlessly and is fully
+  scriptable from a hook; the dependency is de-risked and the adapter probe half is
+  built. Two items remain OPEN and gate P1: **O-1** headless *dispatch* (OQ-008) and
+  **O-2** the formal ≥5-session reliability + cost numbers (≥90% completion AND
+  ≤$0.10/session). O-2 is measured inside P0 once `_cost_cap.py` lands.
 
 ### 2.3 Observer daemon (P1) [SPIKE-GATED]
 
@@ -124,7 +129,9 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
   flagged for human review, **never auto-merged**.
 - **REQ-F-019 — Contradiction detection** (same trigger, conflicting rule);
   flagged, **never auto-resolved**.
-- **REQ-F-020 — Nightly schedule** via `claude --bg`; manual-only when unavailable.
+- **REQ-F-020 — Nightly schedule** via the background adapter (REQ-F-002 — `claude
+  agents` / detached `claude -p`, *not* the draft's `claude --bg`); manual-only when
+  unavailable. Dispatch mechanism resolved by OQ-008 / spike O-1.
 - **REQ-F-021 — Atomic writes** to `.forge/lessons.yaml` (temp + rename).
 
 ### 2.5 Health daemon (P1) [SPIKE-GATED]
@@ -256,7 +263,7 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
 
 | ID | Constraint |
 |----|-----------|
-| C-001 | Background-agent API is a Research Preview; P1 gated on the spike (REQ-F-028), re-validated against current Claude Code |
+| C-001 | Background agents have **shipped** (command `claude agents`, Claude Code v2.1.169 — the spike retired the "is it usable?" risk). P1 is gated not on capability *existence* but on the spike's **reliability/cost** numbers (REQ-F-028 O-2) and **headless dispatch** (OQ-008/O-1) clearing |
 | C-002 | Python 3.11+ stdlib + PyYAML only — no new pip deps |
 | C-003 | One adapter file per host mechanism (REQ-NF-010) |
 | C-004 | Cost cap (`_cost_cap.py`) is a hard prerequisite for any daemon/orchestration feature |
@@ -281,7 +288,7 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
 
 | ID | Question | Priority |
 |----|----------|----------|
-| OQ-001 | **Daemon execution model** — how does a "background daemon" actually run in a hook-based plugin? (scheduled `claude --bg`? a user-started long-lived agent? cron?) This is the central P1 architecture decision. | **High** |
+| OQ-001 | **Daemon execution model** — how does a "background daemon" actually run in a hook-based plugin, given the *shipped* surface? Candidates: a user-started long-lived `claude agents` session; per-event detached `claude -p` dispatched from a hook; or host-level cron. (The draft's `claude --bg` is dead — see spike.) This is the central P1 architecture decision; depends on OQ-008/O-1. | **High** |
 | OQ-002 | Orchestration primitive — does it wrap the Agent tool / agent-teams, or shell out? What's the structured-output contract? | **High** |
 | OQ-003 | Observer polling interval — fixed, configurable, event-driven? | High |
 | OQ-004 | Cost ledger — estimated (model-based) vs actual (API-reported) cost? | Medium |
@@ -310,6 +317,11 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
 | Non-functional | NF-001..010 | all | — |
 
 Task IDs (T-136+) are assigned in `build/04-plan/task-dag-v0.2.md`.
+
+> **Numbering note.** REQ-F IDs are non-contiguous by design: F-028 (spike) and
+> F-029/030 (release) were carried from the 2026-05-14 draft and kept at their
+> original numbers for traceability; **F-036/037 are intentionally unallocated**
+> (reserved). The traceability table above is authoritative for which REQs exist.
 
 ## 8. Acceptance Definition (per phase)
 
