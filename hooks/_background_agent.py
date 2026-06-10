@@ -23,7 +23,9 @@ Design rules:
 
 from __future__ import annotations
 
+import datetime as dt
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -242,3 +244,66 @@ def dispatch(
         )
     except Exception as exc:  # noqa: BLE001 — adapter must never raise (REQ-F-003)
         return DispatchResult("error", f"unexpected dispatch error: {exc}")
+
+
+# --------------------------------------------------------------------------- #
+# Capability cache (REQ-F-001) — written by a detached refresh, read by
+# session-start. The probe shells to `claude agents` (~0.3s), too slow for the
+# session-start latency budget (NF-004), so the result is cached and refreshed
+# out-of-band; session-start only ever reads the cached file.
+# --------------------------------------------------------------------------- #
+_CAPABILITIES_NAME = "capabilities.json"
+
+
+def write_capabilities(
+    forge_dir: Path,
+    cwd: Optional[str] = None,
+    claude_bin: Optional[str] = None,
+    timeout: float = 10.0,
+) -> dict:
+    """Probe and atomically write `<forge_dir>/capabilities.json`. Never raises."""
+    cap = detect_capability(claude_bin=claude_bin, cwd=cwd, timeout=timeout)
+    data = {
+        "forge_background_available": cap.available,
+        "reason": cap.reason,
+        "active_sessions": cap.active_sessions,
+        "checked_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    try:
+        forge_dir.mkdir(parents=True, exist_ok=True)
+        tmp = forge_dir / (_CAPABILITIES_NAME + ".tmp")
+        tmp.write_text(json.dumps(data))
+        os.replace(tmp, forge_dir / _CAPABILITIES_NAME)
+    except OSError:
+        pass  # advisory cache — never crash the caller
+    return data
+
+
+def read_capabilities(forge_dir: Path) -> Optional[dict]:
+    """Return the cached capabilities dict, or None if absent/unreadable."""
+    path = forge_dir / _CAPABILITIES_NAME
+    try:
+        if not path.exists():
+            return None
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _main(argv: list) -> int:
+    """CLI entry so session-start can spawn a detached capability refresh."""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="_background_agent")
+    parser.add_argument("--write-capabilities", action="store_true")
+    parser.add_argument("--forge-dir", required=True)
+    parser.add_argument("--cwd", default=None)
+    args = parser.parse_args(argv)
+    if args.write_capabilities:
+        write_capabilities(Path(args.forge_dir), cwd=args.cwd)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main(sys.argv[1:]))

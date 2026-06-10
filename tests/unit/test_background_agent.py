@@ -180,3 +180,27 @@ def test_dispatch_timeout_degrades(tmp_path: Path) -> None:
     res = _ba.dispatch("x", forge_dir=tmp_path / ".forge", feature="f",
                        claude_bin=bin_, timeout=0.3)
     assert res.status == "error"
+
+
+# --- capabilities cache (T-138 — REQ-F-001) ---------------------------------
+
+def test_write_capabilities_available(tmp_path: Path) -> None:
+    bin_ = _fake_claude(tmp_path, "echo '[{\"pid\":1},{\"pid\":2}]'")
+    forge = tmp_path / ".forge"
+    data = _ba.write_capabilities(forge, claude_bin=bin_)
+    assert data["forge_background_available"] is True
+    assert data["active_sessions"] == 2
+    assert "checked_at" in data
+    # persisted + round-trips
+    assert _ba.read_capabilities(forge)["forge_background_available"] is True
+
+
+def test_write_capabilities_missing_bin(tmp_path: Path) -> None:
+    forge = tmp_path / ".forge"
+    data = _ba.write_capabilities(forge, claude_bin=str(tmp_path / "nope"))
+    assert data["forge_background_available"] is False
+    assert _ba.read_capabilities(forge)["forge_background_available"] is False
+
+
+def test_read_capabilities_missing_returns_none(tmp_path: Path) -> None:
+    assert _ba.read_capabilities(tmp_path / ".forge") is None

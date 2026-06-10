@@ -17,12 +17,15 @@ PYTHON = sys.executable
 
 def _run(cwd: str, env: dict | None = None) -> subprocess.CompletedProcess:
     payload = json.dumps({"cwd": cwd, "hook_event_name": "SessionStart"})
+    # Default to the kill switch so tests never spawn a real `claude` refresh
+    # (T-138). A test that exercises the capability path passes its own env.
+    run_env = env if env is not None else {**os.environ, "FORGE_NO_BACKGROUND": "1"}
     return subprocess.run(
         [PYTHON, HOOK],
         input=payload,
         capture_output=True,
         text=True,
-        env=env,
+        env=run_env,
     )
 
 
@@ -299,3 +302,37 @@ class TestCorruptedState:
         (tmp_path / "pipeline" / "state.md").write_text("")
         r = _run(str(tmp_path))
         assert r.returncode == 0
+
+
+class TestBackgroundCapability:
+    """T-138 — REQ-F-001: session-start maintains .forge/capabilities.json and
+    surfaces unread Observer findings, without blocking (NF-004)."""
+
+    def test_capabilities_written_when_cli_absent(self, tmp_path):
+        # No `claude` on PATH + kill switch OFF → synchronous available:false write.
+        _make_state(tmp_path, stage=1, project_type="api")
+        env = {**os.environ, "PATH": "/nonexistent", "FORGE_NO_BACKGROUND": "0"}
+        r = _run(str(tmp_path), env=env)
+        assert r.returncode == 0
+        cap = json.loads((tmp_path / ".forge" / "capabilities.json").read_text())
+        assert cap["forge_background_available"] is False
+
+    def test_kill_switch_skips_capability_work(self, tmp_path):
+        # Default _run sets FORGE_NO_BACKGROUND=1 → no capabilities.json, no crash.
+        _make_state(tmp_path, stage=1, project_type="api")
+        r = _run(str(tmp_path))
+        assert r.returncode == 0
+        assert not (tmp_path / ".forge" / "capabilities.json").exists()
+
+    def test_unread_findings_surfaced(self, tmp_path):
+        _make_state(tmp_path, stage=2, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        (forge / "observer-findings.jsonl").write_text('{"a":1}\n{"b":2}\n')
+        r = _run(str(tmp_path))
+        assert "2 unread Observer finding(s)" in r.stdout
+
+    def test_no_findings_no_note(self, tmp_path):
+        _make_state(tmp_path, stage=2, project_type="api")
+        r = _run(str(tmp_path))
+        assert "unread Observer" not in r.stdout
