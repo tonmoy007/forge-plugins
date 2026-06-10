@@ -6,19 +6,22 @@
 ## Current State
 
 - **Active program: v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
-  you": daemons, orchestration, brownfield, sprint. **Pipeline Stages 1–5 done**:
-  - Stage 1 SRS **reviewed** (`build/01-srs/srs-v0.2.md`, 52 FRs / 10 NFRs, phased).
-  - P0 spike **PASS** (`build/06-evaluation/spike-background-agents.md`) — **O-1
-    dispatch + O-2 cost RESOLVED** live (2026-06-10): `claude -p --output-format json`
-    headless, correlate via the returned `session_id`, **session reuse `--resume`**
-    cuts cost 10× ($0.053 fresh → $0.0046 resumed). Only **O-2 completion-rate**
-    remains (T-139, gates P1).
-  - Stage 3 architecture (`build/02-architecture/architecture-v0.2.md` + ADR-005/006/007)
-    — all OQ-001..008 resolved.
-  - Stage 5 task DAG **drafted** (`build/04-plan/task-dag-v0.2.md`, **T-136..T-156**,
-    4 milestones). **Pending sign-off before build.**
-- **Active release** (prior): v0.1.7 — "Three more project-type profiles" — scope
-  locked 2026-06-09 (`build/01-srs/srs-v0.1.7.md`, `build/04-plan/task-dag-v0.1.7.md`).
+  you": daemons, orchestration, brownfield, sprint.
+- **v0.2.0 (M1 foundation) COMPLETE + RELEASED** — T-136..T-141. Cost cap + ledger,
+  background-agent dispatch (`claude -p`, session reuse), capability probe wired into
+  session-start, background skill-miner instrumentation, `/forge:set-profile`. Tag
+  `v0.2.0` (`bd9d58a`) + GitHub release; main `16839ee`, develop `709710c`;
+  **origin/polygon parity**. 1124 tests pass; validate 0; full-pipeline 12/12.
+  - Planning (Stages 1/3/5): SRS reviewed, **spike PASS** (O-1 dispatch + O-2 cost
+    RESOLVED — `claude -p --output-format json` headless, `--resume` cuts cost 10×:
+    $0.053→$0.0046), architecture + ADR-005/006/007 (OQ-001..008 resolved), DAG
+    `task-dag-v0.2.md` (T-136..T-156).
+- **NEXT**: **M2 daemons (v0.2.1) are SPIKE-GATED** on T-139's O-2 completion-rate
+  (≥90% over ≥5 real sessions) — accruing via `skill_miner_bg.completion_stats`.
+  **M3 (v0.2.2 orchestration + brownfield) is NOT gated** (needs only the cost cap,
+  shipped) and may proceed in parallel — T-148 next there.
+- **Prior release**: v0.1.7 — "Three more project-type profiles" — scope locked
+  2026-06-09 (`build/01-srs/srs-v0.1.7.md`, `build/04-plan/task-dag-v0.1.7.md`).
 - **v0.1.7 COMPLETE + RELEASED** — all 5 tasks (T-131..T-135). monorepo / mobile /
   data-contract profiles, each with auto-detection + a real gate
   (check_monorepo_graph.py, check_store_readiness.py, check_schema_compat.py).
