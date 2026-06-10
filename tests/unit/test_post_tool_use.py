@@ -288,3 +288,71 @@ class TestSignature:
             assert "signature" in r
             assert isinstance(r["signature"], str)
             assert len(r["signature"]) == 12
+
+
+# ---------------------------------------------------------------------------
+# EF-022 regression: string tool_input / tool_response from non-Write tools
+# ---------------------------------------------------------------------------
+
+class TestStringPayloadGuard:
+    """Regression tests for EF-022: isinstance guard on tool_input/tool_response.
+
+    Bash, Read, and other non-Write tools can send string payloads instead of
+    dicts. The hook must not crash when it receives one.
+    """
+
+    def _run_raw_payload(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [PYTHON, HOOK],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+        )
+
+    def test_string_tool_input_from_bash(self, tmp_path):
+        """Bash tools emit string tool_input — hook must not crash."""
+        r = self._run_raw_payload({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s",
+            "tool_name": "Bash",
+            "tool_input": "git status",
+            "tool_response": {"exit_code": 0, "stdout": ""},
+            "cwd": str(tmp_path),
+        })
+        assert r.returncode == 0
+
+    def test_string_tool_response_from_read(self, tmp_path):
+        """Read tools emit string tool_response — hook must not crash."""
+        r = self._run_raw_payload({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "foo.py"},
+            "tool_response": "# file content",
+            "cwd": str(tmp_path),
+        })
+        assert r.returncode == 0
+
+    def test_both_payloads_string(self, tmp_path):
+        """Both tool_input and tool_response are strings."""
+        r = self._run_raw_payload({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s",
+            "tool_name": "Bash",
+            "tool_input": "ls -la",
+            "tool_response": "total 42",
+            "cwd": str(tmp_path),
+        })
+        assert r.returncode == 0
+
+    def test_dict_tool_input_still_works(self, tmp_path):
+        """Normal dict payloads still log correctly after the guard."""
+        r = self._run_raw_payload({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "src/app.py"},
+            "tool_response": {"success": True},
+            "cwd": str(tmp_path),
+        })
+        assert r.returncode == 0
