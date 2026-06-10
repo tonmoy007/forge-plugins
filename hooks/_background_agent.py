@@ -26,8 +26,19 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent))
+import _cost_cap  # noqa: E402  (sibling hooks/ module — the spend gate)
+
+# Conservative pre-dispatch floor estimates used only to gate spend *before* the
+# run (spike O-2): a fresh session pays the ~42k-token cache-creation tax (~$0.05);
+# a `--resume` poll is a cache read (~$0.005). Actuals come back in the envelope.
+FRESH_FLOOR_USD = 0.06
+RESUME_FLOOR_USD = 0.01
 
 
 @dataclass
@@ -125,3 +136,109 @@ def list_sessions(
     """
     cap = detect_capability(claude_bin=claude_bin, cwd=cwd, timeout=timeout)
     return cap.sessions if cap.available else []
+
+
+@dataclass
+class DispatchResult:
+    """Outcome of a `claude -p` dispatch (REQ-F-002)."""
+
+    status: str  # "ok" | "skipped" | "unavailable" | "error"
+    reason: str
+    session_id: Optional[str] = None
+    cost_usd: Optional[float] = None
+    result: Optional[str] = None
+    raw: Optional[dict] = None
+
+
+def dispatch(
+    prompt: str,
+    *,
+    forge_dir: Path,
+    feature: str,
+    resume: Optional[str] = None,
+    model: Optional[str] = None,
+    floor_usd: Optional[float] = None,
+    claude_bin: Optional[str] = None,
+    cwd: Optional[str] = None,
+    timeout: float = 120.0,
+) -> DispatchResult:
+    """Dispatch a headless agent run via `claude -p --output-format json`
+    (ADR-005; spike O-1). Synchronous — runs the agent, captures the JSON
+    envelope (`session_id`, `total_cost_usd`, `usage`, `result`), and records the
+    **actual** cost to the ledger. The caller is responsible for offloading this
+    into a detached subprocess so the foreground hook never waits (ADR-004).
+
+    Cost-gated: `_cost_cap.precheck` runs *before* spawning; over-cap → no spawn,
+    a skip event, and `status="skipped"`. Pass `resume=<session_id>` to reuse a
+    session (`--resume`) — mandatory for cost (fresh ~$0.05 vs resumed ~$0.005).
+
+    Never raises (REQ-F-003): every failure mode yields a structured non-"ok"
+    result. The correlation key is the **returned `session_id`**, not
+    `claude agents --json` (a `-p` run does not appear there).
+    """
+    try:
+        bin_ = _resolve_bin(claude_bin)
+        if not bin_:
+            return DispatchResult("unavailable", "claude CLI not found on PATH")
+
+        floor = floor_usd if floor_usd is not None else (
+            RESUME_FLOOR_USD if resume else FRESH_FLOOR_USD
+        )
+        decision = _cost_cap.precheck(forge_dir, floor)
+        if not decision.allowed:
+            _cost_cap.note_skip(forge_dir, feature=feature, session_id=resume or "", reason=decision.reason)
+            return DispatchResult("skipped", decision.reason)
+
+        cmd = [bin_, "-p", prompt, "--output-format", "json"]
+        if resume:
+            cmd += ["--resume", resume]
+        if model:
+            cmd += ["--model", model]
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=cwd,
+            )
+        except subprocess.TimeoutExpired:
+            return DispatchResult("error", f"dispatch timeout after {timeout}s")
+        except OSError as exc:  # noqa: BLE001 — missing/unexecutable binary
+            return DispatchResult("error", f"dispatch failed: {exc}")
+
+        if proc.returncode != 0:
+            detail = (proc.stderr or "").strip().splitlines()
+            return DispatchResult("error", f"dispatch exit {proc.returncode}: {detail[0] if detail else ''}")
+
+        try:
+            data = json.loads(proc.stdout or "")
+        except (ValueError, TypeError):
+            return DispatchResult("error", "dispatch returned non-JSON output")
+        if not isinstance(data, dict):
+            return DispatchResult("error", "dispatch envelope was not a JSON object")
+
+        session_id = data.get("session_id")
+        cost = data.get("total_cost_usd")
+        usage = data.get("usage") or {}
+        _cost_cap.record(
+            forge_dir,
+            feature=feature,
+            session_id=session_id or "",
+            input_tokens=int(usage.get("input_tokens", 0) or 0),
+            output_tokens=int(usage.get("output_tokens", 0) or 0),
+            estimated_usd=floor,
+            actual_usd=cost,
+        )
+        return DispatchResult(
+            "ok",
+            "dispatched",
+            session_id=session_id,
+            cost_usd=cost,
+            result=data.get("result"),
+            raw=data,
+        )
+    except Exception as exc:  # noqa: BLE001 — adapter must never raise (REQ-F-003)
+        return DispatchResult("error", f"unexpected dispatch error: {exc}")

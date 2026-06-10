@@ -44,7 +44,7 @@
 | Task | Status | Completed | Commit | Notes |
 |------|--------|-----------|--------|-------|
 | T-136 | 🟢 done | 2026-06-10 | (this commit) | `hooks/_cost_cap.py` — hard-prereq spend gate (ADR-007): caps from config.yaml (fail-soft), ledger `cost-ledger.jsonl` (actual_usd from API), precheck `spent+floor` vs daily/monthly, over-cap → events.jsonl skip, never raises. test_cost_cap.py (13 cases) |
-| T-137 | 🔲 todo | — | — | Background adapter dispatch half (`claude -p`, `--resume`, route cost via _cost_cap) |
+| T-137 | 🟢 done | 2026-06-10 | (this commit) | `_background_agent.dispatch()` — synchronous `claude -p --output-format json [--resume]`, captures session_id/total_cost_usd/usage/result, cost-gated via _cost_cap (precheck→skip event on over-cap; record actual after), never raises. +7 dispatch tests (ok/resume-flags/over-cap/missing-bin/nonzero/non-json/timeout) |
 | T-138 | 🔲 todo | — | — | Wire capability probe into session-start → capabilities.json |
 | T-139 | 🔲 todo | — | — | Spike O-2 completion-rate measurement (the P1 gate) |
 | T-140 | 🔲 todo | — | — | `/forge:set-profile` runtime switch |

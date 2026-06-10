@@ -90,3 +90,93 @@ def test_no_cli_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
     cap = _ba.detect_capability()
     assert cap.available is False
     assert "not found" in cap.reason.lower()
+
+
+# --- dispatch half (T-137 — REQ-F-002, ADR-005) -----------------------------
+
+_ENVELOPE = (
+    '{"session_id":"sess-123","total_cost_usd":0.0528,'
+    '"usage":{"input_tokens":10,"output_tokens":68},'
+    '"is_error":false,"result":"pong"}'
+)
+
+
+def _fake_dispatch_claude(tmp_path: Path, envelope: str = _ENVELOPE) -> tuple[str, Path]:
+    """Fake `claude` whose `-p` logs its argv to argv.log and prints `envelope`."""
+    argv_log = tmp_path / "argv.log"
+    body = f'printf "%s\\n" "$*" >> "{argv_log}"\ncat <<\'EOF\'\n{envelope}\nEOF'
+    return _fake_claude(tmp_path, body), argv_log
+
+
+def test_dispatch_ok_records_cost(tmp_path: Path) -> None:
+    bin_, _ = _fake_dispatch_claude(tmp_path)
+    forge = tmp_path / ".forge"
+    res = _ba.dispatch("say pong", forge_dir=forge, feature="probe", claude_bin=bin_)
+    assert res.status == "ok"
+    assert res.session_id == "sess-123"
+    assert res.cost_usd == 0.0528
+    assert res.result == "pong"
+    # actual cost recorded to the ledger
+    rows = [l for l in (forge / "cost-ledger.jsonl").read_text().splitlines() if l.strip()]
+    assert len(rows) == 1
+    import json
+    assert json.loads(rows[0])["actual_usd"] == 0.0528
+
+
+def test_dispatch_passes_resume_and_json_flags(tmp_path: Path) -> None:
+    bin_, argv_log = _fake_dispatch_claude(tmp_path)
+    forge = tmp_path / ".forge"
+    _ba.dispatch("poll", forge_dir=forge, feature="obs", resume="sess-123", claude_bin=bin_)
+    argv = argv_log.read_text()
+    assert "-p" in argv
+    assert "--output-format json" in argv
+    assert "--resume sess-123" in argv
+
+
+def test_dispatch_skips_when_over_cap(tmp_path: Path) -> None:
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    # Pre-fill today's ledger near the $0.50 default so the floor tips it over.
+    import json
+    import datetime as dt
+    ts = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    (forge / "cost-ledger.jsonl").write_text(
+        json.dumps({"ts": ts, "feature": "x", "session_id": "s",
+                    "input_tokens": 1, "output_tokens": 1,
+                    "estimated_usd": 0.49, "actual_usd": 0.49}) + "\n"
+    )
+    bin_, argv_log = _fake_dispatch_claude(tmp_path)
+    res = _ba.dispatch("poll", forge_dir=forge, feature="obs", claude_bin=bin_)
+    assert res.status == "skipped"
+    assert "cap" in res.reason.lower()
+    assert not argv_log.exists()  # claude never invoked
+    # skip event logged
+    assert (forge / "events.jsonl").exists()
+
+
+def test_dispatch_missing_binary_degrades(tmp_path: Path) -> None:
+    res = _ba.dispatch("x", forge_dir=tmp_path / ".forge", feature="f",
+                       claude_bin=str(tmp_path / "nope"))
+    assert res.status in ("unavailable", "error")
+    # no ledger row written on a failed dispatch
+    assert not (tmp_path / ".forge" / "cost-ledger.jsonl").exists()
+
+
+def test_dispatch_nonzero_exit_degrades(tmp_path: Path) -> None:
+    bin_ = _fake_claude(tmp_path, "echo boom >&2; exit 1")
+    res = _ba.dispatch("x", forge_dir=tmp_path / ".forge", feature="f", claude_bin=bin_)
+    assert res.status == "error"
+
+
+def test_dispatch_non_json_degrades(tmp_path: Path) -> None:
+    bin_ = _fake_claude(tmp_path, "echo 'not json'")
+    res = _ba.dispatch("x", forge_dir=tmp_path / ".forge", feature="f", claude_bin=bin_)
+    assert res.status == "error"
+    assert "json" in res.reason.lower()
+
+
+def test_dispatch_timeout_degrades(tmp_path: Path) -> None:
+    bin_ = _fake_claude(tmp_path, "sleep 5; echo '{}'")
+    res = _ba.dispatch("x", forge_dir=tmp_path / ".forge", feature="f",
+                       claude_bin=bin_, timeout=0.3)
+    assert res.status == "error"
