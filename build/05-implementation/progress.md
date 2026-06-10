@@ -36,6 +36,20 @@
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
 
+## v0.2 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.2.md` (T-136..T-156, 4 phased milestones).
+> M1 (v0.2.0) is the current build target; M2 is gated on T-139 (≥90% completion).
+
+| Task | Status | Completed | Commit | Notes |
+|------|--------|-----------|--------|-------|
+| T-136 | 🟢 done | 2026-06-10 | (this commit) | `hooks/_cost_cap.py` — hard-prereq spend gate (ADR-007): caps from config.yaml (fail-soft), ledger `cost-ledger.jsonl` (actual_usd from API), precheck `spent+floor` vs daily/monthly, over-cap → events.jsonl skip, never raises. test_cost_cap.py (13 cases) |
+| T-137 | 🔲 todo | — | — | Background adapter dispatch half (`claude -p`, `--resume`, route cost via _cost_cap) |
+| T-138 | 🔲 todo | — | — | Wire capability probe into session-start → capabilities.json |
+| T-139 | 🔲 todo | — | — | Spike O-2 completion-rate measurement (the P1 gate) |
+| T-140 | 🔲 todo | — | — | `/forge:set-profile` runtime switch |
+| T-141 | 🔲 todo | — | — | Release v0.2.0 |
+
 ## v0.1.7 Task Status
 
 | Task | Status | Completed | Commit | Notes |
