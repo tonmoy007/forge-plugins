@@ -14,6 +14,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] — 2026-06-10
+
+**v0.2 foundation — background intelligence groundwork.** The first phase of the
+v0.2 program ("a system that works alongside you"). This release lands the P0
+building blocks the daemons, orchestration, and brownfield features will rest on —
+all additive, all degrading to a clean no-op when the background capability is
+absent. v0.1 behavior is unchanged.
+
+The background-agent feasibility spike **passed**: `claude -p --output-format json`
+dispatches headlessly and returns actual cost; session reuse (`--resume`) cuts
+per-poll cost ~10×. The one remaining spike gate — background skill-miner
+completion-rate over ≥5 real sessions — is **instrumented and accruing**; the P1
+daemons wait on it.
+
+### Added
+- **Cost cap + ledger** (`hooks/_cost_cap.py`, T-136): a hard-prerequisite spend
+  gate. Daily/monthly caps from `.forge/config.yaml` (default $0.50/day), an
+  append-only `.forge/cost-ledger.jsonl` recording API-reported actual cost, and a
+  pre-dispatch check that skips + logs over-cap instead of spending. Never raises.
+- **Background adapter dispatch** (`hooks/_background_agent.dispatch`, T-137):
+  headless `claude -p --output-format json` with mandatory session reuse
+  (`--resume`), cost-gated through the cap, correlation via the returned
+  `session_id`. The single call site for the background API.
+- **Capability probe wiring** (T-138): `session-start` maintains a cached
+  `.forge/capabilities.json` via a detached refresh — the slow probe never blocks
+  the hook. New `FORGE_NO_BACKGROUND=1` kill switch disables all background work.
+- **Background skill-miner** (`scripts/skill_miner_bg.py`, T-139): `stop-reflect`
+  offloads skill-mining to a background subagent when capable (inline
+  `mine-skills.py` fallback otherwise), instrumented with completion + cost markers.
+- **`/forge:set-profile <type>`** (T-140): switch the project-type profile at
+  runtime (validated against the 10 known profiles; atomic state.md update;
+  `--dry-run`).
+
+### Changed
+- `stop-reflect.py` Step 4 now branches between the background and inline
+  skill-miner based on `.forge/capabilities.json`. Both paths remain detached — the
+  Stop hook never waits.
+
+---
+
 ## [0.1.7] — 2026-06-09
 
 **Three more project-type profiles.** Forge now ships 10 profiles. Each new
