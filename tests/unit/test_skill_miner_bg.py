@@ -106,6 +106,16 @@ def test_run_over_cap_records_skipped(tmp_path: Path) -> None:
     assert runs[-1]["status"] == "skipped"
 
 
+def test_run_pins_cheap_model(tmp_path: Path) -> None:
+    # Regression: background mining must dispatch on a cheap model (haiku), not the
+    # expensive session default (real usage showed ~$1/run on the default model).
+    argv_log = tmp_path / "argv.log"
+    bin_ = _fake_claude(tmp_path, f'printf "%s\\n" "$*" >> "{argv_log}"\ncat <<\'EOF\'\n{_ENVELOPE}\nEOF')
+    forge = tmp_path / ".forge"
+    _smb.run(forge, session_id="s", cwd=str(tmp_path), claude_bin=bin_)
+    assert "--model haiku" in argv_log.read_text()
+
+
 def test_main_cli_smoke(tmp_path: Path) -> None:
     bin_ = _fake_claude(tmp_path, f"cat <<'EOF'\n{_ENVELOPE}\nEOF")
     forge = tmp_path / ".forge"
