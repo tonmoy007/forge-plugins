@@ -6,7 +6,8 @@
 > OQ-001…OQ-008 from `build/01-srs/srs-v0.2.md`.
 >
 > **Inputs**: `build/01-srs/srs-v0.2.md` (reviewed), the P0 spike
-> (`build/06-evaluation/spike-background-agents.md`, verdict **PASS — capability**).
+> (`build/06-evaluation/spike-background-agents.md`, verdict **PASS**; O-1 dispatch
+> and O-2 cost **RESOLVED** 2026-06-10 — only O-2 completion-rate remains, in P0).
 >
 > **Design spine** (unchanged from v0.1, extended here): every capability-dependent
 > feature degrades to a **clean no-op or sequential fallback** (REQ-NF-006); all
@@ -58,7 +59,7 @@ next foreground event and promoted only through the v0.1 boundary
 
 | Component | Kind | Responsibility | REQ | Status |
 |-----------|------|----------------|-----|--------|
-| `hooks/_background_agent.py` | adapter (stdlib) | **Only** wrapper for `claude agents` / `claude -p`. Probe, list, monitor, dispatch. | F-001/002/003 | **probe half built** (spike) — dispatch half pending O-1 |
+| `hooks/_background_agent.py` | adapter (stdlib) | **Only** wrapper for `claude agents` (monitor) / `claude -p` (dispatch, `--resume` reuse). Probe, list, monitor, dispatch. | F-001/002/003 | **probe built** (spike); **dispatch design resolved** (O-1) — code is P0 |
 | `hooks/_cost_cap.py` | adapter (stdlib) | Daily/monthly budget enforcement + cost ledger append; **hard prerequisite** for any dispatch | F-004/005/006/007 | **P0 — to build** |
 | `scripts/_orchestrate.py` | adapter (stdlib) | **Only** wrapper for in-session subagent fan-out; structured collect + dedup; sequential fallback | F-031/032/033 | **P2 — to build** |
 | `skills/forge-watch/` (+ `-watch-stop`) | skill | Start/stop the Observer daemon | F-008/010 | P1 |
@@ -97,7 +98,7 @@ generalizes that one pattern into the `_background_agent.py` dispatch path.
 foreground hook fires (session-start / post-tool-use)
         │
         ▼
-read .forge/observer-session.json  →  last_poll, interval (default 15 min, config)
+read .forge/observer-session.json  →  last_poll, interval (default 30 min, config), session_id
         │
    now - last_poll > interval ?
         │ yes                                  │ no
@@ -106,8 +107,9 @@ _cost_cap.py: under budget?                 return (no-op, ~file-read latency)
         │ yes                  │ no
         ▼                      ▼
 dispatch detached agent     skip + log "cost cap reached" to events.jsonl
-(claude -p … &), stamp
-new last_poll, return       ← hook NEVER waits on the agent (REQ-NF-004 p95 ≤ 200ms)
+claude -p … --resume <sid> &
+capture session_id from JSON,
+stamp last_poll, return     ← hook NEVER waits on the agent (REQ-NF-004 p95 ≤ 200ms)
 ```
 
 The nightly **Dreamer** (REQ-F-016/020) is the one case that wants a wall-clock
@@ -128,33 +130,40 @@ warns and no-ops instead of double-spawning.
 
 | Half | Call | State | Used by |
 |------|------|-------|---------|
-| **monitor** (built) | `claude agents --json [--cwd]` → JSON array | proven headless (spike #3/#4) | probe, Observer status, `/forge:status` line (F-014) |
-| **dispatch** (pending O-1) | `claude -p "<prompt>" --output-format json` detached | **design below; needs empirical confirm** | Observer/Dreamer/Health poll, async skill-miner (F-027) |
+| **monitor** | `claude agents --json [--cwd]` → JSON array of *user-started* agents (`pid/status/kind/sessionId`) | proven headless (spike #3/#4) | probe (F-001), `/forge:status` line for a user-started watch session (F-014) |
+| **dispatch** | `claude -p "<prompt>" --output-format json [--resume <sid>]` detached | ✅ **proven (spike O-1, 2026-06-10)** | Observer/Dreamer/Health poll, async skill-miner (F-027) |
 
-**Dispatch + correlation design** (the O-1 probe will validate this exact shape):
+**Dispatch + correlation design (confirmed by the O-1 probe):**
 
-1. **Before** dispatch, write `.forge/observer-session.json` with a Forge-generated
-   `correlation_id`, `cwd`, `started_at`, `interval`, `last_poll`.
+1. **Before** the *first* dispatch, write `.forge/observer-session.json` with `cwd`,
+   `started_at`, `interval`, `last_poll`, and `session_id: null`.
 2. Dispatch detached: `claude -p <prompt> --output-format json` with `stdin=DEVNULL`,
-   `start_new_session=True`, stdout redirected to `.forge/runs/<correlation_id>.json`.
-   The **prompt instructs the agent** to (a) do its bounded task and (b) append its
-   findings to `.forge/observer-findings.jsonl` stamped with `correlation_id`.
-3. **Correlate back** by reading `claude agents --json --cwd <repo>` (liveness) and
-   the stamped findings file (results). We do *not* rely on the host returning a
-   stable session handle — the correlation id we wrote is the join key.
-4. **Cost reconciliation**: `--output-format json` returns token usage; the dispatch
-   wrapper feeds that to `_cost_cap.py` (estimated-at-dispatch, actual-on-return).
+   `start_new_session=True`, stdout → `.forge/runs/<ts>.json`. The **prompt instructs
+   the agent** to append findings to `.forge/observer-findings.jsonl`.
+3. **Capture the correlation key from the dispatch's own JSON envelope**: it returns
+   `session_id`, `total_cost_usd` (actual), `usage`, `is_error`, `result`. Persist
+   `session_id` into `observer-session.json`. *(Confirmed: a `claude -p` run does
+   **not** appear in `claude agents --json` — that surface lists user-started agents
+   only. So the join key is the **returned `session_id`**, not a hand-rolled id and
+   not the monitor list.)*
+4. **Reuse the session on every subsequent poll**: `claude -p <prompt> --resume
+   <session_id> …`. This is **mandatory for cost** (next section): a fresh session
+   bills the ~42k-token system prompt as `cache_creation` (~$0.053); `--resume` turns
+   it into a `cache_read` (~$0.0046, **9%**). Only the first poll/day pays the tax.
+5. **Cost accounting**: read `total_cost_usd` straight from the JSON envelope →
+   `_cost_cap.py` records the **actual**; the pre-dispatch cap check uses a
+   conservative floor constant (≈$0.06 fresh / ≈$0.01 resumed) to gate *before* spend.
 
 **Graceful degradation (REQ-F-003) is unchanged**: every entry point returns a
 structured `{"status":"unavailable","reason":…}` and never raises when the CLI is
 missing/old/non-JSON (8 existing tests cover the monitor half; dispatch adds the
-same failure-mode matrix).
+same failure-mode matrix + a "no session_id in envelope" path).
 
-> **O-1 remains the one unproven step.** This section is the *design*; the O-1 probe
-> (spawn one throwaway agent, read it back) confirms whether detached `claude -p`
-> behaves as specified or whether the fallback path (a user-started long-lived
-> `claude agents` session driven by `/forge:watch`) is needed. Either way the
-> **call site is this one file** — the choice touches nothing else (REQ-NF-010).
+> **Fallback (still single-call-site).** If `--resume` continuity ever breaks (e.g.
+> session eviction), the adapter transparently starts a fresh session (pays the tax
+> once) and re-persists the new `session_id`. The alternative model — a user-started
+> long-lived `claude agents` session driven by `/forge:watch` — remains available for
+> the foreground-style Observer; the choice touches only this one file (REQ-NF-010).
 
 ---
 
@@ -165,24 +174,41 @@ until it + its tests are green (REQ-F-007, C-004).
 
 ```
 cost ledger  .forge/cost-ledger.jsonl   (append-only, human-readable — REQ-F-006/NF-008)
-{ "ts", "feature", "input_tokens", "output_tokens",
-  "estimated_usd", "actual_usd"|null, "correlation_id" }
+{ "ts", "feature", "session_id", "input_tokens", "output_tokens",
+  "estimated_usd", "actual_usd" }
 ```
 
-- **Two-phase accounting (OQ-004 decision):** cost is **estimated** at dispatch from
-  token counts × a model price table, then **reconciled to actual** when the agent's
-  `--output-format json` usage returns. Both are stored; caps are enforced on the
-  **running sum of `actual_usd` where present, else `estimated_usd`** (conservative).
-- **Enforcement is pre-dispatch and local:** a single ledger read + sum, no network —
-  preserves the latency budget (REQ-NF-004).
+- **Cost is API-reported, not estimated (OQ-004 — resolved by spike O-2):** every
+  dispatch returns `total_cost_usd` in its `--output-format json` envelope; the
+  ledger records that as `actual_usd`. `estimated_usd` is only a **conservative
+  pre-dispatch floor constant** (≈$0.06 fresh, ≈$0.01 resumed) used to gate spend
+  *before* the run — there is **no model price table to maintain**.
+- **Enforcement is pre-dispatch and local:** check `running_sum(actual_usd) + floor`
+  against the cap with a single ledger read, no network — preserves the latency
+  budget (REQ-NF-004).
 - **Caps:** daily `cost_cap.daily_usd` (default $0.50), optional monthly
   `cost_cap.monthly_usd` (rolling 30 days) — `.forge/config.yaml`.
 - **Over cap → skip + log**, never raise: the dispatch becomes a no-op and an event
   lands in `.forge/events.jsonl`, surfaced next session start.
 
-This is also how the spike's **O-2** numbers get measured (REQ-F-028): instrument
-the async skill-miner dispatch with the ledger, run ≥5 real sessions, read
-completion markers + `cost-ledger.jsonl`. O-2 is **P0 work** and gates P1.
+**The measured cost reality (spike O-2, 2026-06-10) — why session reuse is a rule,
+not a tweak:**
+
+| Mode | Cost/dispatch | Why |
+|------|--------------|-----|
+| Fresh session | **$0.0528** | ~42k-token system prompt billed as `cache_creation` (`cache_read=0`) |
+| `--resume` session | **$0.0046** (9%) | same 42k tokens become a `cache_read` |
+
+At a naive 15-min fresh-poll cadence (8h/day) that is **~$50/mo** — over budget and
+only 1.9× under the $0.10/session gate. With one **reused** session per daemon
+(REQ-F-002), only the first poll/day pays the tax; ~960 polls/mo ≈ **$4.4/mo**. So:
+**default poll interval can stay moderate (30 min) because the cost backstop is the
+cap, and reuse keeps each poll ~$0.005.**
+
+This ledger is also how the spike's remaining **O-2 completion-rate** number gets
+measured (REQ-F-028): instrument the async skill-miner dispatch, run ≥5 real
+sessions, read completion markers + `cost-ledger.jsonl`. **Cost is already cleared;
+only completion-rate (≥90%) remains** — P0 work that gates P1.
 
 ---
 
@@ -339,17 +365,16 @@ pass through the v0.1 approval path — only the *execution locus* moves.
 | OQ-001 daemon execution model | Detached `claude -p` one-shot per due poll; no resident supervisor; lazy event-driven schedule | §2, ADR-005 |
 | OQ-002 orchestration primitive | `_orchestrate.py` wraps in-session subagents; Pydantic structured-output contract | §5, ADR-006 |
 | OQ-003 polling interval | Configurable (default 15 min), checked lazily at foreground hook events | §2 |
-| OQ-004 cost: estimated vs actual | Two-phase: estimate at dispatch, reconcile to actual on return; cap on the conservative max | §4, ADR-007 |
+| OQ-004 cost: estimated vs actual | **RESOLVED** (spike O-2): actual `total_cost_usd` is in the dispatch JSON — record actuals, no price table; pre-check uses a floor constant | §4, ADR-007 |
 | OQ-005 boundary modules | `_proposals.py` / `_validator.py` / `_executor.py` — reused verbatim, no new boundary | §1, §0 |
 | OQ-006 brownfield depth | Structural (headings/docstrings/manifests) by default, bounded by `adopt.max_files`; deeper opt-in | §6 |
 | OQ-007 dup/contradiction threshold | Jaccard 0.8 on word-set of `trigger`+`rule`, config `dreamer.dup_threshold` | (Dreamer; §1) |
-| **OQ-008 headless dispatch** | **Design specified (§3); ONE empirical step (O-1) still open** — gates P1 | §3, ADR-005 |
+| **OQ-008 headless dispatch** | **RESOLVED** (spike O-1): detached `claude -p --output-format json`; correlate via returned `session_id`; reuse via `--resume`; `claude agents --json` is monitor-only | §3, ADR-005 |
 
-**Still genuinely open after this architecture (carried to the O-1 probe / P0):**
-- **O-1** — confirm detached `claude -p` dispatch + correlation behaves as §3 specifies
-  (else flip to the user-started long-lived fallback — same single call site).
-- **O-2** — the formal ≥5-session reliability + cost numbers (REQ-F-028), measured in
-  P0 once `_cost_cap.py` lands.
+**Still genuinely open after this architecture (carried to P0):**
+- **O-2 completion-rate only** — the ≥90%-over-≥5-real-sessions reliability number
+  (REQ-F-028), measured in P0 once `_cost_cap.py` lands. *(O-1 dispatch and O-2 cost
+  are now RESOLVED, 2026-06-10 — see `spike-background-agents.md`.)*
 
 ---
 

@@ -20,17 +20,23 @@ until it and its tests are green — and asks (OQ-004) whether the ledger record
 reconcile to actual on return. No dispatch is wired anywhere until the cap module +
 tests are green.**
 
-- **Two-phase ledger** (OQ-004): each entry carries `estimated_usd` (token counts ×
-  a model price table, written at dispatch) and `actual_usd` (from the agent's
-  `--output-format json` usage, written on return; `null` until then).
-- **Conservative enforcement**: caps are checked on the running sum of `actual_usd`
-  where present, else `estimated_usd` — so an in-flight run counts at its estimate.
+- **Actual cost is API-reported** (OQ-004, spike O-2): the dispatch's
+  `--output-format json` envelope returns `total_cost_usd` directly. The ledger
+  records that as `actual_usd` — **there is no model price table to maintain.**
+- **Pre-dispatch gate uses a conservative floor constant** (`estimated_usd` ≈ $0.06
+  fresh / ≈ $0.01 resumed): caps are checked on `running_sum(actual_usd) + floor`
+  *before* the run, so spend is gated even though true cost is only known after.
 - **Caps**: daily `cost_cap.daily_usd` (default $0.50) and optional rolling-30-day
   `cost_cap.monthly_usd`, from `.forge/config.yaml`.
 - **Local + pre-dispatch**: enforcement is a single ledger read + sum, no network —
   preserving the foreground latency budget (REQ-NF-004).
 - **Over cap → skip + log, never raise**: the dispatch becomes a no-op and an event
   lands in `.forge/events.jsonl`, surfaced at the next session start.
+- **Session reuse keeps the cap satisfiable** (spike O-2): a *fresh* session costs
+  ~$0.053 (the ~42k-token system prompt billed as `cache_creation`); reusing it via
+  `--resume` costs ~$0.0046 (a `cache_read`). Daemons reuse one session (ADR-005), so
+  the $0.50/day cap comfortably covers a moderate poll cadence (~$4.4/mo) instead of
+  being blown by ~$50/mo of naive fresh dispatches.
 
 ## Rationale
 

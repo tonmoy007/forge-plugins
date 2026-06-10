@@ -1,6 +1,6 @@
 # ADR-005: Daemons Are Detached One-Shot Dispatches, Not Resident Processes
 
-**Status**: Accepted (design) — gated on spike O-1 confirmation
+**Status**: Accepted — spike O-1 **confirmed** (2026-06-10)
 **Date**: 2026-06-10
 **Supersedes the assumption in**: the 2026-05-14 v0.2 draft (`claude --bg` daemons)
 
@@ -19,7 +19,8 @@ The P0 spike (`build/06-evaluation/spike-background-agents.md`) established the 
 host surface in Claude Code v2.1.169:
 - `claude agents --json [--cwd]` — lists/monitors background sessions, headless,
   scriptable. **Proven.**
-- `claude -p` — headless one-shot ("print") agent run. **Dispatch path, O-1 open.**
+- `claude -p` — headless one-shot ("print") agent run. **The dispatch path
+  (confirmed by O-1 in the Decision below).**
 
 The draft's `claude --bg` / `/bg` / `/tasks` API does not exist.
 
@@ -42,10 +43,18 @@ Concretely:
   requires it; absent cron, it runs lazily on the day's first session plus the
   manual `/forge:dreamer-run`.
 - **All dispatch goes through the single adapter** `hooks/_background_agent.py`
-  (REQ-NF-010), so the O-1 outcome (or a future host-API change) touches one file.
-- **Correlation** is by a Forge-generated `correlation_id` written to
-  `.forge/observer-session.json` *before* dispatch and stamped into the agent's
-  findings — we do not depend on the host returning a stable session handle.
+  (REQ-NF-010), so any future host-API change touches one file.
+- **Correlation** (O-1 confirmed): the dispatch's `--output-format json` envelope
+  returns a `session_id`; Forge captures it and persists it in
+  `.forge/observer-session.json`. A `claude -p` run does **not** appear in
+  `claude agents --json` (monitor-only surface), so the returned `session_id` is the
+  join key — not a hand-rolled id and not the monitor list.
+- **Session reuse is mandatory (O-2 cost):** each daemon reuses its one session via
+  `claude -p --resume <session_id>`. A fresh session bills the ~42k-token system
+  prompt as `cache_creation` (~$0.053); `--resume` makes it a `cache_read`
+  (~$0.0046, 9%). Only the first poll/day pays the tax. If `--resume` continuity
+  breaks, the adapter starts a fresh session, pays the tax once, and re-persists the
+  new `session_id`.
 
 ## Rationale
 
@@ -73,8 +82,8 @@ Concretely:
 
 ## Consequences
 
-- O-1 (headless dispatch) is the **one** empirical unknown left before P1; it is a
-  bounded, single-file probe.
+- O-1 (headless dispatch) is **resolved** (2026-06-10). The only P1-gating unknown
+  left is O-2's completion-rate (≥90% over ≥5 real sessions) — a P0 measurement.
 - "Daemon" in all v0.2 docs means *recurring detached dispatch*, not a process —
   reviewers and `/forge:status` copy should reflect that.
 - A missed/abandoned run is self-healing: the next due poll re-dispatches (bounded by

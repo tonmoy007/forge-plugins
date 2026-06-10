@@ -71,11 +71,15 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
   background-agent capability and writes `.forge/capabilities.json`
   (`{"forge_background_available": bool}`). No error on machines without it.
 - **REQ-F-002 — Background adapter module.** A single `hooks/_background_agent.py`
-  wraps **every** `claude agents …` / `claude -p` call; no other file invokes the
-  background API directly (so a host-API change touches one file). *(The spike
-  corrected the surface from the draft's assumed `claude --bg`/`/bg`/`/tasks` to the
-  shipped `claude agents`; the probe half of this module is already built — see
-  `build/06-evaluation/spike-background-agents.md`.)*
+  wraps **every** `claude agents …` (monitor) / `claude -p` (dispatch) call; no other
+  file invokes the background API directly (so a host-API change touches one file).
+  Dispatch uses `claude -p --output-format json`, **captures the returned
+  `session_id`**, and **reuses that session via `--resume` for subsequent polls** —
+  mandatory, because a fresh session pays a ~$0.05 cache-creation tax vs ~$0.005
+  resumed (spike O-2). Correlation is by the captured `session_id`, not
+  `claude agents --json` (a `-p` run does not appear there). *(The spike corrected the
+  surface from the draft's assumed `claude --bg`/`/bg`/`/tasks`; the probe half is
+  built — see `build/06-evaluation/spike-background-agents.md`.)*
 - **REQ-F-003 — Degraded no-ops.** When capability is false, every adapter call
   returns `{"status":"unavailable","reason":...}` and never raises.
 - **REQ-F-004 — Daily cost cap.** `hooks/_cost_cap.py` enforces a configurable
@@ -83,8 +87,11 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
 - **REQ-F-005 — Monthly cost cap.** Optional rolling-30-day budget
   (`cost_cap.monthly_usd`).
 - **REQ-F-006 — Cost ledger.** Background costs append to
-  `.forge/cost-ledger.jsonl` (`timestamp, feature, input_tokens, output_tokens,
-  estimated_usd`).
+  `.forge/cost-ledger.jsonl` (`timestamp, feature, session_id, input_tokens,
+  output_tokens, estimated_usd, actual_usd`). `actual_usd` is the
+  **API-reported `total_cost_usd`** from the dispatch's `--output-format json`
+  envelope (spike O-2); `estimated_usd` is the conservative pre-dispatch floor used
+  only to gate spend before the run.
 - **REQ-F-007 — Cost cap is a hard prerequisite.** No daemon feature integrates
   until `_cost_cap.py` + its tests are green.
 
@@ -95,12 +102,15 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
   completion rate < 90% **or** est. cost > $0.10/session typical, the gate fails
   and all [SPIKE-GATED] (P1) requirements defer. Report:
   `build/06-evaluation/spike-background-agents.md` (sessions, completion rate,
-  cost/session, verdict). **Status (2026-06-09): spike RAN — verdict PASS
-  (capability).** `claude agents --json` lists/monitors headlessly and is fully
-  scriptable from a hook; the dependency is de-risked and the adapter probe half is
-  built. Two items remain OPEN and gate P1: **O-1** headless *dispatch* (OQ-008) and
-  **O-2** the formal ≥5-session reliability + cost numbers (≥90% completion AND
-  ≤$0.10/session). O-2 is measured inside P0 once `_cost_cap.py` lands.
+  cost/session, verdict). **Status (2026-06-10): verdict PASS.** Monitor
+  (`claude agents --json`) and dispatch (`claude -p --output-format json`) are both
+  proven headless. **O-1 (dispatch) RESOLVED** — capture the returned `session_id`,
+  reuse it via `--resume`. **O-2 cost RESOLVED** — measured **$0.053 fresh /
+  $0.0046 resumed** per dispatch (the ~42k-token system prompt is a one-time
+  cache-creation tax per session; reuse makes it a cache read). **Only the O-2
+  completion-rate number remains OPEN** (≥90% over ≥5 real sessions), measured inside
+  P0 once `_cost_cap.py` lands; it alone gates P1. If completion fails, v0.2.0 ships
+  foundation-only.
 
 ### 2.3 Observer daemon (P1) [SPIKE-GATED]
 
@@ -129,9 +139,9 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
   flagged for human review, **never auto-merged**.
 - **REQ-F-019 — Contradiction detection** (same trigger, conflicting rule);
   flagged, **never auto-resolved**.
-- **REQ-F-020 — Nightly schedule** via the background adapter (REQ-F-002 — `claude
-  agents` / detached `claude -p`, *not* the draft's `claude --bg`); manual-only when
-  unavailable. Dispatch mechanism resolved by OQ-008 / spike O-1.
+- **REQ-F-020 — Nightly schedule** via the background adapter (REQ-F-002 — detached
+  `claude -p`, session reused via `--resume`; *not* the draft's `claude --bg`);
+  manual-only when unavailable. Dispatch + correlation resolved (OQ-008 / spike O-1).
 - **REQ-F-021 — Atomic writes** to `.forge/lessons.yaml` (temp + rename).
 
 ### 2.5 Health daemon (P1) [SPIKE-GATED]
@@ -281,6 +291,7 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
 | A-003 | Agent-team / subagent fan-out is available in-session for P2 (the spawn mechanism the orchestration primitive wraps) |
 | A-004 | Duplicate detection uses word-level token overlap (no embeddings) |
 | A-005 | Brownfield inference is best-effort and human-confirmed — Forge proposes, the user disposes |
+| A-006 | A fresh dispatched session costs ~$0.05 (one-time ~42k-token cache-creation tax); reuse via `--resume` drops it to ~$0.005. Daemons MUST reuse one session — naive per-poll fresh dispatch (~10×) breaks the budget. (Spike O-2, 2026-06-10.) |
 
 ---
 
@@ -291,11 +302,11 @@ v0.2 closes the two tester findings explicitly deferred from v0.1.x:
 | OQ-001 | **Daemon execution model** — how does a "background daemon" actually run in a hook-based plugin, given the *shipped* surface? Candidates: a user-started long-lived `claude agents` session; per-event detached `claude -p` dispatched from a hook; or host-level cron. (The draft's `claude --bg` is dead — see spike.) This is the central P1 architecture decision; depends on OQ-008/O-1. | **High** |
 | OQ-002 | Orchestration primitive — does it wrap the Agent tool / agent-teams, or shell out? What's the structured-output contract? | **High** |
 | OQ-003 | Observer polling interval — fixed, configurable, event-driven? | High |
-| OQ-004 | Cost ledger — estimated (model-based) vs actual (API-reported) cost? | Medium |
+| OQ-004 | ✅ **RESOLVED** (spike O-2): **actual** API-reported `total_cost_usd` is in the dispatch JSON; ledger records actuals, cap pre-check uses a conservative floor constant. | ~~Medium~~ |
 | OQ-005 | Exact identity of the v0.1 proposal/validator/executor boundary modules (`_proposals.py` / `_validator.py`?) the daemons must use | High |
 | OQ-006 | Brownfield: how deep does REQ inference go — headings/docstrings only, or full code analysis? Bounded by cost. | Medium |
 | OQ-007 | Duplicate/contradiction token-overlap threshold (80% assumed) | Low |
-| OQ-008 | **Headless dispatch** — can a hook spawn a *new* background agent non-interactively (`claude agents` dispatch vs. detached `claude -p`), and how is the spawned session correlated back via `--cwd`/`--json`? (Spike O-1.) | **High** |
+| OQ-008 | ✅ **RESOLVED** (spike O-1): dispatch = detached `claude -p --output-format json`; correlate via the **returned `session_id`** (captured from stdout), reused with `--resume`. `claude agents --json` is monitor-only and does not list `-p` runs. | ~~High~~ |
 
 ---
 
