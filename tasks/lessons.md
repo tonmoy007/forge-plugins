@@ -129,6 +129,25 @@
 - **Why**: A whole-file grep for `/forge:ux` false-positives on legitimate alias documentation, while the real bugs (stale forward hints, drifted status stage→command table) hide among them. The canonical command for a stage is `_stage_table.stage(n)["skill"]`; tie status/hint tests to that, not to a hand-list.
 - **Tags**: [forge, prompt-submit, aliases, next-hint, testing, REQ-NEXTHINT-001, T-103]
 
+### 2026-06-11 — A "today's spend" test entry must use the real clock, not a frozen date
+
+- **Trigger**: Writing a test that pre-seeds `.forge/cost-ledger.jsonl` and exercises a
+  code path that buckets spend by *today* (`_cost_cap._spend` → `today = now.date()`)
+  through a call chain that does **not** inject a clock (`skill_miner_bg.run` →
+  `_background_agent.dispatch` → `_cost_cap.precheck`, all using real `datetime.now`).
+- **Rule**: Stamp the seeded ledger entry with `dt.datetime.now(dt.timezone.utc)`, not a
+  frozen `NOW` constant. A constant ages into "yesterday" the day after the test is
+  written, falls outside the daily window, and the over-cap precheck stops firing
+  (`assert 'completed' == 'skipped'`). The correct, already-followed pattern lives in
+  `test_background_agent.py::test_dispatch_skips_when_over_cap` (line ~142) — match it.
+  If you need full determinism, inject `now` end-to-end (precheck already takes `now=`),
+  but don't thread a test clock through the production dispatch path just for this.
+- **Why**: The bug is latent — green on the authoring day, red every day after — so it
+  detonates in CI mid-release, far from the change that "caused" it (here, an
+  asset-only banner commit took the blame). `test_cost_cap.py` avoids it by passing
+  `now=` explicitly to `precheck`.
+- **Tags**: [testing, dates, flaky, cost-cap, skill-miner, determinism, T-139]
+
 ---
 
 ## Patterns by Category

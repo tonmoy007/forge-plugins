@@ -93,7 +93,12 @@ def test_run_failure_records_failed_never_raises(tmp_path: Path) -> None:
 def test_run_over_cap_records_skipped(tmp_path: Path) -> None:
     forge = tmp_path / ".forge"
     forge.mkdir(parents=True)
-    ts = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # The ledger entry must fall in the cost-cap's "today" bucket, which _cost_cap
+    # computes from the real wall clock (run()→dispatch()→precheck() does not inject a
+    # clock). Stamp it with the actual current UTC time, not a frozen constant —
+    # otherwise the entry ages into "yesterday" the day after this test was written and
+    # the over-cap precheck stops firing (regression: 'completed' != 'skipped').
+    ts = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     (forge / "cost-ledger.jsonl").write_text(
         json.dumps({"ts": ts, "feature": "x", "session_id": "s",
                     "input_tokens": 1, "output_tokens": 1,
