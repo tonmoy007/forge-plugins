@@ -93,7 +93,7 @@ report friction, not to be a polite guest.
 
 ## Where to look when something breaks
 
-Forge v0.1.3 has three diagnostic surfaces. Tell the tester about all
+Forge has three diagnostic surfaces. Tell the tester about all
 three so they know where to point if something goes wrong:
 
 ### `/forge:doctor`
@@ -315,7 +315,7 @@ After the test:
    pollutes the data.
 2. **Categorize each item:**
    - **Bug** — Forge is broken; fix in next patch
-   - **UX friction** — Forge works but is rough; queue for v0.1.4
+   - **UX friction** — Forge works but is rough; queue for the next milestone
    - **Confusion** — documentation gap; fix the README or add a
      `docs/` file
    - **Design disagreement** — they want Forge to be something it
@@ -323,24 +323,22 @@ After the test:
 3. **Capture lessons.** Anything that surprised them should become
    an entry in your project's `tasks/lessons.md` so future you (and
    future Claude sessions) start with that context.
-4. **Update v0.1.4 SRS** with the friction items. Don't try to fix
-   everything in one patch; pick the top 3-5.
+4. **Update the next milestone's SRS** with the friction items. Don't try
+   to fix everything in one patch; pick the top 3-5.
 5. **Thank them concretely.** Show them what you changed because of
    their feedback. People who feel heard give more feedback next time.
 
 ---
 
-## A note about v0.1.3 specifically
+## A note on first external users
 
-v0.1.3 ships *without* the external-user round-trip the original SRS
-acceptance required (§9.4). This is a deliberate deferral. The v0.1.4
-retrospective should treat the first external user's feedback as the
-single most important input — more important than any individual bug
-report — and the v0.1.4 SRS should be heavily influenced by what they
-found.
+Treat the **first external user's** feedback as the single most important
+input to the next cycle's SRS — more important than any individual bug
+report. The first real round-trip tells you what the docs and the happy
+path can't.
 
-If the first tester finds something that makes you want to ship a
-v0.1.3.1 patch instead of waiting for v0.1.4, do it. Trust on a small
-project compounds fast — one well-handled "I found this bug, you fixed
-it in 2 days" interaction makes a tester much more willing to test
-v0.1.5, v0.2, and beyond.
+If a tester finds something that makes you want to ship a fast patch
+release instead of waiting for the next milestone, do it. Trust on a
+small project compounds fast — one well-handled "I found this bug, you
+fixed it in 2 days" interaction makes a tester much more willing to keep
+testing the next release, and the one after that.
