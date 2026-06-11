@@ -355,3 +355,21 @@ class TestBackgroundCapability:
         (forge / "observer-findings.read").write_text("2")
         r = _run(str(tmp_path))
         assert "unread Observer" not in r.stdout
+
+    def test_health_surface_alert_shown(self, tmp_path):
+        # T-144 / REQ-F-026: a pending auto-disable warning is surfaced at start.
+        _make_state(tmp_path, stage=2, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        (forge / "health-surface.txt").write_text(
+            "[2026-06-11T00:00:00Z] Forge Health: FAILING — auto-disable policy triggered.\n"
+            "more detail on the next line\n"
+        )
+        r = _run(str(tmp_path))
+        assert "Health alert" in r.stdout
+        assert "FAILING" in r.stdout
+
+    def test_no_health_surface_no_alert(self, tmp_path):
+        _make_state(tmp_path, stage=2, project_type="api")
+        r = _run(str(tmp_path))
+        assert "Health alert" not in r.stdout

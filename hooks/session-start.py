@@ -124,6 +124,23 @@ def _unread_findings_note(cwd: Path) -> str:
         return ""
 
 
+def _health_surface_note(cwd: Path) -> str:
+    """Surface a pending Health auto-disable warning at session start (REQ-F-026).
+
+    The Health daemon writes `.forge/health-surface.txt` only when status is FAILING
+    *and* the explicit auto-disable policy is on — never silently. A healthy re-run
+    clears it. Read-only here. '' when there is nothing to surface.
+    """
+    path = cwd / ".forge" / "health-surface.txt"
+    try:
+        if not path.exists():
+            return ""
+        note = path.read_text().strip()
+        return f"\n[Forge] Health alert — {note.splitlines()[0]}" if note else ""
+    except OSError:
+        return ""
+
+
 def _poll_observer_if_running(cwd: Path) -> None:
     """Lazily trigger an Observer poll at session start when it's overdue (REQ-F-008).
 
@@ -362,8 +379,9 @@ def run(cwd: Path, session_id: str = "") -> Optional[str]:
         lessons = lessons[:2]
         context = _compose(state, lessons, design, gate)
 
-    # REQ-F-012: surface unread Observer findings (dormant until M2 ships)
+    # REQ-F-012: surface unread Observer findings; REQ-F-026: Health auto-disable alert
     context += _unread_findings_note(cwd)
+    context += _health_surface_note(cwd)
 
     return context
 
