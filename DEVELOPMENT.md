@@ -208,8 +208,8 @@ This is faster than going through a full Claude Code session for tight iteration
 When `main` has a green test run + manual smoke test passes:
 
 ```bash
-# Tag the version
-VERSION=v0.1.0
+# Bump manifests + CHANGELOG, then tag (use scripts/bump-version.py X.Y.Z first)
+VERSION=vX.Y.Z
 git tag $VERSION
 git push origin $VERSION
 
