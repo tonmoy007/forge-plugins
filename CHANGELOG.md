@@ -14,6 +14,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.2] — 2026-06-11
+
+**Skill-miner cost fix — clears the spike's O-2 gate, unlocking the M2 daemons.** A
+patch release: the background skill-miner now pins a cheap model, bringing
+background-agent cost back inside budget and clearing the last gate on the daemon
+build-out.
+
+### Fixed
+- **Background skill-miner pinned to a cheap model** (`scripts/skill_miner_bg.py`,
+  `MINER_MODEL = "haiku"`; override via `--model`). Real-usage testing exposed that an
+  unpinned dispatch falls back to the session default (Opus-class) at **~$1.07/run** —
+  ~20× the spike's haiku estimate and well over the O-2 budget. Pinned, six live
+  dispatches completed **6/6 at ~$0.022/run** ($0.073 fresh, ~$0.011 resumed via
+  `--resume`), clearing the spike's **O-2** gate (≥90% completion **and** ≤$0.10/session).
+  The cost cap proved its worth in the same test — the lone $1.07 run tripped the daily
+  cap and would have blocked the next dispatch. **Consequence: the M2 background daemons
+  (Observer / Dreamer / Health) are unblocked.**
+- **Date-robust over-cap test** (`tests/unit/test_skill_miner_bg.py`). The over-cap
+  skip test seeded the cost-ledger with a frozen date; once the calendar rolled past it,
+  the entry aged out of `_cost_cap`'s real-clock "today" window and the suite failed a
+  day later. Now stamped with the real current UTC time, matching the existing pattern
+  in `test_background_agent.py`.
+
+### Docs
+- **Hero banner + social preview** for the README, with stats verified against the
+  tree (1,100+ tests passing, 70%+ coverage).
+
+---
+
 ## [0.2.1] — 2026-06-10
 
 **Orchestration + brownfield (v0.2 Milestone 3).** In-session, deterministic
