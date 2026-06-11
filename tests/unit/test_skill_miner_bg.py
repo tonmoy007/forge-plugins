@@ -93,7 +93,12 @@ def test_run_failure_records_failed_never_raises(tmp_path: Path) -> None:
 def test_run_over_cap_records_skipped(tmp_path: Path) -> None:
     forge = tmp_path / ".forge"
     forge.mkdir(parents=True)
-    ts = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # The ledger entry must fall in the cost-cap's "today" bucket, which _cost_cap
+    # computes from the real wall clock (run()→dispatch()→precheck() does not inject a
+    # clock). Stamp it with the actual current UTC time, not a frozen constant —
+    # otherwise the entry ages into "yesterday" the day after this test was written and
+    # the over-cap precheck stops firing (regression: 'completed' != 'skipped').
+    ts = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     (forge / "cost-ledger.jsonl").write_text(
         json.dumps({"ts": ts, "feature": "x", "session_id": "s",
                     "input_tokens": 1, "output_tokens": 1,
@@ -104,6 +109,16 @@ def test_run_over_cap_records_skipped(tmp_path: Path) -> None:
     assert status == "skipped"
     runs = [json.loads(l) for l in (forge / "skill-miner-runs.jsonl").read_text().splitlines() if l.strip()]
     assert runs[-1]["status"] == "skipped"
+
+
+def test_run_pins_cheap_model(tmp_path: Path) -> None:
+    # Regression: background mining must dispatch on a cheap model (haiku), not the
+    # expensive session default (real usage showed ~$1/run on the default model).
+    argv_log = tmp_path / "argv.log"
+    bin_ = _fake_claude(tmp_path, f'printf "%s\\n" "$*" >> "{argv_log}"\ncat <<\'EOF\'\n{_ENVELOPE}\nEOF')
+    forge = tmp_path / ".forge"
+    _smb.run(forge, session_id="s", cwd=str(tmp_path), claude_bin=bin_)
+    assert "--model haiku" in argv_log.read_text()
 
 
 def test_main_cli_smoke(tmp_path: Path) -> None:

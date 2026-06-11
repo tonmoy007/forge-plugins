@@ -16,10 +16,15 @@
     RESOLVED — `claude -p --output-format json` headless, `--resume` cuts cost 10×:
     $0.053→$0.0046), architecture + ADR-005/006/007 (OQ-001..008 resolved), DAG
     `task-dag-v0.2.md` (T-136..T-156).
-- **NEXT**: **M2 daemons (v0.2.1) are SPIKE-GATED** on T-139's O-2 completion-rate
-  (≥90% over ≥5 real sessions) — accruing via `skill_miner_bg.completion_stats`.
-  **M3 (v0.2.2 orchestration + brownfield) is NOT gated** (needs only the cost cap,
-  shipped) and may proceed in parallel — T-148 next there.
+- **v0.2.1 (M3 orchestration + brownfield) COMPLETE + RELEASED** — shipped ahead of the
+  spike-gated daemons (not gated; needs only the cost cap). T-148–T-152.
+- **v0.2.2 (skill-miner cost fix) RELEASING** — pins the background skill-miner to a
+  cheap model (`haiku`), cutting an unpinned ~$1.07/run (Opus-class default) to
+  ~$0.022/run; six live dispatches 6/6 → **T-139's O-2 gate CLEARED**. Also a
+  date-robust over-cap test fix + README hero banner.
+- **NEXT**: **M2 daemons are UNBLOCKED** (O-2 cleared) — build Observer / Dreamer /
+  Health + async skill-miner + log rotation (T-142–T-147) on the proven adapter (cheap
+  model + session reuse). Ships as **v0.2.3** (the DAG's "v0.2.1" label is taken).
 - **Prior release**: v0.1.7 — "Three more project-type profiles" — scope locked
   2026-06-09 (`build/01-srs/srs-v0.1.7.md`, `build/04-plan/task-dag-v0.1.7.md`).
 - **v0.1.7 COMPLETE + RELEASED** — all 5 tasks (T-131..T-135). monorepo / mobile /
@@ -49,7 +54,7 @@
 | T-136 | 🟢 done | 2026-06-10 | (this commit) | `hooks/_cost_cap.py` — hard-prereq spend gate (ADR-007): caps from config.yaml (fail-soft), ledger `cost-ledger.jsonl` (actual_usd from API), precheck `spent+floor` vs daily/monthly, over-cap → events.jsonl skip, never raises. test_cost_cap.py (13 cases) |
 | T-137 | 🟢 done | 2026-06-10 | (this commit) | `_background_agent.dispatch()` — synchronous `claude -p --output-format json [--resume]`, captures session_id/total_cost_usd/usage/result, cost-gated via _cost_cap (precheck→skip event on over-cap; record actual after), never raises. +7 dispatch tests (ok/resume-flags/over-cap/missing-bin/nonzero/non-json/timeout) |
 | T-138 | 🟢 done | 2026-06-10 | (this commit) | Probe wired into session-start: cached `.forge/capabilities.json` + **detached refresh** (TTL 24h; claude absent → sync `available:false`; present → fire-and-forget Popen — never blocks, NF-004). `FORGE_NO_BACKGROUND=1` kill switch. Unread-findings note (dormant till M2). _background_agent gains write/read_capabilities + CLI entry. +7 tests |
-| T-139 | 🟡 code shipped / gate PENDING | 2026-06-10 | (this commit) | `scripts/skill_miner_bg.py` — capability-gated background skill-miner (session reuse, cost-gated) + completion/cost markers in `.forge/skill-miner-runs.jsonl`; `completion_stats()` reader. stop-reflect Step 4 branches bg↔inline. **Gate (≥90%/≥5 sessions) accrues over real use — not fabricated.** +7 tests |
+| T-139 | 🟢 done / **gate PASS** | 2026-06-11 | eb42b03+a8a630e | `scripts/skill_miner_bg.py` — capability-gated background skill-miner (session reuse, cost-gated) + completion/cost markers in `.forge/skill-miner-runs.jsonl`; `completion_stats()` reader. stop-reflect Step 4 branches bg↔inline. **O-2 gate CLEARED (v0.2.2): pinned `MINER_MODEL=haiku`; 6/6 live dispatches @ ~$0.022/run (was ~$1.07/run unpinned).** +8 tests |
 | T-140 | 🟢 done | 2026-06-10 | (this commit) | `/forge:set-profile <type>` — `scripts/set-profile.py` validates against the 10 `## Profile:` names, updates project_type in state.md atomically (read-modify-write via _state_lib), `--dry-run` preview; `skills/forge-set-profile/SKILL.md`. +6 tests |
 | T-141 | 🟢 done | 2026-06-10 | (this commit) | Release v0.2.0 — `bump-version.py 0.2.0`, CHANGELOG `[0.2.0]` (P0 foundation + spike PASS); pre-release green (1124 pass, validate 0, full-pipeline 12/12, manifests 0.2.0). PR→develop→main→tag→mirror follows. |
 
