@@ -5,7 +5,7 @@
 > **sequencing is**. Forge enforces it: gated stages, REQ-ID traceability,
 > and structured lesson capture across projects.
 
-[![Tests](https://img.shields.io/badge/tests-690%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1237%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![Claude Code](https://img.shields.io/badge/claude--code-%3E%3D2.1.0-blueviolet)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)]()
@@ -126,9 +126,29 @@ Forge tells you at every session start.
 
 | Command | What it does |
 |---------|-------------|
-| `/forge:status` | Show current stage, task, blockers, and recent history |
+| `/forge:status` | Show current stage, task, blockers, Observer status, and recent history |
 | `/forge:resume` | Restore context after a session restart |
 | `/forge:retro` | Run a cycle-completion retrospective after Stage 12 |
+| `/forge:why` | Explain a gate criterion, lesson tag, stage, or current blocker |
+| `/forge:set-profile` | Set the project-type profile (api, library, cli, monorepo, …) |
+| `/forge:review` | Fan four reviewers (correctness/security/performance/conventions) over a diff and synthesize one report |
+| `/forge:adopt` | Brownfield onboarding — detect type, infer SRS + architecture drafts, seed pipeline state |
+
+### Background Daemons
+
+Optional, cost-capped background agents (Milestone 2). Each reuses **one** cheap-model
+session, runs within a configurable spend cap, and is **capability-gated** — a clean
+no-op when background agents aren't available, so nothing breaks if the feature is off.
+
+| Command | What it does |
+|---------|-------------|
+| `/forge:watch` | Start the **Observer** — periodically records findings (risky changes, missing tests, drift) to `.forge/observer-findings.jsonl`, surfaced at session start and in `/forge:status` |
+| `/forge:watch-stop` | Stop the Observer, preserving its last poll output and findings |
+| `/forge:dreamer-run` | Run the **Dreamer** — consolidate lessons: confidence decay, duplicate & contradiction detection (flag-only), and a daily digest |
+| `/forge:health-check` | Run the **Health** daemon — hook-test + lesson-store integrity → `healthy / degraded / failing`; never silently disables anything |
+
+Background work records actual API cost to `.forge/cost-ledger.jsonl` and stops at the
+daily cap. See `references/daemon-bus.md` for the findings/poll contract.
 
 ---
 
@@ -262,7 +282,7 @@ Unit tests:
 
 ```bash
 python3 -m pytest tests/ -q
-# 532 passed
+# 1237 passed
 ```
 
 ---
