@@ -102,19 +102,59 @@ def _ensure_capabilities(cwd: Path) -> None:
 
 
 def _unread_findings_note(cwd: Path) -> str:
-    """One-line note when the Observer (M2) has left unread findings; '' otherwise.
+    """One-line note when the Observer (T-142) has left **unread** findings; '' otherwise.
 
-    The findings file does not exist until the Observer daemon ships (T-142), so
-    this is dormant (and output-neutral) until then.
+    Unread = total findings minus the read cursor (`.forge/observer-findings.read`,
+    advanced when the user views /forge:status). Read-only — surfacing does not mark
+    findings read here, so the note persists until the user actually looks.
     """
-    path = cwd / ".forge" / "observer-findings.jsonl"
+    forge = cwd / ".forge"
+    path = forge / "observer-findings.jsonl"
     try:
         if not path.exists():
             return ""
-        count = sum(1 for ln in path.read_text().splitlines() if ln.strip())
-        return f"\n[Forge] {count} unread Observer finding(s) — see /forge:status" if count else ""
+        total = sum(1 for ln in path.read_text().splitlines() if ln.strip())
+        try:
+            seen = int((forge / "observer-findings.read").read_text().strip())
+        except (OSError, ValueError):
+            seen = 0
+        unread = max(0, total - seen)
+        return f"\n[Forge] {unread} unread Observer finding(s) — see /forge:status" if unread else ""
     except OSError:
         return ""
+
+
+def _poll_observer_if_running(cwd: Path) -> None:
+    """Lazily trigger an Observer poll at session start when it's overdue (REQ-F-008).
+
+    Detached and fire-and-forget — the Stop/Start hooks never wait on the ~7s dispatch
+    (NF-004). Gated on the kill switch, a running session, and a positive capability
+    cache; observer.py itself re-checks staleness (`--poll-if-stale`). Never raises.
+    """
+    if os.environ.get("FORGE_NO_BACKGROUND") == "1":
+        return  # kill switch (also keeps tests hermetic)
+    forge = cwd / ".forge"
+    try:
+        session = forge / "observer-session.json"
+        if not session.exists():
+            return  # Observer never started — nothing to poll
+        import json as _json
+        try:
+            if (_json.loads(session.read_text()) or {}).get("status") != "running":
+                return
+        except (OSError, ValueError):
+            return
+        caps = forge / "capabilities.json"
+        if not caps.exists():
+            return
+        subprocess.Popen(
+            [sys.executable, str(_PLUGIN_DIR / "scripts" / "observer.py"),
+             "--poll-if-stale", "--cwd", str(cwd), "--forge-dir", str(forge)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception:  # noqa: BLE001 — poll upkeep must never break startup
+        return
 
 
 def _token_estimate(text: str) -> int:
@@ -295,6 +335,7 @@ def run(cwd: Path, session_id: str = "") -> Optional[str]:
     _sync_lessons_if_stale(cwd)
     _register_and_promote(cwd)
     _ensure_capabilities(cwd)  # REQ-F-001 — refresh the cached capability probe
+    _poll_observer_if_running(cwd)  # REQ-F-008 — lazy Observer poll, detached
 
     # Lessons: up to 5 project-level + 3 global
     project_lessons = _load_lessons(

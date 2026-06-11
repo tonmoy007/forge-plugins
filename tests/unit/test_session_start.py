@@ -336,3 +336,22 @@ class TestBackgroundCapability:
         _make_state(tmp_path, stage=2, project_type="api")
         r = _run(str(tmp_path))
         assert "unread Observer" not in r.stdout
+
+    def test_read_cursor_subtracted_from_unread(self, tmp_path):
+        # T-142: only findings past the read cursor count as unread.
+        _make_state(tmp_path, stage=2, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        (forge / "observer-findings.jsonl").write_text('{"a":1}\n{"b":2}\n{"c":3}\n')
+        (forge / "observer-findings.read").write_text("2")  # first two already seen
+        r = _run(str(tmp_path))
+        assert "1 unread Observer finding(s)" in r.stdout
+
+    def test_all_findings_read_no_note(self, tmp_path):
+        _make_state(tmp_path, stage=2, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        (forge / "observer-findings.jsonl").write_text('{"a":1}\n{"b":2}\n')
+        (forge / "observer-findings.read").write_text("2")
+        r = _run(str(tmp_path))
+        assert "unread Observer" not in r.stdout
