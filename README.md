@@ -1,4 +1,4 @@
-# Forge — SDLC Orchestrator for Claude Code
+![Forge — SDLC Orchestrator for Claude Code](assets/banner.svg)
 
 > Forge turns Claude Code from a smart coding assistant into a disciplined
 > engineering partner. Memory isn't the problem Claude Code solves poorly —

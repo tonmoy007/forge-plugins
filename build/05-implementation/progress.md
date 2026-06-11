@@ -16,10 +16,19 @@
     RESOLVED — `claude -p --output-format json` headless, `--resume` cuts cost 10×:
     $0.053→$0.0046), architecture + ADR-005/006/007 (OQ-001..008 resolved), DAG
     `task-dag-v0.2.md` (T-136..T-156).
-- **NEXT**: **M2 daemons (v0.2.1) are SPIKE-GATED** on T-139's O-2 completion-rate
-  (≥90% over ≥5 real sessions) — accruing via `skill_miner_bg.completion_stats`.
-  **M3 (v0.2.2 orchestration + brownfield) is NOT gated** (needs only the cost cap,
-  shipped) and may proceed in parallel — T-148 next there.
+- **v0.2.1 (M3 orchestration + brownfield) COMPLETE + RELEASED** — shipped ahead of the
+  spike-gated daemons (not gated; needs only the cost cap). T-148–T-152.
+- **v0.2.2 (skill-miner cost fix) STAGED on develop** — pins the background skill-miner
+  to a cheap model (`haiku`), cutting an unpinned ~$1.07/run (Opus-class default) to
+  ~$0.022/run; six live dispatches 6/6 → **T-139's O-2 gate CLEARED**. Also a
+  date-robust over-cap test fix + README hero banner. On `develop`; **the develop→main
+  promotion + tag are BLOCKED** by a new `MAIN PROTECTION` ruleset (no bypass actors).
+- **v0.2.3 (M2 background daemons) BUILT** — Observer / Dreamer / Health + async
+  skill-miner production path + log rotation (T-142–T-146) on the proven adapter (cheap
+  model + session reuse, capability-gated, never-raises). Staged for develop; promotes
+  to main together with v0.2.2 once the ruleset is resolved.
+- **NEXT**: resolve the `MAIN PROTECTION` ruleset, then promote v0.2.2 + v0.2.3 to main
+  (two tags) and mirror to polygon. Then M4 sprint (T-153–T-156).
 - **Prior release**: v0.1.7 — "Three more project-type profiles" — scope locked
   2026-06-09 (`build/01-srs/srs-v0.1.7.md`, `build/04-plan/task-dag-v0.1.7.md`).
 - **v0.1.7 COMPLETE + RELEASED** — all 5 tasks (T-131..T-135). monorepo / mobile /
@@ -49,7 +58,7 @@
 | T-136 | 🟢 done | 2026-06-10 | (this commit) | `hooks/_cost_cap.py` — hard-prereq spend gate (ADR-007): caps from config.yaml (fail-soft), ledger `cost-ledger.jsonl` (actual_usd from API), precheck `spent+floor` vs daily/monthly, over-cap → events.jsonl skip, never raises. test_cost_cap.py (13 cases) |
 | T-137 | 🟢 done | 2026-06-10 | (this commit) | `_background_agent.dispatch()` — synchronous `claude -p --output-format json [--resume]`, captures session_id/total_cost_usd/usage/result, cost-gated via _cost_cap (precheck→skip event on over-cap; record actual after), never raises. +7 dispatch tests (ok/resume-flags/over-cap/missing-bin/nonzero/non-json/timeout) |
 | T-138 | 🟢 done | 2026-06-10 | (this commit) | Probe wired into session-start: cached `.forge/capabilities.json` + **detached refresh** (TTL 24h; claude absent → sync `available:false`; present → fire-and-forget Popen — never blocks, NF-004). `FORGE_NO_BACKGROUND=1` kill switch. Unread-findings note (dormant till M2). _background_agent gains write/read_capabilities + CLI entry. +7 tests |
-| T-139 | 🟡 code shipped / gate PENDING | 2026-06-10 | (this commit) | `scripts/skill_miner_bg.py` — capability-gated background skill-miner (session reuse, cost-gated) + completion/cost markers in `.forge/skill-miner-runs.jsonl`; `completion_stats()` reader. stop-reflect Step 4 branches bg↔inline. **Gate (≥90%/≥5 sessions) accrues over real use — not fabricated.** +7 tests |
+| T-139 | 🟢 done / **gate PASS** | 2026-06-11 | eb42b03+a8a630e | `scripts/skill_miner_bg.py` — capability-gated background skill-miner (session reuse, cost-gated) + completion/cost markers in `.forge/skill-miner-runs.jsonl`; `completion_stats()` reader. stop-reflect Step 4 branches bg↔inline. **O-2 gate CLEARED (v0.2.2): pinned `MINER_MODEL=haiku`; 6/6 live dispatches @ ~$0.022/run (was ~$1.07/run unpinned).** +8 tests |
 | T-140 | 🟢 done | 2026-06-10 | (this commit) | `/forge:set-profile <type>` — `scripts/set-profile.py` validates against the 10 `## Profile:` names, updates project_type in state.md atomically (read-modify-write via _state_lib), `--dry-run` preview; `skills/forge-set-profile/SKILL.md`. +6 tests |
 | T-141 | 🟢 done | 2026-06-10 | (this commit) | Release v0.2.0 — `bump-version.py 0.2.0`, CHANGELOG `[0.2.0]` (P0 foundation + spike PASS); pre-release green (1124 pass, validate 0, full-pipeline 12/12, manifests 0.2.0). PR→develop→main→tag→mirror follows. |
 
@@ -65,6 +74,20 @@
 | T-150 | 🟢 done | 2026-06-10 | (this commit) | `/forge:adopt` brownfield onboarding (EF-014) — `scripts/adopt.py`: reuse `detect()`, bounded deterministic file sampling (excludes meta dirs, prioritizes manifests; `adopt.max_files` default 40), fan out requirements+architecture extractors via `_orchestrate`, write INFERRED srs.md/architecture.md drafts (confidence + provenance) + seeded state.md (Stage 1). **Read-only to user source** (only pipeline/+.forge/), `--dry-run` (no spend), refuses if already initialized, tolerates dropped aspects. `skills/forge-adopt/SKILL.md`. +7 tests |
 | T-151 | 🟢 done | 2026-06-10 | (this commit) | `/forge:why` LLM fallback (REQ-F-050) — on a deterministic miss, if background capability available + not opted out, dispatch one orchestrated explainer (`_orchestrate`, cost-gated) and return a clearly-marked best-effort answer (exit 0); unchanged `not found`/exit 1 otherwise. `_should_try_fallback` + `_llm_fallback` in why.py; skill note. +3 tests |
 | T-152 | 🟢 done | 2026-06-10 | (this commit) | Release **v0.2.1** (M3, contiguous) — `bump-version.py 0.2.1`, CHANGELOG `[0.2.1]`, ROADMAP re-map (daemons deferred). Pre-release green. PR→develop→main→tag→mirror. |
+
+### M2 — Background daemons (built as **v0.2.3**, O-2 gate cleared by v0.2.2) — branch `feat/v0.2.3-daemons`
+
+> Renumbered from the DAG's "v0.2.1" (that label was consumed when M3 shipped early).
+> All daemons: cheap model + session reuse, capability-gated no-op, never-raises.
+
+| Task | Status | Completed | Commit | Notes |
+|------|--------|-----------|--------|-------|
+| T-146 | 🟢 done | 2026-06-11 | bb03b28 | `hooks/_error_log.py` — shared stdlib rotation (`rotate_if_needed`/`append_jsonl`), numbered backups at a byte ceiling via atomic `os.replace`; wired into `_emit_error` (`FORGE_LOG_MAX_BYTES`). +11 tests |
+| T-142 | 🟢 done | 2026-06-11 | 1284457 | Observer — `scripts/observer.py`, `/forge:watch`+`/forge:watch-stop`. Reused-session poll, idempotent start, findings→`observer-findings.jsonl` (rotated), cursor-tracked surfacing at session start + `/forge:status`, lazy detached poll, `.forge`-only boundary. `references/daemon-bus.md`. +16 tests |
+| T-143 | 🟢 done | 2026-06-11 | d54dd68 | Dreamer — `scripts/dreamer.py`, `/forge:dreamer-run`. Confidence decay→dormant, dup (Jaccard≥0.8) + contradiction detection **flag-only**, idempotent daily digest `pipeline/log/daily-<date>.md`, atomic lessons.yaml, optional cheap-model consolidation. +26 tests |
+| T-144 | 🟢 done | 2026-06-11 | 38efec5 | Health — `scripts/health_check.py`, `/forge:health-check`. Hook-test + lesson-integrity aggregation → healthy/degraded/failing; auto-disable policy-gated + **never silent** (events.jsonl + `health-surface.txt`, surfaced at session start, cleared on recovery). +28 tests (+4 session-start) |
+| T-145 | 🟢 done | 2026-06-11 | c0a5f4f | Async miner production path — bg miner now drafts `proposed-skills/<slug>/SKILL.md` (was a dead-end `proposals.jsonl`), so it feeds the same approval flow as inline. +1 regression test |
+| T-147 | 🟡 staged | 2026-06-11 | (this commit) | Release **v0.2.3** — `bump-version.py 0.2.3`, CHANGELOG `[0.2.3]`, ROADMAP/progress. Pre-release green. PR→develop done; **develop→main + tag BLOCKED by MAIN PROTECTION ruleset** — promotes with v0.2.2 once resolved. |
 
 ## v0.1.7 Task Status
 

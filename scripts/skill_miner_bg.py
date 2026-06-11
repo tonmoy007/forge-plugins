@@ -7,6 +7,12 @@ a real background agent through `_background_agent.dispatch` (reusing one sessio
 detached worker: it dispatches the mining agent, then records a completion marker +
 cost to `.forge/skill-miner-runs.jsonl`.
 
+Production path (T-145, REQ-F-027): the background agent writes its drafts to the
+**same** canonical artifact the inline miner does — `.forge/proposed-skills/<slug>/
+SKILL.md` — so both paths feed the identical approval flow (`stop-reflect` surfaces
+them, `skill-approval.py` approves/rejects). Only the execution locus moves; the
+proposal format and approval gate are unchanged.
+
 Those markers are the data source for the spike's O-2 gate (REQ-F-028): real sessions
 accumulate runs, and `completion_stats()` reports the completion rate (≥90% over ≥5
 sessions) and per-session cost. Nothing here fabricates a run — each line is one real
@@ -32,12 +38,20 @@ _RUNS_NAME = "skill-miner-runs.jsonl"
 _SESSION_NAME = "skill-miner-session.json"
 _TS_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
+# Skill-mining is a cheap, mechanical task — pin a cheap model. Real-usage testing
+# showed the session default (Opus-class) costs ~$1/run, ~20× the spike's
+# haiku-measured estimate and well over the O-2 budget. (Override via --model.)
+MINER_MODEL = "haiku"
+
 _PROMPT = (
-    "You are Forge's skill-miner. Read `.forge/patterns.jsonl` in the current "
-    "project (it holds sliding tool-usage windows). If any tool-sequence signature "
-    "recurs 3 or more times, append one compact JSON object per proposed skill to "
-    "`.forge/proposals.jsonl` with fields {signature, suggestion, count}. If nothing "
-    "qualifies, write nothing. Be terse. Reply with exactly: done"
+    "You are Forge's skill-miner. Read `.forge/patterns.jsonl` in the current project "
+    "(it holds sliding tool-usage windows). For each tool-sequence signature that "
+    "recurs 3 or more times AND is not listed in `.forge/skill-blacklist.txt`, draft a "
+    "reusable skill: create `.forge/proposed-skills/<slug>/SKILL.md` (slug = a short "
+    "kebab-case name for the workflow) with YAML frontmatter (`name`, `description`) "
+    "followed by a brief body covering when to use it and the observed steps. This is "
+    "the same artifact the inline miner writes, so it flows through the normal approval "
+    "flow. If nothing qualifies, write nothing. Be terse. Reply with exactly: done"
 )
 
 
@@ -139,6 +153,7 @@ def run(
     session_id: str,
     cwd: Optional[str] = None,
     claude_bin: Optional[str] = None,
+    model: Optional[str] = MINER_MODEL,
 ) -> str:
     """Dispatch one background skill-mining run, reusing the miner's session, and
     record the outcome. Returns the recorded status. Never raises."""
@@ -149,6 +164,7 @@ def run(
             forge_dir=forge_dir,
             feature="skill_miner",
             resume=prior,
+            model=model,
             cwd=cwd,
             claude_bin=claude_bin,
         )
@@ -173,8 +189,9 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--session", default="")
     parser.add_argument("--cwd", default=None)
     parser.add_argument("--claude-bin", default=None)
+    parser.add_argument("--model", default=MINER_MODEL, help=f"model alias (default: {MINER_MODEL})")
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
-    run(Path(args.forge_dir), args.session, cwd=args.cwd, claude_bin=args.claude_bin)
+    run(Path(args.forge_dir), args.session, cwd=args.cwd, claude_bin=args.claude_bin, model=args.model)
     return 0
 
 

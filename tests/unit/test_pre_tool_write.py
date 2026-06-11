@@ -271,3 +271,20 @@ class TestEdgeCases:
     def test_no_pipeline_exits_0(self, tmp_path):
         r = _run("Write", "src/app.tsx", "color: #fff;", str(tmp_path))
         assert r.returncode == 0
+
+    def test_string_tool_input_does_not_crash(self, tmp_path):
+        """EF-023 regression: string tool_input from inline Write events."""
+        payload = json.dumps({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": "inline string content",
+            "cwd": str(tmp_path),
+            "session_id": "test-session",
+        })
+        r = subprocess.run(
+            [PYTHON, HOOK],
+            input=payload,
+            capture_output=True,
+            text=True,
+        )
+        assert r.returncode == 0
