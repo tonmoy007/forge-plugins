@@ -14,6 +14,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.3] — 2026-06-11
+
+**Background daemons (v0.2 Milestone 2).** With the O-2 cost gate cleared in v0.2.2,
+the spike-gated daemons land: Observer, Dreamer, and Health, plus the production async
+skill-miner and log rotation. Every daemon pins a cheap model and reuses one session
+(the spike's cost rule), is capability-gated (a clean no-op when background agents are
+unavailable), and never raises.
+
+### Added
+- **Observer daemon** (`scripts/observer.py`, `/forge:watch` + `/forge:watch-stop`,
+  T-142): a reused-session Stage-9 watcher that records findings
+  (`{ts,severity,source,message}`) to `.forge/observer-findings.jsonl`. Idempotent
+  start (warns instead of double-spawning); `watch-stop` preserves the last poll
+  output. Unread findings surface at session start (cursor-tracked) and in
+  `/forge:status`; a lazy ≥30-min poll is fired detached from session start. Writes
+  only under `.forge/` — never pipeline artifacts. + `agents/observer.md`,
+  `references/daemon-bus.md`.
+- **Dreamer daemon** (`scripts/dreamer.py`, `/forge:dreamer-run`, T-143): lesson
+  consolidation — confidence decay (lessons <0.3 → dormant), duplicate detection
+  (Jaccard ≥0.8 on trigger+rule) and contradiction detection, both **flag-only**
+  (never auto-merged/resolved). Writes an idempotent daily digest to
+  `pipeline/log/daily-<date>.md`; atomic `lessons.yaml` writes. Optional cheap-model
+  consolidation summary when background is available. + `agents/dreamer.md`.
+- **Health daemon** (`scripts/health_check.py`, `/forge:health-check`, T-144):
+  aggregates hook unit-test results + lesson-store integrity (missing fields,
+  out-of-range confidence, malformed YAML, broken `[[xref]]`s) into a
+  `healthy|degraded|failing` status. Auto-disable requires an explicit
+  `health.auto_disable_hooks: true` policy and is **never silent** — it logs to
+  `.forge/events.jsonl` and writes `.forge/health-surface.txt`, surfaced at the next
+  session start; a recovered run clears it. + `agents/health.md`.
+- **Size-bounded log rotation** (`hooks/_error_log.py`, T-146, REQ-F-049): a shared,
+  stdlib-only, never-raises primitive (`rotate_if_needed` + `append_jsonl`) that rolls
+  append-only `.forge` logs to numbered backups at a byte ceiling, each step a single
+  atomic `os.replace`. Wired into the hook error log (`FORGE_LOG_MAX_BYTES` override)
+  and reused by the Observer findings log.
+
+### Changed
+- **Async skill-miner is now the production path** (T-145, REQ-F-027): when background
+  capability is present, the background miner drafts `.forge/proposed-skills/<slug>/
+  SKILL.md` — the **same** artifact the inline `mine-skills.py` produces — so both
+  paths feed the identical approval flow. (It previously wrote a dead-end
+  `proposals.jsonl` that nothing consumed.)
+
+---
+
 ## [0.2.2] — 2026-06-11
 
 **Skill-miner cost fix — clears the spike's O-2 gate, unlocking the M2 daemons.** A

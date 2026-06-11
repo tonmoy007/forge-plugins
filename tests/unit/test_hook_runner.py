@@ -105,6 +105,26 @@ class TestEmitError:
         # Should not raise:
         hook_runner._emit_error("h", "K", "d", bad_cwd)
 
+    def test_rotates_when_log_exceeds_cap(self, tmp_path, monkeypatch):
+        # T-146: hook-errors.log must stay bounded. With a tiny ceiling, the next
+        # emit rolls the existing log to .1 and starts fresh — no unbounded growth.
+        monkeypatch.setenv("FORGE_LOG_MAX_BYTES", "200")
+        for i in range(60):  # well past 200 bytes of JSONL records
+            hook_runner._emit_error("h", "K", f"d{i}", tmp_path)
+        log = tmp_path / ".forge" / "hook-errors.log"
+        backup = tmp_path / ".forge" / "hook-errors.log.1"
+        assert log.exists()
+        assert log.stat().st_size < 5000  # bounded, not the full 60-record history
+        assert backup.exists()  # rotated history preserved, not deleted
+
+    def test_no_rotation_when_disabled(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("FORGE_LOG_MAX_BYTES", "0")  # disable rotation
+        for i in range(30):
+            hook_runner._emit_error("h", "K", f"d{i}", tmp_path)
+        log = tmp_path / ".forge" / "hook-errors.log"
+        assert len(log.read_text().strip().splitlines()) == 30  # all kept, no rotation
+        assert not (tmp_path / ".forge" / "hook-errors.log.1").exists()
+
 
 # ---------- run_hook behavior (subprocess) ----------
 

@@ -121,6 +121,15 @@ def test_run_pins_cheap_model(tmp_path: Path) -> None:
     assert "--model haiku" in argv_log.read_text()
 
 
+def test_prompt_targets_canonical_approval_artifact() -> None:
+    # T-145: the background miner must produce the SAME artifact as the inline miner —
+    # `.forge/proposed-skills/<slug>/SKILL.md` — so both feed the identical approval
+    # flow. Regression guard against reverting to the dead-end `proposals.jsonl`.
+    assert "proposed-skills" in _smb._PROMPT
+    assert "SKILL.md" in _smb._PROMPT
+    assert "proposals.jsonl" not in _smb._PROMPT
+
+
 def test_main_cli_smoke(tmp_path: Path) -> None:
     bin_ = _fake_claude(tmp_path, f"cat <<'EOF'\n{_ENVELOPE}\nEOF")
     forge = tmp_path / ".forge"

@@ -58,9 +58,18 @@ Use this skill whenever the user:
    (REQ-GATESTUB-001). A provisional gate is not a pass.
    If `check-gate.py` does not exist yet, skip this step silently.
 
-4. Print the dashboard to the user.
+4. Append the **Observer** status line (Stage-9 daemon, T-142). Run:
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/observer.py --status --cwd .
+   ```
+   Show its one-line output verbatim under the dashboard, e.g.
+   `Observer: running · last poll 12m ago · 3 unread finding(s)` or
+   `Observer: not running (/forge:watch to start)`. This command also marks the
+   surfaced findings as read. If `observer.py` is absent, skip silently.
 
-5. Suggest the obvious next action based on state:
+5. Print the dashboard to the user.
+
+6. Suggest the obvious next action based on state:
    - `current_stage == 0` → "Run `/forge:srs` to begin Stage 1 (Requirements)"
    - `blockers` non-empty → "Resolve blockers before advancing"
    - Otherwise → "Continue with `/forge:<current-stage-command>`"

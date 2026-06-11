@@ -59,6 +59,29 @@ _BLOCKING_HOOKS: frozenset[str] = frozenset({
 _LOG_FILENAME = "hook-errors.log"
 _DETAIL_CAP = 1000
 
+# Size-bounded rotation for hook-errors.log (T-146, REQ-F-049). Default 1 MiB / 2
+# backups; override the ceiling with FORGE_LOG_MAX_BYTES (0 disables rotation).
+_LOG_MAX_BYTES_DEFAULT = 1_048_576
+_LOG_KEEP = 2
+
+# Shared rotation primitive lives in hooks/. Import it best-effort: if it is somehow
+# unavailable, the runner still logs (unrotated) rather than failing.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+try:
+    import _error_log  # noqa: E402
+except Exception:  # noqa: BLE001 — never let an import break the universal runner
+    _error_log = None  # type: ignore[assignment]
+
+
+def _log_max_bytes() -> int:
+    raw = os.environ.get("FORGE_LOG_MAX_BYTES")
+    if raw is None:
+        return _LOG_MAX_BYTES_DEFAULT
+    try:
+        return int(raw)
+    except ValueError:
+        return _LOG_MAX_BYTES_DEFAULT
+
 
 def _resolve_timeout(hook_name: str) -> float:
     """Resolve hook timeout from env overrides, then defaults."""
@@ -106,6 +129,10 @@ def _emit_error(
         log_dir = _resolve_log_dir(cwd)
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / _LOG_FILENAME
+        if _error_log is not None:
+            _error_log.rotate_if_needed(
+                log_path, max_bytes=_log_max_bytes(), keep=_LOG_KEEP
+            )
         with open(log_path, "a") as f:
             f.write(json.dumps(record) + "\n")
     except OSError:
