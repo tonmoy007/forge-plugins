@@ -159,6 +159,7 @@ def dispatch(
     feature: str,
     resume: Optional[str] = None,
     model: Optional[str] = None,
+    output_schema: Optional[dict] = None,
     floor_usd: Optional[float] = None,
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
@@ -196,6 +197,12 @@ def dispatch(
             cmd += ["--resume", resume]
         if model:
             cmd += ["--model", model]
+        if output_schema:
+            # Structured outputs (REQ-HARNESS-001): constrain the agent's result to a
+            # JSON Schema via the CLI's `--print`-only `--json-schema` flag. A CLI too
+            # old for the flag exits non-zero → a structured "error" result (never
+            # raises); the orchestration layer then drops the item with a reason.
+            cmd += ["--json-schema", json.dumps(output_schema)]
 
         try:
             proc = subprocess.run(
