@@ -15,7 +15,7 @@
   (T-167..T-170, folded; no separate v0.3.2 tag) + complete local autonomy: self-heal
   (T-172), verifier subagents (T-173), `--unattended` (T-174), enforcing rules (T-175).
   Tag `v0.3.3` (`8e827a1` merge) on origin + polygon; GitHub releases published; manifests
-  0.3.3. SRS `build/01-srs/srs-v0.3.2.md`, DAG `build/04-plan/task-dag-v0.3.2.md`.
+  0.3.3. SRS `build/01-srs/srs-v0.3.3.md`, DAG `build/04-plan/task-dag-v0.3.3.md`.
 - **v0.3 program (v0.3.0 + v0.3.1) COMPLETE + RELEASED** — "Hands-off Forge — autonomy +
   governance": user-authored **Rules** (v0.3.0) + **Autopilot** cross-stage execution
   (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
@@ -66,11 +66,11 @@
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
 
-## v0.3.2 Task Status
+## v0.3.3 Task Status
 
-> DAG: `build/04-plan/task-dag-v0.3.2.md` (T-167..T-176). M1 Harness (v0.3.2,
-> T-167..T-171); M2 Autonomy (v0.3.3, T-172..T-176, planned). SRS
-> `build/01-srs/srs-v0.3.2.md`.
+> DAG: `build/04-plan/task-dag-v0.3.3.md` (T-167..T-176). M1 Harness (T-167..T-171,
+> originally scoped as v0.3.2, folded into v0.3.3); M2 Autonomy (T-172..T-176). Both
+> shipped under `v0.3.3`. SRS `build/01-srs/srs-v0.3.3.md`.
 
 ### M1 — Modernized harness (v0.3.2) — branch `feat/v0.3.2-autonomy`
 
