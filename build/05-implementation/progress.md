@@ -63,7 +63,7 @@
 | Task | Status | Completed | Commit | Notes |
 |------|--------|-----------|--------|-------|
 | T-157 | 🟢 done | 2026-06-15 | (this commit) | `scripts/rules.py` — `.forge/rules/*.md` loader: frontmatter (stdlib split + fail-soft PyYAML, no `frontmatter` dep), scope model always/stage/glob/manual, `select()` + budget-bounded `render()`, fnmatch globs with `**` handling, CLI list/validate (argparse SUPPRESS). Never-raises. +14 tests |
-| T-158 | 🔲 todo | | | `/forge:rules` skill (init/list/add/validate) + `references/rules-format.md` |
+| T-158 | 🟢 done | 2026-06-15 | (this commit) | `/forge:rules` skill (`name: forge-rules`) — init (idempotent scaffold) / add (no-clobber) / list / validate; `rules.py` gained those CLI subcommands. `references/rules-format.md` documents the schema + 4 scopes. +7 tests (init/add CLI + structural). validate-plugin 0 |
 | T-159 | 🔲 todo | | | session-start always/stage injection (≤2000-token budget) |
 | T-160 | 🔲 todo | | | pre-tool-write glob injection (advisory, never block) |
 | T-161 | 🔲 todo | | | release v0.3.0 |

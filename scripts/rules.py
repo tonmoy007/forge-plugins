@@ -246,6 +246,110 @@ def _forge_dir(cwd: str) -> Path:
     return Path(cwd) / ".forge"
 
 
+_README_TEMPLATE = """# Forge Rules
+
+User-authored rules that steer Forge's agents. Each `*.md` file here has YAML
+frontmatter + a markdown body (the rule text the agent should follow).
+
+Frontmatter:
+    description: short summary
+    scope: always | stage | glob | manual
+    stages: [6, 7]        # for scope: stage
+    globs: ["**/*.tsx"]   # for scope: glob
+    priority: 0           # higher shows first
+
+Scopes:
+    always  - injected every session (within the context budget)
+    stage   - injected when the pipeline is on a listed stage
+    glob    - surfaced when writing a file matching globs (advisory, never blocks)
+    manual  - never auto-injected; reference it by name
+
+See `references/rules-format.md` for the full schema. Manage with `/forge:rules`.
+"""
+
+_EXAMPLE_RULE = """---
+description: House style for generated prose and code
+scope: always
+priority: 10
+---
+- Prefer clarity over cleverness; keep sentences short.
+- Match the surrounding file's conventions before introducing new ones.
+- No commented-out code or TODOs without an owner.
+"""
+
+
+def _rule_template(scope: str, description: str) -> str:
+    extra = ""
+    if scope == "stage":
+        extra = "stages: [6]\n"
+    elif scope == "glob":
+        extra = "globs: ['**/*']\n"
+    return (
+        "---\n"
+        f"description: {description or 'TODO: describe this rule'}\n"
+        f"scope: {scope}\n"
+        f"{extra}"
+        "---\n"
+        "TODO: write the rule the agent should follow.\n"
+    )
+
+
+def _cmd_init(args) -> int:
+    """Scaffold `.forge/rules/` with a README + example rule. Idempotent."""
+    d = rules_dir(_forge_dir(args.cwd))
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"ERROR: could not create {d}: {exc}", file=sys.stderr)
+        return 1
+    created, skipped = [], []
+    for name, body in (("README.md", _README_TEMPLATE), ("00-style.md", _EXAMPLE_RULE)):
+        path = d / name
+        if path.exists():
+            skipped.append(name)
+            continue
+        try:
+            path.write_text(body)
+            created.append(name)
+        except OSError as exc:
+            print(f"WARN: could not write {name}: {exc}", file=sys.stderr)
+    print(f"Rules dir: {d}")
+    if created:
+        print(f"  created: {', '.join(created)}")
+    if skipped:
+        print(f"  kept (already present): {', '.join(skipped)}")
+    print("Edit .forge/rules/*.md or run `/forge:rules add <name>`. See "
+          "references/rules-format.md.")
+    return 0
+
+
+def _cmd_add(args) -> int:
+    """Create a new rule file from a template. Refuses to clobber an existing file."""
+    scope = str(args.scope).strip().lower()
+    if scope not in VALID_SCOPES:
+        print(f"ERROR: invalid scope {args.scope!r}; choose one of {', '.join(VALID_SCOPES)}",
+              file=sys.stderr)
+        return 2
+    stem = args.name[:-3] if args.name.endswith(".md") else args.name
+    d = rules_dir(_forge_dir(args.cwd))
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"ERROR: could not create {d}: {exc}", file=sys.stderr)
+        return 1
+    path = d / f"{stem}.md"
+    if path.exists():
+        print(f"Rule {path.name} already exists — not overwritten. Edit it directly.")
+        return 0
+    try:
+        path.write_text(_rule_template(scope, args.description or ""))
+    except OSError as exc:
+        print(f"ERROR: could not write {path}: {exc}", file=sys.stderr)
+        return 1
+    print(f"Created {path} (scope: {scope}). Fill in the body, then `/forge:rules validate`.")
+    return 0
+
+
 def _cmd_list(args) -> int:
     rules = load_rules(_forge_dir(args.cwd))
     if not rules:
@@ -304,6 +408,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     sub_common = argparse.ArgumentParser(add_help=False)
     sub_common.add_argument("--cwd", default=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("init", parents=[sub_common]).set_defaults(func=_cmd_init)
+    p_add = sub.add_parser("add", parents=[sub_common])
+    p_add.add_argument("name", help="rule file name (without .md)")
+    p_add.add_argument("--scope", default="always",
+                       help=f"one of {', '.join(VALID_SCOPES)} (default: always)")
+    p_add.add_argument("--description", default="", help="short rule description")
+    p_add.set_defaults(func=_cmd_add)
     sub.add_parser("list", parents=[sub_common]).set_defaults(func=_cmd_list)
     sub.add_parser("validate", parents=[sub_common]).set_defaults(func=_cmd_validate)
     args = parser.parse_args(argv)

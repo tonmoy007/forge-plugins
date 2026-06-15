@@ -170,3 +170,37 @@ def test_load_never_raises_on_unreadable(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "read_text", boom)
     # Must degrade, not raise.
     assert _rules.load_rules(forge) == []
+
+
+# --- CLI: init / add --------------------------------------------------------
+
+def test_init_scaffolds_and_is_idempotent(tmp_path: Path) -> None:
+    rc = _rules.main(["init", "--cwd", str(tmp_path)])
+    assert rc == 0
+    d = tmp_path / ".forge" / "rules"
+    assert (d / "README.md").exists()
+    assert (d / "00-style.md").exists()
+    # The scaffolded example is a valid, loadable rule.
+    loaded = _rules.load_rules(tmp_path / ".forge")
+    assert [r.name for r in loaded] == ["00-style"]  # README skipped (no scope)
+    # Re-running keeps existing files (idempotent, no clobber).
+    (d / "00-style.md").write_text("---\nscope: always\n---\nEDITED\n")
+    assert _rules.main(["init", "--cwd", str(tmp_path)]) == 0
+    assert "EDITED" in (d / "00-style.md").read_text()
+
+
+def test_add_creates_and_refuses_clobber(tmp_path: Path) -> None:
+    assert _rules.main(["add", "20-ui", "--scope", "glob",
+                        "--description", "UI rules", "--cwd", str(tmp_path)]) == 0
+    path = tmp_path / ".forge" / "rules" / "20-ui.md"
+    assert path.exists()
+    rule = _rules.load_rules(tmp_path / ".forge")[0]
+    assert rule.name == "20-ui" and rule.scope == "glob"
+    # Second add must not overwrite the edited file.
+    path.write_text("---\nscope: glob\nglobs: ['**/*.ts']\n---\nKEEP ME\n")
+    assert _rules.main(["add", "20-ui", "--cwd", str(tmp_path)]) == 0
+    assert "KEEP ME" in path.read_text()
+
+
+def test_add_invalid_scope_is_usage_error(tmp_path: Path) -> None:
+    assert _rules.main(["add", "x", "--scope", "whenever", "--cwd", str(tmp_path)]) == 2
