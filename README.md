@@ -264,7 +264,10 @@ stage, cost-capped + capability-gated; a clean no-op when background agents are 
 
 It generalizes `/forge:force-advance` (one gated advance) and `/forge:build --milestone`
 (a within-stage batch) to a cross-stage loop. Configure under `autopilot:` in
-`.forge/config.yaml`.
+`.forge/config.yaml` — including `models` (per-stage model routing — a capable model for
+hard stages, a cheap one for checks), `max_budget_usd` (per-dispatch spend ceiling), and
+`session_max_dispatches` (rotate a long reused session to bound context). Background
+stages also request schema-constrained output via the CLI's `--json-schema`.
 
 ---
 

@@ -14,6 +14,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.2] — 2026-06-15
+
+**Modernized harness (v0.3 — toward complete autonomy).** Adopt current Claude Code
+primitives under the autopilot/orchestration substrate, each verified against the live
+CLI and degrading gracefully when unavailable (REQ-NF-013). Foundation for the
+self-healing autonomy planned in v0.3.3.
+
+### Added
+- **Structured outputs** (`hooks/_background_agent.py`, `scripts/_orchestrate.py`, T-167):
+  orchestrated dispatches can request schema-constrained JSON via the CLI's
+  `--json-schema` (Claude Code 2.1.177+); the parse/validate/retry/drop path remains the
+  fallback. Consumers (`/forge:review`, `/forge:adopt`, `/forge:why`) opt in per call.
+- **Per-dispatch budget ceiling** (T-168): `--max-budget-usd` on `claude -p` (config
+  `autopilot.max_budget_usd`), complementing the `_cost_cap` daily/monthly ledger gate.
+- **Per-stage model routing** (T-169): `autopilot.models` maps stages (numeric key or
+  command word, e.g. `build`/`eval`) to models — a capable model for hard stages, a cheap
+  one for gate-checks/narration.
+- **Long-run session rotation** (T-170): `autopilot.session_max_dispatches` rotates a
+  reused background session to a fresh one to bound context growth (the CLI auto-compacts
+  *within* a session; this bounds reuse *across* dispatches).
+
+### Changed
+- `.forge/config.yaml` `autopilot:` gains `max_budget_usd`, `models`, and
+  `session_max_dispatches` (all read fail-soft; absent ⇒ prior behavior).
+
+### Fixed
+
+---
+
 ## [0.3.1] — 2026-06-15
 
 **Autopilot (v0.3 Milestone 2 — autonomy).** Hand Forge the wheel: `/forge:autopilot`
