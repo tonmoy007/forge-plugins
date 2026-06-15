@@ -19,6 +19,7 @@ a cross-stage loop. Stdlib + PyYAML (fail-soft). Never raises.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import sys
@@ -28,8 +29,10 @@ from typing import Optional
 
 _PLUGIN_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
+sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _stage_table  # noqa: E402
 import _state_lib  # noqa: E402
+import _error_log  # noqa: E402  (shared rotation for the run-log)
 
 VALID_MODES = ("in-session", "background")
 _RUNLOG_NAME = "autopilot-runs.jsonl"
@@ -164,6 +167,24 @@ def _completed_stages(forge_dir: Path) -> set[int]:
     return done
 
 
+def _now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def record_run(
+    forge_dir, stage: int, status: str, *, mode: str = "in-session", note: str = ""
+) -> bool:
+    """Append a run-log row to `.forge/autopilot-runs.jsonl` (size-bounded, rotated).
+
+    The in-session loop calls this after each stage so `--resume` can skip completed
+    work. Never raises (delegates to `_error_log.append_jsonl`).
+    """
+    entry = {"ts": _now_iso(), "stage": stage, "status": status, "mode": mode}
+    if note:
+        entry["note"] = note
+    return _error_log.append_jsonl(Path(forge_dir) / _RUNLOG_NAME, entry)
+
+
 def plan_stages(
     cwd,
     *,
@@ -220,7 +241,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         description="Deterministic autopilot stage planner (the /forge:autopilot skill "
                     "walks this plan in-session).",
     )
+    parser.add_argument("command", nargs="?", default="plan", choices=("plan", "record"),
+                        help="plan the run (default) or record a completed stage")
     parser.add_argument("--cwd", default=os.getcwd(), help="project root (default: cwd)")
+    parser.add_argument("--stage", type=int, default=None, metavar="N",
+                        help="(record) the stage just completed")
+    parser.add_argument("--status", default="done", help="(record) stage outcome")
+    parser.add_argument("--note", default="", help="(record) optional note")
     parser.add_argument("--to", type=int, default=None, metavar="N",
                         help="run through stage N (inclusive)")
     parser.add_argument("--stages", type=int, default=None, metavar="K",
@@ -237,6 +264,16 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="print the plan only (this script never mutates state regardless)")
     parser.add_argument("--json", action="store_true", help="emit the plan as JSON")
     args = parser.parse_args(argv)
+
+    if args.command == "record":
+        if args.stage is None:
+            print("error: record requires --stage N", file=sys.stderr)
+            return 2
+        ok = record_run(Path(args.cwd) / ".forge", args.stage, args.status,
+                        mode=args.mode, note=args.note)
+        print(f"recorded stage {args.stage} status={args.status}" if ok
+              else "warning: run-log write failed", file=sys.stderr)
+        return 0
 
     plan = plan_stages(
         args.cwd, to=args.to, stages_count=args.stages, until_gate=args.until_gate,

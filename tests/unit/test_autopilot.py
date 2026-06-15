@@ -153,3 +153,32 @@ def test_cli_dry_run_no_side_effects(tmp_path):
     assert r.returncode == 0
     # planner never writes; the run-log must not appear from a dry-run plan.
     assert not (tmp_path / ".forge" / "autopilot-runs.jsonl").exists()
+
+
+# --- record (run-log) -------------------------------------------------------
+
+def test_record_run_appends_and_completed_reads(tmp_path):
+    forge = tmp_path / ".forge"
+    assert _ap.record_run(forge, 6, "done") is True
+    assert 6 in _ap._completed_stages(forge)
+
+
+def test_cli_record_then_resume_skips(tmp_path):
+    _make_state(tmp_path, 6)
+    r = subprocess.run(
+        [PYTHON, str(_mod_path), "record", "--cwd", str(tmp_path),
+         "--stage", "6", "--status", "done"],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0
+    assert (tmp_path / ".forge" / "autopilot-runs.jsonl").exists()
+    plan = _ap.plan_stages(tmp_path, to=8, resume=True)
+    assert [p["stage"] for p in plan] == [7, 8]
+
+
+def test_cli_record_requires_stage(tmp_path):
+    r = subprocess.run(
+        [PYTHON, str(_mod_path), "record", "--cwd", str(tmp_path)],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 2  # usage error: --stage required
