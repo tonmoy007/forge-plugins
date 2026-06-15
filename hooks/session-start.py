@@ -46,6 +46,7 @@ sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib  # noqa: E402
 import _state_read  # noqa: E402
 import _background_agent  # noqa: E402  (capability cache — REQ-F-001)
+import rules as user_rules  # noqa: E402  (user-authored rules surface — REQ-RULES-009)
 from _hook_runner import run_hook  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
@@ -296,11 +297,29 @@ def _design_summary(design_path: Path) -> str:
         return ""
 
 
+def _rules_block(cwd: Path, stage: int) -> str:
+    """Render user-authored `always` + current-`stage` rules (REQ-RULES-009).
+
+    Returns '' when there are none. Read-only and NEVER raises — a broken or absent
+    `.forge/rules/` directory must not break startup.
+    """
+    try:
+        selected = user_rules.select(user_rules.load_rules(cwd / ".forge"), stage=stage)
+        body = user_rules.render(selected, max_chars=500)
+        if not body:
+            return ""
+        shown = len(body.splitlines())
+        return f"[Forge] Rules ({shown}):\n{body}"
+    except Exception:  # noqa: BLE001 — rules upkeep must never break startup
+        return ""
+
+
 def _compose(
     state: dict,
     lessons: list[dict],
     design: str,
     gate: str,
+    rules_text: str = "",
 ) -> str:
     stage = state.get("current_stage", 0)
     stage_name = STAGE_NAMES.get(stage, "unknown")
@@ -325,6 +344,9 @@ def _compose(
         lines.append(f"[Forge] Active lessons ({len(lessons)}): {abbrev}")
     else:
         lines.append("[Forge] Active lessons (0): (none)")
+
+    if rules_text:
+        lines.append(rules_text)
 
     if design:
         lines.append(f"[Forge] Design system: {design}")
@@ -372,12 +394,16 @@ def run(cwd: Path, session_id: str = "") -> Optional[str]:
             design = _design_summary(ds_path)
 
     gate = _gate_summary(_PLUGIN_DIR, stage)
-    context = _compose(state, lessons, design, gate)
+    rules_text = _rules_block(cwd, stage)
+    context = _compose(state, lessons, design, gate, rules_text)
 
-    # Enforce token budget by trimming lessons
+    # Enforce token budget (REQ-NF-011): trim lessons first, then drop rules as a
+    # last resort, so the block always stays within budget.
     if _token_estimate(context) > _MAX_TOKENS:
         lessons = lessons[:2]
-        context = _compose(state, lessons, design, gate)
+        context = _compose(state, lessons, design, gate, rules_text)
+    if _token_estimate(context) > _MAX_TOKENS:
+        context = _compose(state, lessons, design, gate, "")
 
     # REQ-F-012: surface unread Observer findings; REQ-F-026: Health auto-disable alert
     context += _unread_findings_note(cwd)
