@@ -67,10 +67,15 @@ in-session (a script can't drive the Agent tool — ADR-006).
       reuse the returned session across stages for cost:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py dispatch --cwd . \
-        --stage {stage} --skill {skill} --label "{label}" [--session {prev_session_id}]
+        --stage {stage} --skill {skill} --label "{label}" \
+        [--session {prev_session_id}] [--dispatch-count {n}]
       ```
       A `status: unavailable` result means background agents are off — fall back to
-      in-session or stop. Carry the returned `session_id` into the next dispatch.
+      in-session or stop. Carry the returned `session_id` into the next dispatch, and
+      pass `--dispatch-count` (dispatches so far on this session) so a long run rotates
+      to a fresh session per `autopilot.session_max_dispatches`, bounding context growth.
+      Per-stage model routing (`autopilot.models`) and the per-dispatch `$` ceiling
+      (`autopilot.max_budget_usd`) are applied automatically from `.forge/config.yaml`.
    d. **Check the gate**:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage {stage} --cwd . \

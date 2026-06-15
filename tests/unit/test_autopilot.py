@@ -325,6 +325,61 @@ def test_model_for_stage_none_when_unset():
     assert _ap.model_for_stage(_ap.AutopilotConfig(), 6) is None
 
 
+# --- long-run context: session rotation (T-170, REQ-HARNESS-004) -----------
+
+def test_should_rotate_session():
+    cfg = _ap.AutopilotConfig(session_max_dispatches=5)
+    assert _ap.should_rotate_session(5, cfg) is True
+    assert _ap.should_rotate_session(6, cfg) is True
+    assert _ap.should_rotate_session(4, cfg) is False
+
+
+def test_should_rotate_session_unset_never_rotates():
+    assert _ap.should_rotate_session(1000, _ap.AutopilotConfig()) is False
+
+
+def test_load_config_reads_session_max_dispatches(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  session_max_dispatches: 8\n")
+    assert _ap.load_config(forge).session_max_dispatches == 8
+
+
+def test_run_stage_rotate_starts_fresh_session(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "NEW"
+        cost_usd = 0.0
+        reason = ""
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda prompt, **kw: (calls.append(kw), _Res())[1])
+    _ap.run_stage(tmp_path, 6, "/forge:build", mode="background",
+                  session_id="OLD", rotate=True)
+    assert calls[0]["resume"] is None  # rotated → fresh session (bounds context growth)
+
+
+def test_run_stage_no_rotate_keeps_session(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "OLD"
+        cost_usd = 0.0
+        reason = ""
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda prompt, **kw: (calls.append(kw), _Res())[1])
+    _ap.run_stage(tmp_path, 6, "/forge:build", mode="background", session_id="OLD")
+    assert calls[0]["resume"] == "OLD"  # default: reuse session (cost)
+
+
 # --- session / cancel (REQ-AP-007) -----------------------------------------
 
 def test_start_session_idempotent(tmp_path):

@@ -53,6 +53,7 @@ class AutopilotConfig:
     model: Optional[str] = None  # background-mode model override (else inherits default)
     max_budget_usd: Optional[float] = None  # per-dispatch hard $ ceiling (REQ-HARNESS-002)
     models: dict = field(default_factory=dict)  # per-stage model routing (REQ-HARNESS-003)
+    session_max_dispatches: Optional[int] = None  # rotate reused session after N (REQ-HARNESS-004)
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -105,7 +106,19 @@ def load_config(forge_dir) -> AutopilotConfig:
     models = section.get("models")
     if isinstance(models, dict):
         cfg.models = models
+    smax = _coerce_int(section.get("session_max_dispatches"))
+    if smax is not None:
+        cfg.session_max_dispatches = smax
     return cfg
+
+
+def should_rotate_session(dispatch_count: int, config: AutopilotConfig) -> bool:
+    """True when the reused session should rotate to a fresh one to bound context growth
+    on long runs (REQ-HARNESS-004). The CLI auto-compacts *within* a session; this caps
+    how long one session is reused *across* dispatches. Unset → never rotate. Never raises.
+    """
+    cap = config.session_max_dispatches
+    return isinstance(cap, int) and cap > 0 and dispatch_count >= cap
 
 
 def model_for_stage(config: AutopilotConfig, stage: int, plugin_root=None) -> Optional[str]:
@@ -314,6 +327,7 @@ def run_stage(
     *,
     mode: str = "in-session",
     session_id: Optional[str] = None,
+    rotate: bool = False,
     model: Optional[str] = None,
     max_budget_usd: Optional[float] = None,
     claude_bin: Optional[str] = None,
@@ -336,7 +350,7 @@ def run_stage(
             _stage_prompt(stage, skill, label),
             forge_dir=forge,
             feature="autopilot-stage",
-            resume=session_id,
+            resume=(None if rotate else session_id),
             model=model,
             max_budget_usd=max_budget_usd,
             claude_bin=claude_bin,
@@ -423,6 +437,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--label", default="", help="(dispatch) human stage label")
     parser.add_argument("--session", default=None, help="(dispatch) reuse this session id")
     parser.add_argument("--model", default=None, help="(dispatch) background model override")
+    parser.add_argument("--dispatch-count", type=int, default=0,
+                        help="(dispatch) prior dispatches on this session — triggers rotation")
     parser.add_argument("--to", type=int, default=None, metavar="N",
                         help="run through stage N (inclusive)")
     parser.add_argument("--stages", type=int, default=None, metavar="K",
@@ -456,9 +472,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
         cfg = load_config(Path(args.cwd) / ".forge")
         model = args.model or model_for_stage(cfg, args.stage)
+        rotate = should_rotate_session(args.dispatch_count, cfg)
         result = run_stage(args.cwd, args.stage, args.skill, args.label,
-                           mode="background", session_id=args.session, model=model,
-                           max_budget_usd=cfg.max_budget_usd)
+                           mode="background", session_id=args.session, rotate=rotate,
+                           model=model, max_budget_usd=cfg.max_budget_usd)
         print(json.dumps(result))
         return 0
 
