@@ -31,9 +31,12 @@ in-session (a script can't drive the Agent tool — ADR-006).
 
 ## Safety rails (always)
 
-- **Stop-on-gate.** On any blocking gate failure, autopilot STOPS and surfaces the
-  blockers. It **never** force-advances unless `.forge/config.yaml` →
-  `autopilot.allow_force: true` **and** the user supplied a reason.
+- **Bounded self-heal, then stop-on-gate.** On a blocking gate failure, autopilot makes a
+  bounded number of fix attempts via `/forge:resolve` (`autopilot.max_heal_attempts`,
+  default **1**; `0` restores classic stop-on-gate), re-checking the gate after each. When
+  heal is exhausted (or disabled) and blockers remain it STOPS and surfaces them. It
+  **never** force-advances unless `.forge/config.yaml` → `autopilot.allow_force: true`
+  **and** the user supplied a reason.
 - **Bounded.** It runs only the planned stages (target + `autopilot.max_stages` /
   `stop_before` caps); it never loops unbounded.
 - **Interruptible.** `/forge:autopilot-stop` halts it before the next stage.
@@ -81,15 +84,34 @@ in-session (a script can't drive the Agent tool — ADR-006).
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage {stage} --cwd . \
         --plugin-dir ${CLAUDE_PLUGIN_ROOT}
       ```
-      Parse the JSON `details[]`. If any `severity: blocker` is not `passed` → **STOP**:
-      surface the blockers and tell the user to fix and re-run `/forge:autopilot --resume`,
-      or override with `/forge:force-advance --reason "…"`. Do **not** advance.
-   e. **Advance** on a clean gate:
+      Parse the JSON `details[]`. If any `severity: blocker` is not `passed`, **self-heal**
+      before giving up (see step e); only STOP when heal is exhausted or disabled.
+   e. **Self-heal a blocked gate** (REQ-AUTO-001/002). Track `attempts_used` per stage,
+      starting at 0. While the gate has blockers **and**
+      `autopilot.py` `should_heal` allows another attempt — i.e. `attempts_used <
+      autopilot.max_heal_attempts` (default **1**; `0` = classic stop-on-gate) — run one
+      bounded fix through the Stage-11 resolver, then re-check the gate:
+      - In `--mode in-session` (default): run `/forge:resolve` against this stage's
+        blockers (pass the failing `details[]` so the resolver knows what to fix).
+      - In `--mode background`: dispatch it headlessly (cost/budget/capability gated,
+        session reused):
+        ```bash
+        python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py heal --cwd . \
+          --stage {stage} --skill /forge:resolve --label "{label}" \
+          --blockers "{failing criteria}" [--session {sid}] [--dispatch-count {n}]
+        ```
+      After each heal, re-run `check-gate.py` (step d) and increment `attempts_used`. On a
+      now-clean gate → advance (step f). When `should_heal` returns false (cap reached or
+      `max_heal_attempts: 0`) and blockers remain → **STOP**: surface the remaining
+      blockers and tell the user to fix and re-run `/forge:autopilot --resume`, or override
+      with `/forge:force-advance --reason "…"`. Autopilot **never** force-advances on its
+      own (only `allow_force: true` + a reason does).
+   f. **Advance** on a clean gate:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --cwd .
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py record --cwd . --stage {stage} --status done
       ```
-   f. **Checkpoint policy** (`autopilot.checkpoint`): `gate` (default) — continue unless a
+   g. **Checkpoint policy** (`autopilot.checkpoint`): `gate` (default) — continue unless a
       gate blocks; `every` — pause for the user's OK between stages; `never` — run straight
       through.
 

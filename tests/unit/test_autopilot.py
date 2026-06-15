@@ -421,3 +421,118 @@ def test_cli_stop_then_status(tmp_path):
     r_status = subprocess.run([PYTHON, str(_mod_path), "status", "--cwd", cwd],
                               capture_output=True, text=True)
     assert json.loads(r_status.stdout)["stop_requested"] is True
+
+
+# --- self-heal loop (T-172, REQ-AUTO-001/002) ------------------------------
+
+def test_max_heal_attempts_defaults_to_one():
+    # Default policy: one bounded heal attempt per stage before STOP.
+    assert _ap.AutopilotConfig().max_heal_attempts == 1
+
+
+def test_load_config_reads_max_heal_attempts(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  max_heal_attempts: 3\n")
+    assert _ap.load_config(forge).max_heal_attempts == 3
+
+
+def test_load_config_max_heal_attempts_zero_is_stop_on_gate(tmp_path):
+    # 0 is meaningful (not "unset"): it restores v0.3.1 stop-on-gate behavior.
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  max_heal_attempts: 0\n")
+    assert _ap.load_config(forge).max_heal_attempts == 0
+
+
+def test_should_heal_default_allows_one_attempt():
+    cfg = _ap.AutopilotConfig()  # max_heal_attempts == 1
+    assert _ap.should_heal(0, cfg) is True   # first blocker → heal
+    assert _ap.should_heal(1, cfg) is False  # after one heal → STOP
+
+
+def test_should_heal_zero_never_heals():
+    cfg = _ap.AutopilotConfig(max_heal_attempts=0)
+    assert _ap.should_heal(0, cfg) is False  # == v0.3.1 stop-on-gate
+
+
+def test_should_heal_respects_higher_cap():
+    cfg = _ap.AutopilotConfig(max_heal_attempts=3)
+    assert _ap.should_heal(2, cfg) is True
+    assert _ap.should_heal(3, cfg) is False
+
+
+def test_run_heal_in_session_marker(tmp_path):
+    out = _ap.run_heal(tmp_path, 6, "/forge:resolve", "Build")
+    assert out["status"] == "in-session"
+    assert out["stage"] == 6
+
+
+def test_run_heal_background_killswitch_noop(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_NO_BACKGROUND", "1")
+    out = _ap.run_heal(tmp_path, 6, "/forge:resolve", mode="background")
+    assert out["status"] == "unavailable"
+
+
+def test_run_heal_background_dispatches_resolve(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "S2"
+        cost_usd = 0.004
+        reason = "healed"
+
+    def fake_dispatch(prompt, **kw):
+        calls.append((prompt, kw))
+        return _Res()
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch", fake_dispatch)
+    out = _ap.run_heal(tmp_path, 6, "/forge:resolve", "Build",
+                       mode="background", session_id="S1", blockers="gate X failed")
+    assert out["status"] == "ok"
+    assert out["session_id"] == "S2"
+    prompt, kw = calls[0]
+    assert kw["feature"] == "autopilot-heal"   # distinct ledger feature from stage runs
+    assert kw["resume"] == "S1"                 # heal reuses the run session
+    assert "resolve" in prompt.lower()          # routes through the Stage-11 resolver
+    assert "gate X failed" in prompt            # blockers threaded into the heal prompt
+
+
+def test_run_heal_background_passes_budget_and_model(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "S2"
+        cost_usd = 0.0
+        reason = ""
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda prompt, **kw: (calls.append(kw), _Res())[1])
+    _ap.run_heal(tmp_path, 6, "/forge:resolve", mode="background",
+                 model="claude-haiku-4-5", max_budget_usd=0.10)
+    assert calls[0]["max_budget_usd"] == 0.10
+    assert calls[0]["model"] == "claude-haiku-4-5"
+
+
+def test_cli_heal_requires_stage(tmp_path):
+    r = subprocess.run([PYTHON, str(_mod_path), "heal", "--cwd", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert r.returncode == 2
+
+
+def test_cli_heal_unavailable_killswitch(tmp_path):
+    _make_state(tmp_path, 6)
+    env = {**os.environ, "FORGE_NO_BACKGROUND": "1"}
+    r = subprocess.run(
+        [PYTHON, str(_mod_path), "heal", "--cwd", str(tmp_path),
+         "--stage", "6", "--skill", "/forge:resolve"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["status"] == "unavailable"

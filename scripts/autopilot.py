@@ -54,6 +54,7 @@ class AutopilotConfig:
     max_budget_usd: Optional[float] = None  # per-dispatch hard $ ceiling (REQ-HARNESS-002)
     models: dict = field(default_factory=dict)  # per-stage model routing (REQ-HARNESS-003)
     session_max_dispatches: Optional[int] = None  # rotate reused session after N (REQ-HARNESS-004)
+    max_heal_attempts: int = 1  # bounded self-heal per stage (REQ-AUTO-002; 0 = stop-on-gate)
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -109,7 +110,19 @@ def load_config(forge_dir) -> AutopilotConfig:
     smax = _coerce_int(section.get("session_max_dispatches"))
     if smax is not None:
         cfg.session_max_dispatches = smax
+    heal = _coerce_int(section.get("max_heal_attempts"))
+    if heal is not None:  # 0 is valid (stop-on-gate); only an absent/garbage value keeps the default
+        cfg.max_heal_attempts = max(0, heal)
     return cfg
+
+
+def should_heal(attempts_used: int, config: AutopilotConfig) -> bool:
+    """True when autopilot may attempt another bounded self-heal for the current stage
+    (REQ-AUTO-001/002). Capped by `max_heal_attempts` (default 1; 0 = v0.3.1 stop-on-gate).
+    `attempts_used` is the number of heals already tried for this stage. Never raises.
+    """
+    cap = config.max_heal_attempts
+    return isinstance(cap, int) and attempts_used < cap
 
 
 def should_rotate_session(dispatch_count: int, config: AutopilotConfig) -> bool:
@@ -319,6 +332,61 @@ def _stage_prompt(stage: int, skill: str, label: str) -> str:
     )
 
 
+def _heal_prompt(stage: int, skill: str, label: str, blockers: str = "") -> str:
+    base = (
+        f"You are Forge autopilot self-healing pipeline stage {stage} ({label}). The "
+        f"stage gate FAILED with blocking issues. Run the work for {skill} to fix the "
+        f"blockers and repair the stage's canonical artifact, then stop. Do NOT advance "
+        f"the stage pointer; the foreground loop re-checks the gate."
+    )
+    if blockers:
+        base += f"\n\nBlocking gate criteria to resolve:\n{blockers}"
+    return base
+
+
+def _dispatch_background(
+    cwd,
+    stage: int,
+    prompt: str,
+    *,
+    feature: str,
+    session_id: Optional[str],
+    rotate: bool,
+    model: Optional[str],
+    max_budget_usd: Optional[float],
+    claude_bin: Optional[str],
+) -> dict:
+    """Shared cost/capability-gated `claude -p` dispatch for stage runs and self-heals.
+
+    Returns a clean `unavailable` no-op when the kill switch is set or no background
+    capability is present; an `error` dict if dispatch unexpectedly raises. Never raises.
+    """
+    forge = Path(cwd) / ".forge"
+    ok, reason = _background_available(forge)
+    if not ok:
+        return {"status": "unavailable", "reason": reason, "stage": stage}
+    try:
+        res = _background_agent.dispatch(
+            prompt,
+            forge_dir=forge,
+            feature=feature,
+            resume=(None if rotate else session_id),
+            model=model,
+            max_budget_usd=max_budget_usd,
+            claude_bin=claude_bin,
+            cwd=str(cwd),
+        )
+    except Exception as exc:  # noqa: BLE001 — dispatch shouldn't raise, but never crash
+        return {"status": "error", "reason": str(exc), "stage": stage}
+    return {
+        "status": getattr(res, "status", "error"),
+        "reason": getattr(res, "reason", ""),
+        "session_id": getattr(res, "session_id", None) or session_id,
+        "cost_usd": getattr(res, "cost_usd", None),
+        "stage": stage,
+    }
+
+
 def run_stage(
     cwd,
     stage: int,
@@ -341,30 +409,41 @@ def run_stage(
     """
     if mode != "background":
         return {"status": "in-session", "stage": stage}
-    forge = Path(cwd) / ".forge"
-    ok, reason = _background_available(forge)
-    if not ok:
-        return {"status": "unavailable", "reason": reason, "stage": stage}
-    try:
-        res = _background_agent.dispatch(
-            _stage_prompt(stage, skill, label),
-            forge_dir=forge,
-            feature="autopilot-stage",
-            resume=(None if rotate else session_id),
-            model=model,
-            max_budget_usd=max_budget_usd,
-            claude_bin=claude_bin,
-            cwd=str(cwd),
-        )
-    except Exception as exc:  # noqa: BLE001 — dispatch shouldn't raise, but never crash
-        return {"status": "error", "reason": str(exc), "stage": stage}
-    return {
-        "status": getattr(res, "status", "error"),
-        "reason": getattr(res, "reason", ""),
-        "session_id": getattr(res, "session_id", None) or session_id,
-        "cost_usd": getattr(res, "cost_usd", None),
-        "stage": stage,
-    }
+    return _dispatch_background(
+        cwd, stage, _stage_prompt(stage, skill, label),
+        feature="autopilot-stage", session_id=session_id, rotate=rotate,
+        model=model, max_budget_usd=max_budget_usd, claude_bin=claude_bin,
+    )
+
+
+def run_heal(
+    cwd,
+    stage: int,
+    skill: str = "/forge:resolve",
+    label: str = "",
+    *,
+    mode: str = "in-session",
+    session_id: Optional[str] = None,
+    rotate: bool = False,
+    model: Optional[str] = None,
+    max_budget_usd: Optional[float] = None,
+    blockers: str = "",
+    claude_bin: Optional[str] = None,
+) -> dict:
+    """Dispatch one bounded self-heal for a blocked stage (REQ-AUTO-001). Never raises.
+
+    Routes through the Stage-11 resolver (`/forge:resolve`) to fix the gate blockers, then
+    returns so the foreground loop can re-check the gate. `in-session` is a no-op marker
+    (the skill runs the resolve in the user's session). `background` is the same
+    cost/capability-gated substrate as `run_stage`, tagged `autopilot-heal` in the ledger.
+    """
+    if mode != "background":
+        return {"status": "in-session", "stage": stage}
+    return _dispatch_background(
+        cwd, stage, _heal_prompt(stage, skill, label, blockers),
+        feature="autopilot-heal", session_id=session_id, rotate=rotate,
+        model=model, max_budget_usd=max_budget_usd, claude_bin=claude_bin,
+    )
 
 
 def plan_stages(
@@ -424,9 +503,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "walks this plan in-session).",
     )
     parser.add_argument("command", nargs="?", default="plan",
-                        choices=("plan", "record", "dispatch", "start", "stop", "status",
-                                 "finish"),
+                        choices=("plan", "record", "dispatch", "heal", "start", "stop",
+                                 "status", "finish"),
                         help="plan (default) | record a stage | dispatch (background) | "
+                             "heal a blocked stage (background) | "
                              "start/stop/status/finish the autopilot session")
     parser.add_argument("--cwd", default=os.getcwd(), help="project root (default: cwd)")
     parser.add_argument("--stage", type=int, default=None, metavar="N",
@@ -438,7 +518,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--session", default=None, help="(dispatch) reuse this session id")
     parser.add_argument("--model", default=None, help="(dispatch) background model override")
     parser.add_argument("--dispatch-count", type=int, default=0,
-                        help="(dispatch) prior dispatches on this session — triggers rotation")
+                        help="(dispatch/heal) prior dispatches on this session — triggers rotation")
+    parser.add_argument("--blockers", default="",
+                        help="(heal) blocking gate criteria summary to thread into the resolve prompt")
     parser.add_argument("--to", type=int, default=None, metavar="N",
                         help="run through stage N (inclusive)")
     parser.add_argument("--stages", type=int, default=None, metavar="K",
@@ -476,6 +558,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         result = run_stage(args.cwd, args.stage, args.skill, args.label,
                            mode="background", session_id=args.session, rotate=rotate,
                            model=model, max_budget_usd=cfg.max_budget_usd)
+        print(json.dumps(result))
+        return 0
+
+    if args.command == "heal":
+        if args.stage is None:
+            print("error: heal requires --stage N", file=sys.stderr)
+            return 2
+        cfg = load_config(Path(args.cwd) / ".forge")
+        model = args.model or model_for_stage(cfg, args.stage)
+        rotate = should_rotate_session(args.dispatch_count, cfg)
+        result = run_heal(args.cwd, args.stage, args.skill or "/forge:resolve", args.label,
+                          mode="background", session_id=args.session, rotate=rotate,
+                          model=model, max_budget_usd=cfg.max_budget_usd,
+                          blockers=args.blockers)
         print(json.dumps(result))
         return 0
 
