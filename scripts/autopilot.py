@@ -289,6 +289,59 @@ def record_run(
     return _error_log.append_jsonl(Path(forge_dir) / _RUNLOG_NAME, entry)
 
 
+def record_assumption(forge_dir, stage: int, assumption: str, *, mode: str = "in-session") -> bool:
+    """Record a reasonable default taken for an unanswered interactive prompt during an
+    unattended run (REQ-AUTO-004) — an explicit assumption in the run-log, never a silent
+    guess. Status `assumption` is NOT a done-status, so it does not mark the stage complete
+    for `--resume`. Never raises.
+    """
+    return record_run(forge_dir, stage, "assumption", mode=mode, note=assumption)
+
+
+# Answers file for unattended interactive stages (REQ-AUTO-004), tried in order.
+_ANSWERS_NAMES = ("autopilot-answers.json", "autopilot-answers.yaml", "autopilot-answers.yml")
+
+
+def read_answers(forge_dir) -> dict:
+    """Load `.forge/autopilot-answers.{json,yaml,yml}` — pre-supplied answers for the
+    CLARIFY/CONFIRM prompts of interactive stages in an unattended run (REQ-AUTO-004).
+    Returns {} when absent/unreadable/malformed (the loop then records assumptions instead).
+    Never raises.
+    """
+    forge = Path(forge_dir)
+    for name in _ANSWERS_NAMES:
+        path = forge / name
+        try:
+            if not path.exists():
+                continue
+            text = path.read_text()
+        except OSError:
+            continue
+        if name.endswith(".json"):
+            try:
+                data = json.loads(text)
+            except (ValueError, TypeError):
+                continue
+        else:
+            data = _safe_yaml_load(text)
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def answers_for_stage(answers: dict, stage: int) -> Optional[str]:
+    """Return the supplied answer for a stage (numeric or string key), or None. Non-string
+    values are JSON-encoded so the loop can hand them to the stage. Never raises.
+    """
+    if not isinstance(answers, dict):
+        return None
+    for key in (stage, str(stage)):
+        if key in answers:
+            v = answers[key]
+            return v if isinstance(v, str) else json.dumps(v)
+    return None
+
+
 def read_session(forge_dir) -> dict:
     """Read `.forge/autopilot-session.json` ({} if absent/unreadable). Never raises."""
     path = Path(forge_dir) / _SESSION_NAME
@@ -581,11 +634,12 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "walks this plan in-session).",
     )
     parser.add_argument("command", nargs="?", default="plan",
-                        choices=("plan", "record", "dispatch", "heal", "verify", "start",
-                                 "stop", "status", "finish"),
+                        choices=("plan", "record", "dispatch", "heal", "verify", "answers",
+                                 "start", "stop", "status", "finish"),
                         help="plan (default) | record a stage | dispatch (background) | "
                              "heal a blocked stage (background) | verify a passed stage "
-                             "(background) | start/stop/status/finish the autopilot session")
+                             "(background) | answers (echo unattended answers file) | "
+                             "start/stop/status/finish the autopilot session")
     parser.add_argument("--cwd", default=os.getcwd(), help="project root (default: cwd)")
     parser.add_argument("--stage", type=int, default=None, metavar="N",
                         help="(record/dispatch) the target stage")
@@ -611,6 +665,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="execution substrate the skill uses (default: in-session)")
     parser.add_argument("--resume", action="store_true",
                         help="skip stages already completed in .forge/autopilot-runs.jsonl")
+    parser.add_argument("--unattended", action="store_true",
+                        help="no per-stage checkpoints; interactive stages use the answers "
+                             "file or record assumptions (the loop honors the full safety "
+                             "envelope — budget, cost cap, max_heal, stop flag, kill switch)")
     parser.add_argument("--dry-run", action="store_true",
                         help="print the plan only (this script never mutates state regardless)")
     parser.add_argument("--json", action="store_true", help="emit the plan as JSON")
@@ -665,6 +723,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(json.dumps(result))
         return 0
 
+    if args.command == "answers":
+        print(json.dumps(read_answers(Path(args.cwd) / ".forge")))
+        return 0
+
     if args.command in ("start", "stop", "status", "finish"):
         forge = Path(args.cwd) / ".forge"
         if args.command == "start":
@@ -692,7 +754,9 @@ def main(argv: Optional[list[str]] = None) -> int:
               "(no pipeline state, or already at the target).", file=sys.stderr)
         return 0
     stages_str = " -> ".join(str(p["stage"]) for p in plan)
-    print(f"[Forge] {prefix}autopilot plan ({args.mode}): stages {stages_str}", file=sys.stderr)
+    unattended = " unattended" if args.unattended else ""
+    print(f"[Forge] {prefix}autopilot plan ({args.mode}{unattended}): stages {stages_str}",
+          file=sys.stderr)
     for p in plan:
         # stdout: one machine-readable "N\t/forge:skill" per line (build-batch idiom).
         print(f"{p['stage']}\t{p['skill']}")

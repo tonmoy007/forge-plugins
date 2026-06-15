@@ -614,3 +614,64 @@ def test_cli_verify_unavailable_killswitch(tmp_path):
     )
     assert r.returncode == 0
     assert json.loads(r.stdout)["status"] == "unavailable"
+
+
+# --- unattended mode (T-174, REQ-AUTO-004/005) -----------------------------
+
+def test_read_answers_absent_is_empty(tmp_path):
+    assert _ap.read_answers(tmp_path / ".forge") == {}
+
+
+def test_read_answers_json(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "autopilot-answers.json").write_text('{"1": "use postgres", "4": "rest"}')
+    assert _ap.read_answers(forge)["1"] == "use postgres"
+
+
+def test_read_answers_yaml(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "autopilot-answers.yaml").write_text("1: use postgres\n4: rest\n")
+    ans = _ap.read_answers(forge)
+    assert str(ans.get(1) or ans.get("1")) == "use postgres"
+
+
+def test_read_answers_malformed_is_empty(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "autopilot-answers.json").write_text("{not json")
+    assert _ap.read_answers(forge) == {}
+
+
+def test_answers_for_stage_numeric_and_string():
+    ans = {1: "a", "4": "b"}
+    assert _ap.answers_for_stage(ans, 1) == "a"
+    assert _ap.answers_for_stage(ans, 4) == "b"
+    assert _ap.answers_for_stage(ans, 9) is None
+
+
+def test_record_assumption_logs_but_not_completed(tmp_path):
+    forge = tmp_path / ".forge"
+    assert _ap.record_assumption(forge, 1, "assumed REST API") is True
+    # An assumption alone must NOT mark the stage complete for --resume.
+    assert 1 not in _ap._completed_stages(forge)
+
+
+def test_cli_answers_echoes_loaded(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "autopilot-answers.json").write_text('{"1": "x"}')
+    r = subprocess.run([PYTHON, str(_mod_path), "answers", "--cwd", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["1"] == "x"
+
+
+def test_cli_plan_unattended_accepted(tmp_path):
+    _make_state(tmp_path, 6)
+    r = subprocess.run([PYTHON, str(_mod_path), "--cwd", str(tmp_path),
+                        "--unattended", "--json"], capture_output=True, text=True)
+    assert r.returncode == 0
+    plan = json.loads(r.stdout)
+    assert [p["stage"] for p in plan] == [6, 7, 8, 9, 10, 11, 12]

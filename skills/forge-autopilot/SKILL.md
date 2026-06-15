@@ -23,6 +23,7 @@ in-session (a script can't drive the Agent tool — ADR-006).
 
 - `/forge:autopilot` (optionally `to stage N`, `the next K stages`, or `until a gate`).
 - The user wants several stages run without issuing each `/forge:*` command by hand.
+- `/forge:autopilot --unattended` for a fully hands-free run (no checkpoints; see below).
 
 ## When NOT to Use
 
@@ -43,6 +44,25 @@ in-session (a script can't drive the Agent tool — ADR-006).
 - **Background mode** (`--mode background`) is cost-capped + capability-gated and a clean
   no-op when background agents are unavailable or `FORGE_NO_BACKGROUND=1`.
 
+## Unattended mode (`--unattended`, REQ-AUTO-004/005)
+
+`/forge:autopilot --unattended` runs with **no per-stage checkpoints** (it ignores
+`checkpoint: every`) for a hands-free run. It stays inside the **full safety envelope** —
+the per-dispatch `max_budget_usd`, the `_cost_cap` ledger, `max_heal_attempts`,
+`max_stages`/`stop_before`, the `FORGE_NO_BACKGROUND` kill switch, and the
+`/forge:autopilot-stop` flag. Hitting **any** bound STOPS cleanly, leaving a resumable
+run-log (`/forge:autopilot --resume`).
+
+For interactive stages (SRS/spec/plan CLARIFY/CONFIRM), an unattended run does **not**
+silently guess:
+- It first loads pre-supplied answers — `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py
+  answers --cwd .` reads `.forge/autopilot-answers.{json,yaml}` (keyed by stage) — and uses
+  the matching answer.
+- Absent an answer, it adopts a **reasonable default and records it as an explicit
+  assumption** in the run-log: `autopilot.py record --cwd . --stage {stage} --status
+  assumption --note "{what was assumed and why}"`. Assumptions never mark a stage complete,
+  so they surface in the final summary for the user to review.
+
 ## Steps
 
 1. **Start + plan.** Mark the session active (idempotent — warns if one is already
@@ -54,7 +74,8 @@ in-session (a script can't drive the Agent tool — ADR-006).
    the ordered plan:
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py --cwd . --json \
-     [--to N | --stages K | --until-gate] [--mode in-session|background] [--resume]
+     [--to N | --stages K | --until-gate] [--mode in-session|background] [--resume] \
+     [--unattended]
    ```
    Each plan item is `{stage, skill, label}`. If the plan is empty, tell the user there's
    nothing to run (already at target, or no pipeline) and stop.
