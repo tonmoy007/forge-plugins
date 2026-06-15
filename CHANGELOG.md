@@ -14,6 +14,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.4] — 2026-06-15
+
+**Sprint planning + cross-machine guidance (M4).** Closes the long-deferred v0.2 M4
+backlog (originally scoped as v0.2.3): a sprint view over the task DAG, `~/.forge` sync
+guidance with opt-in local-only telemetry, and a Windows-timeout fix.
+
+### Added
+- **`/forge:sprint`** (`scripts/sprint.py`, `skills/forge-sprint/`, T-153,
+  REQ-F-044..048): a deterministic **view over the task DAG** (no LLM). `plan` groups the
+  next ready tasks (dependency order, target `--size`, optional `--milestone`) into
+  `pipeline/05-plan/sprint-NN.md` — **carry-over first**, preserving T-IDs across sprints;
+  `review` reports done/carried/blockers into `pipeline/12-release/sprint-NN-review.md`;
+  `list` shows progress. Fully opt-in — a project that never runs it sees no change.
+- **Opt-in, local-only telemetry** (`scripts/telemetry.py`, T-154, REQ-F-053):
+  skill-mining telemetry is **off by default**; when enabled it records to
+  `.forge/telemetry.jsonl` **on the local machine only** and leaves solely via an explicit
+  `export`. `enable`/`disable`/`status`/`summary`/`export` CLI. Forge has no telemetry
+  network path. The skill-miner records a fail-soft `skills_mined` event when opted in.
+- **`docs/forge-sync.md`** (T-154, REQ-F-052): a conflict-safe layout for syncing
+  `~/.forge` (global lessons) across machines with no server — what to sync, what to keep
+  machine-local, and a private-git-repo recommendation.
+
+### Changed
+- README: sprint coverage; ROADMAP/progress reflect the M4 release.
+
+### Fixed
+- **Cross-platform hook timeout** (`scripts/_hook_runner.py`, T-155, REQ-F-054 /
+  NFR-COMPAT-001): Windows lacks `signal.SIGALRM`/`setitimer`, which crashed `run_hook` on
+  the first hook event. The runner now degrades to **no wall-clock kill** on such platforms
+  (still exception-isolated; explicit `exit 2` still blocks) instead of crashing. See
+  `build/06-evaluation/spike-windows.md`.
+
+---
+
 ## [0.3.3] — 2026-06-15
 
 **Complete (local) autonomy + modernized harness (v0.3).** Two things land together:

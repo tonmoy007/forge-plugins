@@ -317,3 +317,46 @@ class TestSignalCleanup:
         # itimer should be disarmed (returns (0.0, 0.0) when not active)
         remaining, _ = signal.setitimer(signal.ITIMER_REAL, 0)
         assert remaining == 0
+
+
+class TestNoSigalrmPlatform:
+    """T-155 / REQ-F-054 — Windows: `signal.setitimer`/`SIGALRM` do not exist there, so
+    run_hook must degrade to *no wall-clock timeout* rather than crash. Simulated on POSIX
+    by removing those attrs at runtime before the call."""
+
+    def test_runs_without_setitimer(self, tmp_path):
+        rc, out, _ = _run_in_subprocess(
+            "import signal\n"
+            "for a in ('setitimer', 'getitimer', 'SIGALRM', 'ITIMER_REAL'):\n"
+            "    if hasattr(signal, a):\n"
+            "        delattr(signal, a)\n"
+            "def main(): print('ran')\n"
+            "run_hook(main, hook_name='session-start')",
+            env={"CLAUDE_PROJECT_DIR": str(tmp_path)},
+        )
+        assert rc == 0
+        assert "ran" in out
+
+    def test_blocking_exit2_without_setitimer(self, tmp_path):
+        rc, _, _ = _run_in_subprocess(
+            "import signal, sys\n"
+            "for a in ('setitimer', 'getitimer', 'SIGALRM', 'ITIMER_REAL'):\n"
+            "    if hasattr(signal, a):\n"
+            "        delattr(signal, a)\n"
+            "def main(): sys.exit(2)\n"
+            "run_hook(main, hook_name='pre-tool-write')",
+            env={"CLAUDE_PROJECT_DIR": str(tmp_path)},
+        )
+        assert rc == 2  # blocking semantics intact without the timer
+
+    def test_exception_isolated_without_setitimer(self, tmp_path):
+        rc, _, _ = _run_in_subprocess(
+            "import signal\n"
+            "for a in ('setitimer', 'getitimer', 'SIGALRM', 'ITIMER_REAL'):\n"
+            "    if hasattr(signal, a):\n"
+            "        delattr(signal, a)\n"
+            "def main(): raise RuntimeError('boom')\n"
+            "run_hook(main, hook_name='session-start')",
+            env={"CLAUDE_PROJECT_DIR": str(tmp_path)},
+        )
+        assert rc == 0  # uncaught exception still isolated (exit 0)

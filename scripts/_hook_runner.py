@@ -16,9 +16,12 @@ Environment overrides:
   - ``FORGE_HOOK_TIMEOUT_<HOOK_NAME>``     — per-hook override, e.g.
     ``FORGE_HOOK_TIMEOUT_SESSION_START=5``
 
-POSIX-only (uses ``SIGALRM``). Stdlib-only.
+The wall-clock timeout uses ``SIGALRM``/``setitimer`` (POSIX). On platforms without
+them (Windows), the runner degrades to **no hard timeout** — the hook still runs and
+stays exception-isolated; only the watchdog kill is unavailable (T-155 / NFR-COMPAT-001;
+see ``build/06-evaluation/spike-windows.md``). Stdlib-only.
 
-Ref: T-100
+Ref: T-100, T-155
 """
 
 from __future__ import annotations
@@ -153,6 +156,43 @@ def _timeout_handler(signum, frame):  # type: ignore[no-untyped-def]
     raise _Timeout()
 
 
+def _supports_itimer() -> bool:
+    """True only on platforms with the POSIX interval timer (SIGALRM + setitimer).
+
+    Windows has neither, so the wall-clock kill is unavailable there (T-155 /
+    REQ-F-054 / NFR-COMPAT-001). Checked at call time so it can be exercised on POSIX.
+    """
+    return hasattr(signal, "setitimer") and hasattr(signal, "SIGALRM")
+
+
+def _install_timeout(timeout: float):
+    """Arm a wall-clock SIGALRM and return the previous handler, or None when the timer
+    is unavailable (Windows) or cannot be installed (e.g. not the main thread). When None,
+    the hook runs WITHOUT a hard timeout — it is still exception-isolated. Never raises.
+    """
+    if not _supports_itimer():
+        return None
+    try:
+        previous = signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.setitimer(signal.ITIMER_REAL, timeout)
+        return previous
+    except (ValueError, OSError, AttributeError):
+        # ValueError: not in main thread. AttributeError: partial signal support.
+        return None
+
+
+def _cancel_timeout(previous) -> None:
+    """Disarm the interval timer and restore the previous handler. Never raises."""
+    if not _supports_itimer():
+        return
+    try:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        if previous is not None:
+            signal.signal(signal.SIGALRM, previous)
+    except (TypeError, ValueError, OSError, AttributeError):
+        pass
+
+
 def run_hook(
     fn: Callable[[], None],
     *,
@@ -198,10 +238,11 @@ def run_hook(
         except (TypeError, ValueError):
             cwd_for_log = None
 
-    # Install timeout. setitimer with ITIMER_REAL supports float seconds,
-    # unlike signal.alarm which only takes int seconds.
-    previous = signal.signal(signal.SIGALRM, _timeout_handler)
-    signal.setitimer(signal.ITIMER_REAL, timeout)
+    # Install timeout. setitimer with ITIMER_REAL supports float seconds, unlike
+    # signal.alarm which only takes int seconds. On platforms without SIGALRM/setitimer
+    # (Windows), this degrades to no wall-clock kill — the hook still runs and stays
+    # exception-isolated (T-155 / NFR-COMPAT-001).
+    previous = _install_timeout(timeout)
 
     try:
         fn()
@@ -239,11 +280,7 @@ def run_hook(
         _emit_error(hook_name, type(exc).__name__, tb, cwd_for_log)
         sys.exit(0)
     finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        try:
-            signal.signal(signal.SIGALRM, previous)
-        except (TypeError, ValueError):
-            pass
+        _cancel_timeout(previous)
 
 
 __all__ = ["run_hook"]
