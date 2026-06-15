@@ -150,6 +150,21 @@ def test_dispatch_omits_json_schema_when_absent(tmp_path: Path) -> None:
     assert "--json-schema" not in argv_log.read_text()
 
 
+def test_dispatch_passes_max_budget_flag(tmp_path: Path) -> None:
+    # T-168: per-dispatch hard $ ceiling via the CLI's --max-budget-usd (2.1.177+).
+    bin_, argv_log = _fake_dispatch_claude(tmp_path)
+    forge = tmp_path / ".forge"
+    _ba.dispatch("go", forge_dir=forge, feature="t", max_budget_usd=0.10, claude_bin=bin_)
+    assert "--max-budget-usd" in argv_log.read_text()
+
+
+def test_dispatch_omits_max_budget_when_absent(tmp_path: Path) -> None:
+    bin_, argv_log = _fake_dispatch_claude(tmp_path)
+    forge = tmp_path / ".forge"
+    _ba.dispatch("go", forge_dir=forge, feature="t", claude_bin=bin_)
+    assert "--max-budget-usd" not in argv_log.read_text()
+
+
 def test_dispatch_skips_when_over_cap(tmp_path: Path) -> None:
     forge = tmp_path / ".forge"
     forge.mkdir(parents=True)

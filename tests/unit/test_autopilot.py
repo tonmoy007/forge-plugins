@@ -265,6 +265,33 @@ def test_cli_dispatch_requires_stage(tmp_path):
     assert r.returncode == 2
 
 
+# --- run-level task budget (T-168, REQ-HARNESS-002) ------------------------
+
+def test_load_config_reads_max_budget(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  max_budget_usd: 0.25\n")
+    assert _ap.load_config(forge).max_budget_usd == 0.25
+
+
+def test_run_stage_background_passes_max_budget(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "S2"
+        cost_usd = 0.0
+        reason = ""
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda prompt, **kw: (calls.append(kw), _Res())[1])
+    _ap.run_stage(tmp_path, 6, "/forge:build", mode="background", max_budget_usd=0.25)
+    assert calls[0]["max_budget_usd"] == 0.25
+
+
 # --- session / cancel (REQ-AP-007) -----------------------------------------
 
 def test_start_session_idempotent(tmp_path):

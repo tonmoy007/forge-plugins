@@ -51,6 +51,7 @@ class AutopilotConfig:
     checkpoint: str = "gate"  # every | gate | never
     allow_force: bool = False
     model: Optional[str] = None  # background-mode model override (else inherits default)
+    max_budget_usd: Optional[float] = None  # per-dispatch hard $ ceiling (REQ-HARNESS-002)
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -94,6 +95,12 @@ def load_config(forge_dir) -> AutopilotConfig:
     model = section.get("model")
     if isinstance(model, str) and model.strip():
         cfg.model = model.strip()
+    budget = section.get("max_budget_usd")
+    if budget is not None:
+        try:
+            cfg.max_budget_usd = float(budget)
+        except (TypeError, ValueError):
+            pass
     return cfg
 
 
@@ -276,6 +283,7 @@ def run_stage(
     mode: str = "in-session",
     session_id: Optional[str] = None,
     model: Optional[str] = None,
+    max_budget_usd: Optional[float] = None,
     claude_bin: Optional[str] = None,
 ) -> dict:
     """Execute one stage in the selected substrate (REQ-AP-006). Never raises.
@@ -298,6 +306,7 @@ def run_stage(
             feature="autopilot-stage",
             resume=session_id,
             model=model,
+            max_budget_usd=max_budget_usd,
             claude_bin=claude_bin,
             cwd=str(cwd),
         )
@@ -413,8 +422,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.stage is None:
             print("error: dispatch requires --stage N", file=sys.stderr)
             return 2
+        cfg = load_config(Path(args.cwd) / ".forge")
         result = run_stage(args.cwd, args.stage, args.skill, args.label,
-                           mode="background", session_id=args.session, model=args.model)
+                           mode="background", session_id=args.session, model=args.model,
+                           max_budget_usd=cfg.max_budget_usd)
         print(json.dumps(result))
         return 0
 

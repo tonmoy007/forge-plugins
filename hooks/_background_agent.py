@@ -160,6 +160,7 @@ def dispatch(
     resume: Optional[str] = None,
     model: Optional[str] = None,
     output_schema: Optional[dict] = None,
+    max_budget_usd: Optional[float] = None,
     floor_usd: Optional[float] = None,
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
@@ -203,6 +204,11 @@ def dispatch(
             # old for the flag exits non-zero → a structured "error" result (never
             # raises); the orchestration layer then drops the item with a reason.
             cmd += ["--json-schema", json.dumps(output_schema)]
+        if max_budget_usd is not None:
+            # Per-dispatch hard $ ceiling enforced by the CLI itself (REQ-HARNESS-002);
+            # complements _cost_cap's daily/monthly ledger gate. A CLI too old for the
+            # flag exits non-zero → structured "error" result (never raises).
+            cmd += ["--max-budget-usd", str(max_budget_usd)]
 
         try:
             proc = subprocess.run(
