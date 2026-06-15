@@ -131,6 +131,7 @@ Forge tells you at every session start.
 | `/forge:retro` | Run a cycle-completion retrospective after Stage 12 |
 | `/forge:why` | Explain a gate criterion, lesson tag, stage, or current blocker |
 | `/forge:set-profile` | Set the project-type profile (api, library, cli, monorepo, …) |
+| `/forge:rules` | Author project rules that steer agents (`init`/`add`/`list`/`validate`) — advisory, scope-based |
 | `/forge:review` | Fan four reviewers (correctness/security/performance/conventions) over a diff and synthesize one report |
 | `/forge:adopt` | Brownfield onboarding — detect type, infer SRS + architecture drafts, seed pipeline state |
 
@@ -199,15 +200,54 @@ Lessons are extracted automatically after each stage completion. When a pattern 
 
 ---
 
+## Project Rules
+
+Author project-specific constraints that steer Forge's agents — a scoped, Forge-native
+take on Cursor's `.cursor/rules`. Rules live in `.forge/rules/*.md` (YAML frontmatter +
+a markdown body) and are **advisory**: they nudge the agents and surface as context, but
+never block a write.
+
+```bash
+/forge:rules init                                   # scaffold .forge/rules/ (README + example)
+/forge:rules add no-bare-except --scope glob        # add a new rule from a template
+/forge:rules list                                   # show active rules
+/forge:rules validate                               # check frontmatter / scopes
+```
+
+Each rule's **scope** decides when it activates:
+
+| Scope | Activates | Surfaces |
+|-------|-----------|----------|
+| `always` | every session | session-start context block |
+| `stage` | when on a listed pipeline stage | session-start context block |
+| `glob` | when writing a file matching `globs` | advisory feedback before the write |
+| `manual` | never automatically | referenced by name |
+
+Example — `.forge/rules/00-style.md`:
+
+```markdown
+---
+description: House style for UI components
+scope: glob
+globs: ["**/*.tsx"]
+---
+Prefer composition over inheritance; use design tokens, not raw values.
+```
+
+Rules share the session-start token budget with lessons and degrade to a clean no-op
+when `.forge/rules/` is absent. Full schema: `references/rules-format.md`.
+
+---
+
 ## How Hooks Work
 
 Forge installs 7 lifecycle hooks that run silently alongside your Claude Code session:
 
 | Hook | Fires | What it does |
 |------|-------|-------------|
-| `session-start.py` | Every session open | Injects current stage, task, blockers, top lessons (≤ 2 000 tokens) |
+| `session-start.py` | Every session open | Injects current stage, task, blockers, top lessons, and active `always`/`stage` rules (≤ 2 000 tokens) |
 | `prompt-submit.py` | Every user message | Detects stage intent; flags corrections for lesson extraction |
-| `pre-tool-write.py` | Before Write/Edit | Checks design token compliance, traceability, naming conventions |
+| `pre-tool-write.py` | Before Write/Edit | Checks design token compliance; surfaces matching `glob` project rules (advisory) |
 | `post-tool-use.py` | After Write/Edit/Bash | Logs tool use; appends to `patterns.jsonl` for skill mining |
 | `stop-reflect.py` | End of Claude turn | Evaluates output against gate criteria; surfaces skill proposals |
 | `subagent-stop.py` | End of subagent turn | Captures subagent reflections |

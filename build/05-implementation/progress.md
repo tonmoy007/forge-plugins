@@ -66,7 +66,7 @@
 | T-158 | 🟢 done | 2026-06-15 | (this commit) | `/forge:rules` skill (`name: forge-rules`) — init (idempotent scaffold) / add (no-clobber) / list / validate; `rules.py` gained those CLI subcommands. `references/rules-format.md` documents the schema + 4 scopes. +7 tests (init/add CLI + structural). validate-plugin 0 |
 | T-159 | 🟢 done | 2026-06-15 | (this commit) | `hooks/session-start.py` injects `always` + current-`stage` rules (`_rules_block`, render cap 500 chars) after lessons; budget path trims lessons then drops rules last-resort to hold ≤2000 tokens. Never-raises. +6 tests (always/stage/off-stage/no-dir/glob-excluded/budget) |
 | T-160 | 🟢 done | 2026-06-15 | (this commit) | `hooks/pre-tool-write.py` refactored into `_glob_rules_message` (any file type) + `_design_violations_message` (UI, existing); glob rules surface as advisory `additionalContext`, never block (exit 0). Design-system path behavior preserved. +5 tests. Full suite 1257 pass |
-| T-161 | 🔲 todo | | | release v0.3.0 |
+| T-161 | 🟡 staged | 2026-06-15 | (this commit) | Release v0.3.0 prep — `bump-version.py 0.3.0` (manifests + CHANGELOG `[0.3.0]`), README "Project Rules" section + commands/hooks rows, ROADMAP rows. Pre-release green: 1257 unit pass, validate-plugin 0, full-pipeline 12/12. **Push/PR/tag/mirror pending user confirmation.** |
 
 ### M2 — Autopilot / autonomy (v0.3.1) — branch (later)
 

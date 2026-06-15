@@ -14,6 +14,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] — 2026-06-15
+
+**Project Rules (v0.3 Milestone 1 — governance).** A user-authored constraints surface
+that steers Forge's agents, in the spirit of Cursor's `.cursor/rules`. Rules live in
+`.forge/rules/*.md` (YAML frontmatter + a markdown body), are **advisory** (they never
+block a write), and degrade to a clean no-op when the directory is absent. This is the
+first phase of the v0.3 "Hands-off Forge" program; Autopilot follows in v0.3.1.
+
+### Added
+- **Rules loader** (`scripts/rules.py`, T-157, REQ-RULES-001..004): parses
+  `.forge/rules/*.md` with a scope model — `always`, `stage`, `glob`, `manual` —
+  exposing `load_rules` / `select` / budget-bounded `render`. Frontmatter is split with
+  a stdlib fence parser + fail-soft PyYAML (no third-party `frontmatter` dependency);
+  globs use `fnmatch` with sensible `**` handling. Malformed files are skipped and an
+  absent directory yields nothing — it **never raises** (it is imported by hooks).
+- **`/forge:rules` skill** (`skills/forge-rules/`, T-158, REQ-RULES-005..008):
+  `init` (idempotent scaffold of `.forge/rules/` with a README + example) / `add` (from a
+  template, never clobbers) / `list` / `validate`. Documented in
+  `references/rules-format.md`.
+- **Glob-rule injection on writes** (`hooks/pre-tool-write.py`, T-160, REQ-RULES-010):
+  user `glob` rules matching the written file surface as advisory `additionalContext`
+  for **any** file type, alongside the existing design-system feedback. Never blocks.
+
+### Changed
+- **Session-start injects rules** (`hooks/session-start.py`, T-159, REQ-RULES-009): the
+  context block now includes `always` + current-`stage` rules, kept within the existing
+  ≤2000-token budget (lessons trim first, then rules drop as a last resort).
+
+### Fixed
+
+---
+
 ## [0.2.3] — 2026-06-11
 
 **Background daemons (v0.2 Milestone 2).** With the O-2 cost gate cleared in v0.2.2,
