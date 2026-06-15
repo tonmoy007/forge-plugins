@@ -72,7 +72,7 @@
 
 | Task | Status | Notes |
 |------|--------|-------|
-| T-162 | 🔲 todo | `scripts/autopilot.py` deterministic stage planner |
+| T-162 | 🟢 done | `scripts/autopilot.py` deterministic planner — resolve_plan (targets --to/--stages/--until-gate, cycle entry/exit + bounds clamp, config stop_before/max_stages), plan_stages (state → {stage,skill,label}, --resume skips run-log), load_config; never-raises (malformed state → []). CLI --json/--dry-run. +18 tests |
 | T-163 | 🔲 todo | `/forge:autopilot` in-session loop (stop-on-gate) |
 | T-164 | 🔲 todo | `--mode background` substrate |
 | T-165 | 🔲 todo | `/forge:autopilot-stop` + cancel/idempotency |
