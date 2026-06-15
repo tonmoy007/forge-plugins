@@ -5,8 +5,13 @@
 
 ## Current State
 
-- **Active program: v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
-  you": daemons, orchestration, brownfield, sprint.
+- **Active program: v0.3** — "Hands-off Forge — autonomy + governance": user-authored
+  **Rules** (v0.3.0) + **Autopilot** cross-stage execution (v0.3.1). On branch
+  `feat/v0.3.0-rules` off `main`; SRS `build/01-srs/srs-v0.3.md`, DAG
+  `build/04-plan/task-dag-v0.3.md` (T-157..T-166). See v0.3 Task Status below.
+- **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
+  you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
+  (sprint M4, T-153–156, deferred).
 - **v0.2.0 (M1 foundation) COMPLETE + RELEASED** — T-136..T-141. Cost cap + ledger,
   background-agent dispatch (`claude -p`, session reuse), capability probe wired into
   session-start, background skill-miner instrumentation, `/forge:set-profile`. Tag
@@ -47,6 +52,31 @@
 - **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.3 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.3.md` (T-157..T-166). Two phases: M1 Rules (v0.3.0,
+> T-157..T-161), M2 Autopilot (v0.3.1, T-162..T-166). SRS `build/01-srs/srs-v0.3.md`.
+
+### M1 — Rules / governance (v0.3.0) — branch `feat/v0.3.0-rules`
+
+| Task | Status | Completed | Commit | Notes |
+|------|--------|-----------|--------|-------|
+| T-157 | 🟢 done | 2026-06-15 | (this commit) | `scripts/rules.py` — `.forge/rules/*.md` loader: frontmatter (stdlib split + fail-soft PyYAML, no `frontmatter` dep), scope model always/stage/glob/manual, `select()` + budget-bounded `render()`, fnmatch globs with `**` handling, CLI list/validate (argparse SUPPRESS). Never-raises. +14 tests |
+| T-158 | 🔲 todo | | | `/forge:rules` skill (init/list/add/validate) + `references/rules-format.md` |
+| T-159 | 🔲 todo | | | session-start always/stage injection (≤2000-token budget) |
+| T-160 | 🔲 todo | | | pre-tool-write glob injection (advisory, never block) |
+| T-161 | 🔲 todo | | | release v0.3.0 |
+
+### M2 — Autopilot / autonomy (v0.3.1) — branch (later)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| T-162 | 🔲 todo | `scripts/autopilot.py` deterministic stage planner |
+| T-163 | 🔲 todo | `/forge:autopilot` in-session loop (stop-on-gate) |
+| T-164 | 🔲 todo | `--mode background` substrate |
+| T-165 | 🔲 todo | `/forge:autopilot-stop` + cancel/idempotency |
+| T-166 | 🔲 todo | release v0.3.1 |
 
 ## v0.2 Task Status
 
