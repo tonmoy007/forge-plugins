@@ -265,6 +265,121 @@ def test_cli_dispatch_requires_stage(tmp_path):
     assert r.returncode == 2
 
 
+# --- run-level task budget (T-168, REQ-HARNESS-002) ------------------------
+
+def test_load_config_reads_max_budget(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  max_budget_usd: 0.25\n")
+    assert _ap.load_config(forge).max_budget_usd == 0.25
+
+
+def test_run_stage_background_passes_max_budget(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "S2"
+        cost_usd = 0.0
+        reason = ""
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda prompt, **kw: (calls.append(kw), _Res())[1])
+    _ap.run_stage(tmp_path, 6, "/forge:build", mode="background", max_budget_usd=0.25)
+    assert calls[0]["max_budget_usd"] == 0.25
+
+
+# --- per-stage model routing (T-169, REQ-HARNESS-003) ----------------------
+
+def test_load_config_reads_models(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text(
+        "autopilot:\n  models:\n    6: claude-opus-4-8\n    eval: claude-haiku-4-5\n"
+    )
+    cfg = _ap.load_config(forge)
+    assert isinstance(cfg.models, dict) and cfg.models
+
+
+def test_model_for_stage_numeric_key():
+    cfg = _ap.AutopilotConfig(models={6: "claude-opus-4-8", 7: "claude-haiku-4-5"})
+    assert _ap.model_for_stage(cfg, 6) == "claude-opus-4-8"
+    assert _ap.model_for_stage(cfg, 7) == "claude-haiku-4-5"
+
+
+def test_model_for_stage_command_word_key():
+    # stage 6's skill is /forge:build → keyable as "build"
+    cfg = _ap.AutopilotConfig(models={"build": "claude-opus-4-8"})
+    assert _ap.model_for_stage(cfg, 6) == "claude-opus-4-8"
+
+
+def test_model_for_stage_falls_back_to_single_model():
+    cfg = _ap.AutopilotConfig(model="claude-haiku-4-5")  # no per-stage map
+    assert _ap.model_for_stage(cfg, 6) == "claude-haiku-4-5"
+
+
+def test_model_for_stage_none_when_unset():
+    assert _ap.model_for_stage(_ap.AutopilotConfig(), 6) is None
+
+
+# --- long-run context: session rotation (T-170, REQ-HARNESS-004) -----------
+
+def test_should_rotate_session():
+    cfg = _ap.AutopilotConfig(session_max_dispatches=5)
+    assert _ap.should_rotate_session(5, cfg) is True
+    assert _ap.should_rotate_session(6, cfg) is True
+    assert _ap.should_rotate_session(4, cfg) is False
+
+
+def test_should_rotate_session_unset_never_rotates():
+    assert _ap.should_rotate_session(1000, _ap.AutopilotConfig()) is False
+
+
+def test_load_config_reads_session_max_dispatches(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  session_max_dispatches: 8\n")
+    assert _ap.load_config(forge).session_max_dispatches == 8
+
+
+def test_run_stage_rotate_starts_fresh_session(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "NEW"
+        cost_usd = 0.0
+        reason = ""
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda prompt, **kw: (calls.append(kw), _Res())[1])
+    _ap.run_stage(tmp_path, 6, "/forge:build", mode="background",
+                  session_id="OLD", rotate=True)
+    assert calls[0]["resume"] is None  # rotated → fresh session (bounds context growth)
+
+
+def test_run_stage_no_rotate_keeps_session(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "OLD"
+        cost_usd = 0.0
+        reason = ""
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda prompt, **kw: (calls.append(kw), _Res())[1])
+    _ap.run_stage(tmp_path, 6, "/forge:build", mode="background", session_id="OLD")
+    assert calls[0]["resume"] == "OLD"  # default: reuse session (cost)
+
+
 # --- session / cancel (REQ-AP-007) -----------------------------------------
 
 def test_start_session_idempotent(tmp_path):
@@ -306,3 +421,257 @@ def test_cli_stop_then_status(tmp_path):
     r_status = subprocess.run([PYTHON, str(_mod_path), "status", "--cwd", cwd],
                               capture_output=True, text=True)
     assert json.loads(r_status.stdout)["stop_requested"] is True
+
+
+# --- self-heal loop (T-172, REQ-AUTO-001/002) ------------------------------
+
+def test_max_heal_attempts_defaults_to_one():
+    # Default policy: one bounded heal attempt per stage before STOP.
+    assert _ap.AutopilotConfig().max_heal_attempts == 1
+
+
+def test_load_config_reads_max_heal_attempts(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  max_heal_attempts: 3\n")
+    assert _ap.load_config(forge).max_heal_attempts == 3
+
+
+def test_load_config_max_heal_attempts_zero_is_stop_on_gate(tmp_path):
+    # 0 is meaningful (not "unset"): it restores v0.3.1 stop-on-gate behavior.
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  max_heal_attempts: 0\n")
+    assert _ap.load_config(forge).max_heal_attempts == 0
+
+
+def test_should_heal_default_allows_one_attempt():
+    cfg = _ap.AutopilotConfig()  # max_heal_attempts == 1
+    assert _ap.should_heal(0, cfg) is True   # first blocker → heal
+    assert _ap.should_heal(1, cfg) is False  # after one heal → STOP
+
+
+def test_should_heal_zero_never_heals():
+    cfg = _ap.AutopilotConfig(max_heal_attempts=0)
+    assert _ap.should_heal(0, cfg) is False  # == v0.3.1 stop-on-gate
+
+
+def test_should_heal_respects_higher_cap():
+    cfg = _ap.AutopilotConfig(max_heal_attempts=3)
+    assert _ap.should_heal(2, cfg) is True
+    assert _ap.should_heal(3, cfg) is False
+
+
+def test_run_heal_in_session_marker(tmp_path):
+    out = _ap.run_heal(tmp_path, 6, "/forge:resolve", "Build")
+    assert out["status"] == "in-session"
+    assert out["stage"] == 6
+
+
+def test_run_heal_background_killswitch_noop(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_NO_BACKGROUND", "1")
+    out = _ap.run_heal(tmp_path, 6, "/forge:resolve", mode="background")
+    assert out["status"] == "unavailable"
+
+
+def test_run_heal_background_dispatches_resolve(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "S2"
+        cost_usd = 0.004
+        reason = "healed"
+
+    def fake_dispatch(prompt, **kw):
+        calls.append((prompt, kw))
+        return _Res()
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch", fake_dispatch)
+    out = _ap.run_heal(tmp_path, 6, "/forge:resolve", "Build",
+                       mode="background", session_id="S1", blockers="gate X failed")
+    assert out["status"] == "ok"
+    assert out["session_id"] == "S2"
+    prompt, kw = calls[0]
+    assert kw["feature"] == "autopilot-heal"   # distinct ledger feature from stage runs
+    assert kw["resume"] == "S1"                 # heal reuses the run session
+    assert "resolve" in prompt.lower()          # routes through the Stage-11 resolver
+    assert "gate X failed" in prompt            # blockers threaded into the heal prompt
+
+
+def test_run_heal_background_passes_budget_and_model(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "S2"
+        cost_usd = 0.0
+        reason = ""
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda prompt, **kw: (calls.append(kw), _Res())[1])
+    _ap.run_heal(tmp_path, 6, "/forge:resolve", mode="background",
+                 model="claude-haiku-4-5", max_budget_usd=0.10)
+    assert calls[0]["max_budget_usd"] == 0.10
+    assert calls[0]["model"] == "claude-haiku-4-5"
+
+
+def test_cli_heal_requires_stage(tmp_path):
+    r = subprocess.run([PYTHON, str(_mod_path), "heal", "--cwd", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert r.returncode == 2
+
+
+def test_cli_heal_unavailable_killswitch(tmp_path):
+    _make_state(tmp_path, 6)
+    env = {**os.environ, "FORGE_NO_BACKGROUND": "1"}
+    r = subprocess.run(
+        [PYTHON, str(_mod_path), "heal", "--cwd", str(tmp_path),
+         "--stage", "6", "--skill", "/forge:resolve"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["status"] == "unavailable"
+
+
+# --- self-verification (T-173, REQ-AUTO-003) -------------------------------
+
+def test_verify_disabled_by_default():
+    assert _ap.AutopilotConfig().verify is False
+
+
+def test_load_config_reads_verify(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  verify: true\n")
+    assert _ap.load_config(forge).verify is True
+
+
+def test_run_verify_in_session_marker(tmp_path):
+    out = _ap.run_verify(tmp_path, 6, "/forge:build", "Build")
+    assert out["status"] == "in-session"
+    assert out["stage"] == 6
+
+
+def test_run_verify_background_fresh_context_and_schema(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "V1"
+        cost_usd = 0.003
+        reason = ""
+        result = '{"verdict": "pass"}'
+
+    def fake_dispatch(prompt, **kw):
+        calls.append((prompt, kw))
+        return _Res()
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch", fake_dispatch)
+    out = _ap.run_verify(tmp_path, 6, "/forge:build", "Build", mode="background")
+    prompt, kw = calls[0]
+    assert kw["feature"] == "autopilot-verify"
+    assert kw["resume"] is None                       # fresh context — never reuse the stage session
+    assert kw["output_schema"] == _ap.VERIFY_SCHEMA   # structured verdict
+    assert "independent" in prompt.lower()
+    assert out["result"] == '{"verdict": "pass"}'
+
+
+def test_verdict_failed_true_on_fail():
+    assert _ap.verdict_failed({"result": '{"verdict": "fail", "reasons": ["x"]}'}) is True
+
+
+def test_verdict_failed_false_on_pass():
+    assert _ap.verdict_failed({"result": '{"verdict": "pass"}'}) is False
+
+
+def test_verdict_failed_degrades_on_garbage():
+    # A broken/empty/unavailable verifier must NOT block an already-passing gate.
+    assert _ap.verdict_failed({"result": "not json"}) is False
+    assert _ap.verdict_failed({"status": "unavailable"}) is False
+    assert _ap.verdict_failed({}) is False
+
+
+def test_cli_verify_requires_stage(tmp_path):
+    r = subprocess.run([PYTHON, str(_mod_path), "verify", "--cwd", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert r.returncode == 2
+
+
+def test_cli_verify_unavailable_killswitch(tmp_path):
+    _make_state(tmp_path, 6)
+    env = {**os.environ, "FORGE_NO_BACKGROUND": "1"}
+    r = subprocess.run(
+        [PYTHON, str(_mod_path), "verify", "--cwd", str(tmp_path),
+         "--stage", "6", "--skill", "/forge:build"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["status"] == "unavailable"
+
+
+# --- unattended mode (T-174, REQ-AUTO-004/005) -----------------------------
+
+def test_read_answers_absent_is_empty(tmp_path):
+    assert _ap.read_answers(tmp_path / ".forge") == {}
+
+
+def test_read_answers_json(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "autopilot-answers.json").write_text('{"1": "use postgres", "4": "rest"}')
+    assert _ap.read_answers(forge)["1"] == "use postgres"
+
+
+def test_read_answers_yaml(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "autopilot-answers.yaml").write_text("1: use postgres\n4: rest\n")
+    ans = _ap.read_answers(forge)
+    assert str(ans.get(1) or ans.get("1")) == "use postgres"
+
+
+def test_read_answers_malformed_is_empty(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "autopilot-answers.json").write_text("{not json")
+    assert _ap.read_answers(forge) == {}
+
+
+def test_answers_for_stage_numeric_and_string():
+    ans = {1: "a", "4": "b"}
+    assert _ap.answers_for_stage(ans, 1) == "a"
+    assert _ap.answers_for_stage(ans, 4) == "b"
+    assert _ap.answers_for_stage(ans, 9) is None
+
+
+def test_record_assumption_logs_but_not_completed(tmp_path):
+    forge = tmp_path / ".forge"
+    assert _ap.record_assumption(forge, 1, "assumed REST API") is True
+    # An assumption alone must NOT mark the stage complete for --resume.
+    assert 1 not in _ap._completed_stages(forge)
+
+
+def test_cli_answers_echoes_loaded(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "autopilot-answers.json").write_text('{"1": "x"}')
+    r = subprocess.run([PYTHON, str(_mod_path), "answers", "--cwd", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["1"] == "x"
+
+
+def test_cli_plan_unattended_accepted(tmp_path):
+    _make_state(tmp_path, 6)
+    r = subprocess.run([PYTHON, str(_mod_path), "--cwd", str(tmp_path),
+                        "--unattended", "--json"], capture_output=True, text=True)
+    assert r.returncode == 0
+    plan = json.loads(r.stdout)
+    assert [p["stage"] for p in plan] == [6, 7, 8, 9, 10, 11, 12]

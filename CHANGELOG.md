@@ -14,6 +14,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.3] — 2026-06-15
+
+**Complete (local) autonomy + modernized harness (v0.3).** Two things land together:
+(1) the autopilot/orchestration substrate is rebuilt onto current Claude Code primitives,
+each verified against the live CLI and degrading gracefully when unavailable
+(REQ-NF-013); and (2) autopilot graduates from *hands-off but supervised* to
+*self-healing, self-verifying, and unattended* — without weakening the safety posture
+(never forces a gate without explicit opt-in; everything bounded and reversible).
+
+### Added
+- **Structured outputs** (`hooks/_background_agent.py`, `scripts/_orchestrate.py`, T-167):
+  orchestrated dispatches can request schema-constrained JSON via the CLI's
+  `--json-schema` (Claude Code 2.1.177+); the parse/validate/retry/drop path remains the
+  fallback. Consumers (`/forge:review`, `/forge:adopt`, `/forge:why`) opt in per call.
+- **Per-dispatch budget ceiling** (T-168): `--max-budget-usd` on `claude -p` (config
+  `autopilot.max_budget_usd`), complementing the `_cost_cap` daily/monthly ledger gate.
+- **Per-stage model routing** (T-169): `autopilot.models` maps stages (numeric key or
+  command word, e.g. `build`/`eval`) to models — a capable model for hard stages, a cheap
+  one for gate-checks/narration.
+- **Long-run session rotation** (T-170): `autopilot.session_max_dispatches` rotates a
+  reused background session to a fresh one to bound context growth (the CLI auto-compacts
+  *within* a session; this bounds reuse *across* dispatches).
+- **Self-heal loop** (`scripts/autopilot.py`, T-172, REQ-AUTO-001/002): on a blocking
+  gate, autopilot makes a bounded fix attempt via the Stage-11 resolver
+  (`autopilot.max_heal_attempts`, default 1; `0` = classic stop-on-gate) and re-checks the
+  gate before giving up. `run_heal()` + a `heal` CLI command dispatch `/forge:resolve`
+  headlessly in background mode; it never force-advances on its own.
+- **Self-verification** (T-173, REQ-AUTO-003): with `autopilot.verify: true`, a passing
+  gate is double-checked by an **independent fresh-context verifier** (schema-constrained
+  verdict); a `fail` routes back into the self-heal loop. A broken/unavailable verifier
+  degrades to no-op (never blocks an already-passing gate).
+- **`--unattended` mode** (T-174, REQ-AUTO-004/005): a hands-free run with no per-stage
+  checkpoints, bounded by the full safety envelope (budget, cost cap, max-heal,
+  max-stages/stop-before, kill switch, stop flag). Interactive stages use a pre-supplied
+  `.forge/autopilot-answers.{json,yaml}` or record **explicit assumptions** in the
+  run-log — never a silent guess. Any bound STOPS cleanly with a resumable run-log.
+- **Enforcing rules** (`scripts/rules.py`, `hooks/pre-tool-write.py`, T-175,
+  REQ-AUTO-006): a `glob` rule with `enforce: true` (+ `severity`) **blocks** a matching
+  write (`pre-tool-write` exit 2) — the governance guardrail for unattended autonomy
+  (e.g. fence off lockfiles/secrets). Advisory remains the default; absent rules dir is a
+  clean no-op.
+
+### Changed
+- `.forge/config.yaml` `autopilot:` gains `max_budget_usd`, `models`,
+  `session_max_dispatches`, `max_heal_attempts`, and `verify` (all read fail-soft;
+  absent ⇒ prior behavior).
+- `/forge:autopilot` skill: self-heal + self-verify steps, `--unattended` flow, and
+  updated safety rails. `references/rules-format.md` documents enforcing rules.
+
+### Fixed
+
+---
+
 ## [0.3.1] — 2026-06-15
 
 **Autopilot (v0.3 Milestone 2 — autonomy).** Hand Forge the wheel: `/forge:autopilot`

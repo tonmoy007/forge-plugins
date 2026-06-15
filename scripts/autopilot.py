@@ -23,7 +23,7 @@ import datetime as dt
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -40,6 +40,19 @@ _RUNLOG_NAME = "autopilot-runs.jsonl"
 _SESSION_NAME = "autopilot-session.json"
 _DONE_STATUSES = {"done", "passed", "advanced", "ok"}
 
+# Structured verdict an independent verifier returns (REQ-AUTO-003); constrained via the
+# CLI structured-outputs flag (T-167). A CLI/model without structured outputs degrades to
+# free-form text, which `verdict_failed` parses leniently (and treats as pass on failure).
+VERIFY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": ["pass", "fail"]},
+        "reasons": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["verdict"],
+    "additionalProperties": False,
+}
+
 
 # --------------------------------------------------------------------------- #
 # Config
@@ -51,6 +64,11 @@ class AutopilotConfig:
     checkpoint: str = "gate"  # every | gate | never
     allow_force: bool = False
     model: Optional[str] = None  # background-mode model override (else inherits default)
+    max_budget_usd: Optional[float] = None  # per-dispatch hard $ ceiling (REQ-HARNESS-002)
+    models: dict = field(default_factory=dict)  # per-stage model routing (REQ-HARNESS-003)
+    session_max_dispatches: Optional[int] = None  # rotate reused session after N (REQ-HARNESS-004)
+    max_heal_attempts: int = 1  # bounded self-heal per stage (REQ-AUTO-002; 0 = stop-on-gate)
+    verify: bool = False  # opt-in independent self-verification after a passing gate (REQ-AUTO-003)
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -94,7 +112,87 @@ def load_config(forge_dir) -> AutopilotConfig:
     model = section.get("model")
     if isinstance(model, str) and model.strip():
         cfg.model = model.strip()
+    budget = section.get("max_budget_usd")
+    if budget is not None:
+        try:
+            cfg.max_budget_usd = float(budget)
+        except (TypeError, ValueError):
+            pass
+    models = section.get("models")
+    if isinstance(models, dict):
+        cfg.models = models
+    smax = _coerce_int(section.get("session_max_dispatches"))
+    if smax is not None:
+        cfg.session_max_dispatches = smax
+    heal = _coerce_int(section.get("max_heal_attempts"))
+    if heal is not None:  # 0 is valid (stop-on-gate); only an absent/garbage value keeps the default
+        cfg.max_heal_attempts = max(0, heal)
+    cfg.verify = section.get("verify") is True
     return cfg
+
+
+def should_heal(attempts_used: int, config: AutopilotConfig) -> bool:
+    """True when autopilot may attempt another bounded self-heal for the current stage
+    (REQ-AUTO-001/002). Capped by `max_heal_attempts` (default 1; 0 = v0.3.1 stop-on-gate).
+    `attempts_used` is the number of heals already tried for this stage. Never raises.
+    """
+    cap = config.max_heal_attempts
+    return isinstance(cap, int) and attempts_used < cap
+
+
+def verdict_failed(result: dict) -> bool:
+    """Interpret a verifier dispatch result (REQ-AUTO-003): True only when the verifier
+    returned a clean `fail` verdict. A missing/unparseable/unavailable verdict is treated
+    as NOT-failed — the verifier is an extra check on an already-passing gate, so a broken
+    or unavailable verifier degrades gracefully rather than blocking (REQ-NF-013). Never raises.
+    """
+    if not isinstance(result, dict):
+        return False
+    payload = result.get("result")
+    if not isinstance(payload, str) or not payload.strip():
+        return False
+    try:
+        data = json.loads(payload)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(data, dict) and str(data.get("verdict", "")).lower() == "fail"
+
+
+def should_rotate_session(dispatch_count: int, config: AutopilotConfig) -> bool:
+    """True when the reused session should rotate to a fresh one to bound context growth
+    on long runs (REQ-HARNESS-004). The CLI auto-compacts *within* a session; this caps
+    how long one session is reused *across* dispatches. Unset → never rotate. Never raises.
+    """
+    cap = config.session_max_dispatches
+    return isinstance(cap, int) and cap > 0 and dispatch_count >= cap
+
+
+def model_for_stage(config: AutopilotConfig, stage: int, plugin_root=None) -> Optional[str]:
+    """Resolve the model for a stage (REQ-HARNESS-003): per-stage `models` mapping first
+    (numeric key or the stage's command word, e.g. `build` from `/forge:build`), then the
+    single `model` override, else None (host default). Never raises.
+    """
+    models = config.models if isinstance(config.models, dict) else {}
+
+    def _clean(v):
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    for key in (stage, str(stage)):
+        if key in models:
+            m = _clean(models[key])
+            if m:
+                return m
+    try:
+        entry = _stage_table.stage(stage, plugin_root) or {}
+        skill = entry.get("skill") or ""
+        word = skill.split(":")[-1] if ":" in skill else ""
+        if word and word in models:
+            m = _clean(models[word])
+            if m:
+                return m
+    except Exception:  # noqa: BLE001 — routing must never crash a dispatch
+        pass
+    return config.model
 
 
 # --------------------------------------------------------------------------- #
@@ -191,6 +289,59 @@ def record_run(
     return _error_log.append_jsonl(Path(forge_dir) / _RUNLOG_NAME, entry)
 
 
+def record_assumption(forge_dir, stage: int, assumption: str, *, mode: str = "in-session") -> bool:
+    """Record a reasonable default taken for an unanswered interactive prompt during an
+    unattended run (REQ-AUTO-004) — an explicit assumption in the run-log, never a silent
+    guess. Status `assumption` is NOT a done-status, so it does not mark the stage complete
+    for `--resume`. Never raises.
+    """
+    return record_run(forge_dir, stage, "assumption", mode=mode, note=assumption)
+
+
+# Answers file for unattended interactive stages (REQ-AUTO-004), tried in order.
+_ANSWERS_NAMES = ("autopilot-answers.json", "autopilot-answers.yaml", "autopilot-answers.yml")
+
+
+def read_answers(forge_dir) -> dict:
+    """Load `.forge/autopilot-answers.{json,yaml,yml}` — pre-supplied answers for the
+    CLARIFY/CONFIRM prompts of interactive stages in an unattended run (REQ-AUTO-004).
+    Returns {} when absent/unreadable/malformed (the loop then records assumptions instead).
+    Never raises.
+    """
+    forge = Path(forge_dir)
+    for name in _ANSWERS_NAMES:
+        path = forge / name
+        try:
+            if not path.exists():
+                continue
+            text = path.read_text()
+        except OSError:
+            continue
+        if name.endswith(".json"):
+            try:
+                data = json.loads(text)
+            except (ValueError, TypeError):
+                continue
+        else:
+            data = _safe_yaml_load(text)
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def answers_for_stage(answers: dict, stage: int) -> Optional[str]:
+    """Return the supplied answer for a stage (numeric or string key), or None. Non-string
+    values are JSON-encoded so the loop can hand them to the stage. Never raises.
+    """
+    if not isinstance(answers, dict):
+        return None
+    for key in (stage, str(stage)):
+        if key in answers:
+            v = answers[key]
+            return v if isinstance(v, str) else json.dumps(v)
+    return None
+
+
 def read_session(forge_dir) -> dict:
     """Read `.forge/autopilot-session.json` ({} if absent/unreadable). Never raises."""
     path = Path(forge_dir) / _SESSION_NAME
@@ -267,6 +418,77 @@ def _stage_prompt(stage: int, skill: str, label: str) -> str:
     )
 
 
+def _heal_prompt(stage: int, skill: str, label: str, blockers: str = "") -> str:
+    base = (
+        f"You are Forge autopilot self-healing pipeline stage {stage} ({label}). The "
+        f"stage gate FAILED with blocking issues. Run the work for {skill} to fix the "
+        f"blockers and repair the stage's canonical artifact, then stop. Do NOT advance "
+        f"the stage pointer; the foreground loop re-checks the gate."
+    )
+    if blockers:
+        base += f"\n\nBlocking gate criteria to resolve:\n{blockers}"
+    return base
+
+
+def _verify_prompt(stage: int, skill: str, label: str) -> str:
+    return (
+        f"You are an INDEPENDENT Forge verifier for pipeline stage {stage} ({label}), "
+        f"running in fresh context. The stage's mechanical gate has already passed. "
+        f"Critically assess whether the stage's canonical artifact (produced by {skill}) "
+        f"genuinely satisfies the stage's intent and the upstream requirements — beyond "
+        f"the mechanical checks. Do NOT modify anything. Return a verdict of \"pass\" or "
+        f"\"fail\" with concise reasons."
+    )
+
+
+def _dispatch_background(
+    cwd,
+    stage: int,
+    prompt: str,
+    *,
+    feature: str,
+    session_id: Optional[str],
+    rotate: bool,
+    model: Optional[str],
+    max_budget_usd: Optional[float],
+    claude_bin: Optional[str],
+    output_schema: Optional[dict] = None,
+) -> dict:
+    """Shared cost/capability-gated `claude -p` dispatch for stage runs, self-heals, and
+    verifiers.
+
+    Returns a clean `unavailable` no-op when the kill switch is set or no background
+    capability is present; an `error` dict if dispatch unexpectedly raises. Never raises.
+    """
+    forge = Path(cwd) / ".forge"
+    ok, reason = _background_available(forge)
+    if not ok:
+        return {"status": "unavailable", "reason": reason, "stage": stage}
+    kwargs = dict(
+        forge_dir=forge,
+        feature=feature,
+        resume=(None if rotate else session_id),
+        model=model,
+        max_budget_usd=max_budget_usd,
+        claude_bin=claude_bin,
+        cwd=str(cwd),
+    )
+    if output_schema is not None:
+        kwargs["output_schema"] = output_schema
+    try:
+        res = _background_agent.dispatch(prompt, **kwargs)
+    except Exception as exc:  # noqa: BLE001 — dispatch shouldn't raise, but never crash
+        return {"status": "error", "reason": str(exc), "stage": stage}
+    return {
+        "status": getattr(res, "status", "error"),
+        "reason": getattr(res, "reason", ""),
+        "session_id": getattr(res, "session_id", None) or session_id,
+        "cost_usd": getattr(res, "cost_usd", None),
+        "result": getattr(res, "result", None),
+        "stage": stage,
+    }
+
+
 def run_stage(
     cwd,
     stage: int,
@@ -275,7 +497,9 @@ def run_stage(
     *,
     mode: str = "in-session",
     session_id: Optional[str] = None,
+    rotate: bool = False,
     model: Optional[str] = None,
+    max_budget_usd: Optional[float] = None,
     claude_bin: Optional[str] = None,
 ) -> dict:
     """Execute one stage in the selected substrate (REQ-AP-006). Never raises.
@@ -287,29 +511,70 @@ def run_stage(
     """
     if mode != "background":
         return {"status": "in-session", "stage": stage}
-    forge = Path(cwd) / ".forge"
-    ok, reason = _background_available(forge)
-    if not ok:
-        return {"status": "unavailable", "reason": reason, "stage": stage}
-    try:
-        res = _background_agent.dispatch(
-            _stage_prompt(stage, skill, label),
-            forge_dir=forge,
-            feature="autopilot-stage",
-            resume=session_id,
-            model=model,
-            claude_bin=claude_bin,
-            cwd=str(cwd),
-        )
-    except Exception as exc:  # noqa: BLE001 — dispatch shouldn't raise, but never crash
-        return {"status": "error", "reason": str(exc), "stage": stage}
-    return {
-        "status": getattr(res, "status", "error"),
-        "reason": getattr(res, "reason", ""),
-        "session_id": getattr(res, "session_id", None) or session_id,
-        "cost_usd": getattr(res, "cost_usd", None),
-        "stage": stage,
-    }
+    return _dispatch_background(
+        cwd, stage, _stage_prompt(stage, skill, label),
+        feature="autopilot-stage", session_id=session_id, rotate=rotate,
+        model=model, max_budget_usd=max_budget_usd, claude_bin=claude_bin,
+    )
+
+
+def run_heal(
+    cwd,
+    stage: int,
+    skill: str = "/forge:resolve",
+    label: str = "",
+    *,
+    mode: str = "in-session",
+    session_id: Optional[str] = None,
+    rotate: bool = False,
+    model: Optional[str] = None,
+    max_budget_usd: Optional[float] = None,
+    blockers: str = "",
+    claude_bin: Optional[str] = None,
+) -> dict:
+    """Dispatch one bounded self-heal for a blocked stage (REQ-AUTO-001). Never raises.
+
+    Routes through the Stage-11 resolver (`/forge:resolve`) to fix the gate blockers, then
+    returns so the foreground loop can re-check the gate. `in-session` is a no-op marker
+    (the skill runs the resolve in the user's session). `background` is the same
+    cost/capability-gated substrate as `run_stage`, tagged `autopilot-heal` in the ledger.
+    """
+    if mode != "background":
+        return {"status": "in-session", "stage": stage}
+    return _dispatch_background(
+        cwd, stage, _heal_prompt(stage, skill, label, blockers),
+        feature="autopilot-heal", session_id=session_id, rotate=rotate,
+        model=model, max_budget_usd=max_budget_usd, claude_bin=claude_bin,
+    )
+
+
+def run_verify(
+    cwd,
+    stage: int,
+    skill: str,
+    label: str = "",
+    *,
+    mode: str = "in-session",
+    model: Optional[str] = None,
+    max_budget_usd: Optional[float] = None,
+    claude_bin: Optional[str] = None,
+) -> dict:
+    """Run an independent verifier over a stage whose gate just passed (REQ-AUTO-003).
+
+    Always **fresh context** (never reuses the stage session) so the verdict is
+    independent. `in-session` is a no-op marker — the skill spawns a verifier subagent in
+    the user's session. `background` dispatches a schema-constrained verdict
+    (`VERIFY_SCHEMA`) headlessly, tagged `autopilot-verify` in the ledger. The returned
+    dict's `result` carries the verdict JSON for `verdict_failed`. Never raises.
+    """
+    if mode != "background":
+        return {"status": "in-session", "stage": stage}
+    return _dispatch_background(
+        cwd, stage, _verify_prompt(stage, skill, label),
+        feature="autopilot-verify", session_id=None, rotate=False,
+        model=model, max_budget_usd=max_budget_usd, claude_bin=claude_bin,
+        output_schema=VERIFY_SCHEMA,
+    )
 
 
 def plan_stages(
@@ -369,9 +634,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "walks this plan in-session).",
     )
     parser.add_argument("command", nargs="?", default="plan",
-                        choices=("plan", "record", "dispatch", "start", "stop", "status",
-                                 "finish"),
+                        choices=("plan", "record", "dispatch", "heal", "verify", "answers",
+                                 "start", "stop", "status", "finish"),
                         help="plan (default) | record a stage | dispatch (background) | "
+                             "heal a blocked stage (background) | verify a passed stage "
+                             "(background) | answers (echo unattended answers file) | "
                              "start/stop/status/finish the autopilot session")
     parser.add_argument("--cwd", default=os.getcwd(), help="project root (default: cwd)")
     parser.add_argument("--stage", type=int, default=None, metavar="N",
@@ -382,6 +649,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--label", default="", help="(dispatch) human stage label")
     parser.add_argument("--session", default=None, help="(dispatch) reuse this session id")
     parser.add_argument("--model", default=None, help="(dispatch) background model override")
+    parser.add_argument("--dispatch-count", type=int, default=0,
+                        help="(dispatch/heal) prior dispatches on this session — triggers rotation")
+    parser.add_argument("--blockers", default="",
+                        help="(heal) blocking gate criteria summary to thread into the resolve prompt")
     parser.add_argument("--to", type=int, default=None, metavar="N",
                         help="run through stage N (inclusive)")
     parser.add_argument("--stages", type=int, default=None, metavar="K",
@@ -394,6 +665,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="execution substrate the skill uses (default: in-session)")
     parser.add_argument("--resume", action="store_true",
                         help="skip stages already completed in .forge/autopilot-runs.jsonl")
+    parser.add_argument("--unattended", action="store_true",
+                        help="no per-stage checkpoints; interactive stages use the answers "
+                             "file or record assumptions (the loop honors the full safety "
+                             "envelope — budget, cost cap, max_heal, stop flag, kill switch)")
     parser.add_argument("--dry-run", action="store_true",
                         help="print the plan only (this script never mutates state regardless)")
     parser.add_argument("--json", action="store_true", help="emit the plan as JSON")
@@ -413,9 +688,43 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.stage is None:
             print("error: dispatch requires --stage N", file=sys.stderr)
             return 2
+        cfg = load_config(Path(args.cwd) / ".forge")
+        model = args.model or model_for_stage(cfg, args.stage)
+        rotate = should_rotate_session(args.dispatch_count, cfg)
         result = run_stage(args.cwd, args.stage, args.skill, args.label,
-                           mode="background", session_id=args.session, model=args.model)
+                           mode="background", session_id=args.session, rotate=rotate,
+                           model=model, max_budget_usd=cfg.max_budget_usd)
         print(json.dumps(result))
+        return 0
+
+    if args.command == "heal":
+        if args.stage is None:
+            print("error: heal requires --stage N", file=sys.stderr)
+            return 2
+        cfg = load_config(Path(args.cwd) / ".forge")
+        model = args.model or model_for_stage(cfg, args.stage)
+        rotate = should_rotate_session(args.dispatch_count, cfg)
+        result = run_heal(args.cwd, args.stage, args.skill or "/forge:resolve", args.label,
+                          mode="background", session_id=args.session, rotate=rotate,
+                          model=model, max_budget_usd=cfg.max_budget_usd,
+                          blockers=args.blockers)
+        print(json.dumps(result))
+        return 0
+
+    if args.command == "verify":
+        if args.stage is None:
+            print("error: verify requires --stage N", file=sys.stderr)
+            return 2
+        cfg = load_config(Path(args.cwd) / ".forge")
+        model = args.model or model_for_stage(cfg, args.stage)
+        result = run_verify(args.cwd, args.stage, args.skill, args.label,
+                            mode="background", model=model,
+                            max_budget_usd=cfg.max_budget_usd)
+        print(json.dumps(result))
+        return 0
+
+    if args.command == "answers":
+        print(json.dumps(read_answers(Path(args.cwd) / ".forge")))
         return 0
 
     if args.command in ("start", "stop", "status", "finish"):
@@ -445,7 +754,9 @@ def main(argv: Optional[list[str]] = None) -> int:
               "(no pipeline state, or already at the target).", file=sys.stderr)
         return 0
     stages_str = " -> ".join(str(p["stage"]) for p in plan)
-    print(f"[Forge] {prefix}autopilot plan ({args.mode}): stages {stages_str}", file=sys.stderr)
+    unattended = " unattended" if args.unattended else ""
+    print(f"[Forge] {prefix}autopilot plan ({args.mode}{unattended}): stages {stages_str}",
+          file=sys.stderr)
     for p in plan:
         # stdout: one machine-readable "N\t/forge:skill" per line (build-batch idiom).
         print(f"{p['stage']}\t{p['skill']}")
