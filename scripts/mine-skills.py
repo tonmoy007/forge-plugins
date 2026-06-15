@@ -391,9 +391,22 @@ def main(argv: Optional[list[str]] = None) -> int:
         return min(len(plans), _EXIT_CAP)
 
     written = write_proposals(plans)
+    _record_telemetry(forge_dir, written, plans)
     for path in written:
         print(str(path))
     return min(len(written), _EXIT_CAP)
+
+
+def _record_telemetry(forge_dir: Path, written: list, plans: list) -> None:
+    """Best-effort opt-in skill-mining telemetry (REQ-F-053). A no-op unless the user has
+    enabled it; never raises (must not break skill mining)."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import telemetry  # noqa: E402 — sibling scripts/ module
+        telemetry.record(forge_dir, "skills_mined",
+                         written=len(written), candidates=len(plans))
+    except Exception:  # noqa: BLE001 — telemetry is advisory; never propagate
+        pass
 
 
 if __name__ == "__main__":

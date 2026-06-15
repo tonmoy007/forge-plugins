@@ -134,8 +134,9 @@ Forge tells you at every session start.
 | `/forge:rules` | Author project rules that steer agents (`init`/`add`/`list`/`validate`) — advisory, scope-based |
 | `/forge:review` | Fan four reviewers (correctness/security/performance/conventions) over a diff and synthesize one report |
 | `/forge:adopt` | Brownfield onboarding — detect type, infer SRS + architecture drafts, seed pipeline state |
-| `/forge:autopilot` | Run pipeline stages hands-off (bounded, stop-on-gate); `--resume`, `--mode in-session\|background` |
+| `/forge:autopilot` | Run pipeline stages hands-off (self-heal, optional verify, `--unattended`); `--resume`, `--mode` |
 | `/forge:autopilot-stop` | Halt a running autopilot cleanly at the next stage boundary |
+| `/forge:sprint` | Group the task DAG into bounded sprints and review them (`plan`/`review`/`list`) — opt-in |
 
 ### Background Daemons
 
@@ -283,6 +284,30 @@ hard stages, a cheap one for checks), `max_budget_usd` (per-dispatch spend ceili
 `session_max_dispatches` (rotate a long reused session to bound context),
 `max_heal_attempts`, and `verify`. Background stages also request schema-constrained
 output via the CLI's `--json-schema`.
+
+---
+
+## Sprints
+
+`/forge:sprint` slices your task DAG into bounded, reviewable chunks. It is a deterministic
+**view over `pipeline/05-plan/task-dag.md`** (T-IDs are the identity) — the DAG and
+`progress.md` stay the source of truth, and it is **fully opt-in** (a project that never
+runs it sees no change).
+
+```bash
+/forge:sprint plan              # commit the next ready tasks to pipeline/05-plan/sprint-NN.md
+/forge:sprint plan --size 6     # target a different sprint size (default 5)
+/forge:sprint review            # report done vs. carried → pipeline/12-release/sprint-NN-review.md
+/forge:sprint list              # sprints and their progress
+```
+
+`plan` selects the next ready tasks in dependency order and **carries over** anything from
+the previous sprint that is not yet done — keeping each task's T-ID, so history follows the
+work across sprints.
+
+Cross-machine note: see [`docs/forge-sync.md`](docs/forge-sync.md) for syncing `~/.forge`
+global lessons between machines (no server) and the opt-in, local-only skill-mining
+telemetry (off by default; data never leaves your machine without an explicit export).
 
 ---
 
