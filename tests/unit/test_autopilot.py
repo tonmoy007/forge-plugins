@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -182,3 +183,83 @@ def test_cli_record_requires_stage(tmp_path):
         capture_output=True, text=True,
     )
     assert r.returncode == 2  # usage error: --stage required
+
+
+# --- background substrate (REQ-AP-006) -------------------------------------
+
+def _caps(forge: Path, available: bool) -> None:
+    forge.mkdir(parents=True, exist_ok=True)
+    (forge / "capabilities.json").write_text(
+        json.dumps({"forge_background_available": available})
+    )
+
+
+def test_run_stage_in_session_marker(tmp_path):
+    out = _ap.run_stage(tmp_path, 6, "/forge:build", mode="in-session")
+    assert out["status"] == "in-session"
+
+
+def test_run_stage_background_killswitch_noop(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_NO_BACKGROUND", "1")
+    _caps(tmp_path / ".forge", True)
+    called = []
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda *a, **k: called.append(1))
+    out = _ap.run_stage(tmp_path, 6, "/forge:build", mode="background")
+    assert out["status"] == "unavailable"
+    assert not called  # never dispatched under the kill switch
+
+
+def test_run_stage_background_no_capability_noop(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    called = []
+    monkeypatch.setattr(_ap._background_agent, "dispatch",
+                        lambda *a, **k: called.append(1))
+    out = _ap.run_stage(tmp_path, 6, "/forge:build", mode="background")  # no caps file
+    assert out["status"] == "unavailable"
+    assert not called
+
+
+def test_run_stage_background_dispatches_with_session_reuse(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "S2"
+        cost_usd = 0.004
+        reason = "dispatched"
+
+    def fake_dispatch(prompt, **kw):
+        calls.append(kw)
+        return _Res()
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch", fake_dispatch)
+    out = _ap.run_stage(tmp_path, 6, "/forge:build", "Build",
+                        mode="background", session_id="S1")
+    assert out["status"] == "ok"
+    assert out["session_id"] == "S2"
+    assert calls and calls[0]["resume"] == "S1"  # reuses the session
+    assert calls[0]["feature"] == "autopilot-stage"
+
+
+def test_cli_dispatch_unavailable_killswitch(tmp_path):
+    _make_state(tmp_path, 6)
+    env = {**os.environ, "FORGE_NO_BACKGROUND": "1"}
+    r = subprocess.run(
+        [PYTHON, str(_mod_path), "dispatch", "--cwd", str(tmp_path),
+         "--stage", "6", "--skill", "/forge:build"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["status"] == "unavailable"
+
+
+def test_cli_dispatch_requires_stage(tmp_path):
+    r = subprocess.run(
+        [PYTHON, str(_mod_path), "dispatch", "--cwd", str(tmp_path)],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 2

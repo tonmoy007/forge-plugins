@@ -74,7 +74,7 @@
 |------|--------|-------|
 | T-162 | 🟢 done | `scripts/autopilot.py` deterministic planner — resolve_plan (targets --to/--stages/--until-gate, cycle entry/exit + bounds clamp, config stop_before/max_stages), plan_stages (state → {stage,skill,label}, --resume skips run-log), load_config; never-raises (malformed state → []). CLI --json/--dry-run. +18 tests |
 | T-163 | 🟢 done | `/forge:autopilot` skill (`name: forge-autopilot`) — in-session loop: plan → per-stage run agent → check-gate → advance on pass / STOP on blocker (never force unless `allow_force`+reason); narrates + records run-log; checkpoint policy; honors always-rules. `autopilot.py record` subcommand (run-log via `_error_log.append_jsonl`). +3 record tests +4 structural. validate 0 |
-| T-164 | 🔲 todo | `--mode background` substrate |
+| T-164 | 🟢 done | `--mode background` substrate — `run_stage` dispatches one stage via `_background_agent.dispatch` (cost+capability gated, session reuse), clean `unavailable` no-op under kill switch / no capability; never raises. `autopilot.py dispatch` subcommand + config `autopilot.model`. Skill documents the background path. +6 tests |
 | T-165 | 🔲 todo | `/forge:autopilot-stop` + cancel/idempotency |
 | T-166 | 🔲 todo | release v0.3.1 |
 

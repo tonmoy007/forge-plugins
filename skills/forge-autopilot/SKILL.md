@@ -54,9 +54,17 @@ in-session (a script can't drive the Agent tool — ADR-006).
    a. If `.forge/autopilot-session.json` has `stop_requested: true`, STOP (see
       `/forge:autopilot-stop`).
    b. Narrate: `[Forge] autopilot: stage {stage} — {label}`.
-   c. **Run the stage** by following its command `{skill}` (e.g. `/forge:build`) — the
-      stage's agent does the work. Interactive stages (SRS/spec/plan) may pause for
-      CLARIFY/CONFIRM; that is expected (autopilot is hands-off, not unattended).
+   c. **Run the stage.** In `--mode in-session` (default), follow the stage's command
+      `{skill}` (e.g. `/forge:build`) so the stage's agent does the work; interactive
+      stages (SRS/spec/plan) may pause for CLARIFY/CONFIRM — that is expected (autopilot
+      is hands-off, not unattended). In `--mode background`, dispatch it headlessly and
+      reuse the returned session across stages for cost:
+      ```bash
+      python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py dispatch --cwd . \
+        --stage {stage} --skill {skill} --label "{label}" [--session {prev_session_id}]
+      ```
+      A `status: unavailable` result means background agents are off — fall back to
+      in-session or stop. Carry the returned `session_id` into the next dispatch.
    d. **Check the gate**:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage {stage} --cwd . \

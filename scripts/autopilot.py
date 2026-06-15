@@ -33,6 +33,7 @@ sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _stage_table  # noqa: E402
 import _state_lib  # noqa: E402
 import _error_log  # noqa: E402  (shared rotation for the run-log)
+import _background_agent  # noqa: E402  (the sole `claude -p` wrapper — background mode)
 
 VALID_MODES = ("in-session", "background")
 _RUNLOG_NAME = "autopilot-runs.jsonl"
@@ -48,6 +49,7 @@ class AutopilotConfig:
     stop_before: Optional[int] = None
     checkpoint: str = "gate"  # every | gate | never
     allow_force: bool = False
+    model: Optional[str] = None  # background-mode model override (else inherits default)
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -88,6 +90,9 @@ def load_config(forge_dir) -> AutopilotConfig:
     if checkpoint in ("every", "gate", "never"):
         cfg.checkpoint = checkpoint
     cfg.allow_force = section.get("allow_force") is True
+    model = section.get("model")
+    if isinstance(model, str) and model.strip():
+        cfg.model = model.strip()
     return cfg
 
 
@@ -185,6 +190,70 @@ def record_run(
     return _error_log.append_jsonl(Path(forge_dir) / _RUNLOG_NAME, entry)
 
 
+def _background_available(forge_dir) -> tuple[bool, str]:
+    """Is the background substrate usable? Honors the kill switch + capability cache."""
+    if os.environ.get("FORGE_NO_BACKGROUND") == "1":
+        return False, "kill switch (FORGE_NO_BACKGROUND=1)"
+    caps = _background_agent.read_capabilities(Path(forge_dir))
+    if not caps or not caps.get("forge_background_available"):
+        return False, "background agents unavailable"
+    return True, "available"
+
+
+def _stage_prompt(stage: int, skill: str, label: str) -> str:
+    return (
+        f"You are Forge autopilot executing pipeline stage {stage} ({label}). Run the "
+        f"work for {skill} in this project — produce the stage's canonical artifact — "
+        f"then stop. Do NOT advance the stage pointer; the foreground loop checks the "
+        f"gate and advances."
+    )
+
+
+def run_stage(
+    cwd,
+    stage: int,
+    skill: str,
+    label: str = "",
+    *,
+    mode: str = "in-session",
+    session_id: Optional[str] = None,
+    model: Optional[str] = None,
+    claude_bin: Optional[str] = None,
+) -> dict:
+    """Execute one stage in the selected substrate (REQ-AP-006). Never raises.
+
+    `in-session` is a no-op marker — the skill runs the stage in the user's session.
+    `background` dispatches one cost/capability-gated `claude -p` run (session reused via
+    `session_id`); a clean `unavailable` no-op when the kill switch is set or no
+    background capability is present.
+    """
+    if mode != "background":
+        return {"status": "in-session", "stage": stage}
+    forge = Path(cwd) / ".forge"
+    ok, reason = _background_available(forge)
+    if not ok:
+        return {"status": "unavailable", "reason": reason, "stage": stage}
+    try:
+        res = _background_agent.dispatch(
+            _stage_prompt(stage, skill, label),
+            forge_dir=forge,
+            feature="autopilot-stage",
+            resume=session_id,
+            model=model,
+            claude_bin=claude_bin,
+            cwd=str(cwd),
+        )
+    except Exception as exc:  # noqa: BLE001 — dispatch shouldn't raise, but never crash
+        return {"status": "error", "reason": str(exc), "stage": stage}
+    return {
+        "status": getattr(res, "status", "error"),
+        "reason": getattr(res, "reason", ""),
+        "session_id": getattr(res, "session_id", None) or session_id,
+        "cost_usd": getattr(res, "cost_usd", None),
+        "stage": stage,
+    }
+
+
 def plan_stages(
     cwd,
     *,
@@ -241,13 +310,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         description="Deterministic autopilot stage planner (the /forge:autopilot skill "
                     "walks this plan in-session).",
     )
-    parser.add_argument("command", nargs="?", default="plan", choices=("plan", "record"),
-                        help="plan the run (default) or record a completed stage")
+    parser.add_argument("command", nargs="?", default="plan",
+                        choices=("plan", "record", "dispatch"),
+                        help="plan the run (default), record a completed stage, or "
+                             "dispatch one stage in the background substrate")
     parser.add_argument("--cwd", default=os.getcwd(), help="project root (default: cwd)")
     parser.add_argument("--stage", type=int, default=None, metavar="N",
-                        help="(record) the stage just completed")
+                        help="(record/dispatch) the target stage")
     parser.add_argument("--status", default="done", help="(record) stage outcome")
     parser.add_argument("--note", default="", help="(record) optional note")
+    parser.add_argument("--skill", default="", help="(dispatch) the stage's /forge:* command")
+    parser.add_argument("--label", default="", help="(dispatch) human stage label")
+    parser.add_argument("--session", default=None, help="(dispatch) reuse this session id")
+    parser.add_argument("--model", default=None, help="(dispatch) background model override")
     parser.add_argument("--to", type=int, default=None, metavar="N",
                         help="run through stage N (inclusive)")
     parser.add_argument("--stages", type=int, default=None, metavar="K",
@@ -273,6 +348,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                         mode=args.mode, note=args.note)
         print(f"recorded stage {args.stage} status={args.status}" if ok
               else "warning: run-log write failed", file=sys.stderr)
+        return 0
+
+    if args.command == "dispatch":
+        if args.stage is None:
+            print("error: dispatch requires --stage N", file=sys.stderr)
+            return 2
+        result = run_stage(args.cwd, args.stage, args.skill, args.label,
+                           mode="background", session_id=args.session, model=args.model)
+        print(json.dumps(result))
         return 0
 
     plan = plan_stages(
