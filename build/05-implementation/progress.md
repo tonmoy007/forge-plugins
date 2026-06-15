@@ -5,10 +5,14 @@
 
 ## Current State
 
-- **Active program: v0.3** — "Hands-off Forge — autonomy + governance": user-authored
-  **Rules** (v0.3.0) + **Autopilot** cross-stage execution (v0.3.1). On branch
-  `feat/v0.3.0-rules` off `main`; SRS `build/01-srs/srs-v0.3.md`, DAG
-  `build/04-plan/task-dag-v0.3.md` (T-157..T-166). See v0.3 Task Status below.
+- **v0.3 program COMPLETE + RELEASED** — "Hands-off Forge — autonomy + governance":
+  user-authored **Rules** (v0.3.0) + **Autopilot** cross-stage execution (v0.3.1),
+  T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin + polygon;
+  GitHub releases published; main `ebb94ef`, manifests 0.3.1. SRS
+  `build/01-srs/srs-v0.3.md`, DAG `build/04-plan/task-dag-v0.3.md`. 1295 unit tests,
+  validate 0, full-pipeline 12/12.
+- **NEXT**: post-release docs/banner/social-preview refresh (per release routine); then
+  v0.2 M4 sprint (T-153–156) remains the open backlog item.
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
   you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
   (sprint M4, T-153–156, deferred).
@@ -66,7 +70,7 @@
 | T-158 | 🟢 done | 2026-06-15 | (this commit) | `/forge:rules` skill (`name: forge-rules`) — init (idempotent scaffold) / add (no-clobber) / list / validate; `rules.py` gained those CLI subcommands. `references/rules-format.md` documents the schema + 4 scopes. +7 tests (init/add CLI + structural). validate-plugin 0 |
 | T-159 | 🟢 done | 2026-06-15 | (this commit) | `hooks/session-start.py` injects `always` + current-`stage` rules (`_rules_block`, render cap 500 chars) after lessons; budget path trims lessons then drops rules last-resort to hold ≤2000 tokens. Never-raises. +6 tests (always/stage/off-stage/no-dir/glob-excluded/budget) |
 | T-160 | 🟢 done | 2026-06-15 | (this commit) | `hooks/pre-tool-write.py` refactored into `_glob_rules_message` (any file type) + `_design_violations_message` (UI, existing); glob rules surface as advisory `additionalContext`, never block (exit 0). Design-system path behavior preserved. +5 tests. Full suite 1257 pass |
-| T-161 | 🟡 staged | 2026-06-15 | (this commit) | Release v0.3.0 prep — `bump-version.py 0.3.0` (manifests + CHANGELOG `[0.3.0]`), README "Project Rules" section + commands/hooks rows, ROADMAP rows. Pre-release green: 1257 unit pass, validate-plugin 0, full-pipeline 12/12. **Push/PR/tag/mirror pending user confirmation.** |
+| T-161 | 🟢 done | 2026-06-15 | 9102b78 | Release **v0.3.0** — bump 0.3.0, CHANGELOG `[0.3.0]`, README "Project Rules" + commands/hooks rows, ROADMAP. Shipped via PR #19→develop→#20→main; **tag `v0.3.0`** + GitHub release; mirrored to polygon. Pre-release green (1295 unit, validate 0, full-pipeline 12/12). |
 
 ### M2 — Autopilot / autonomy (v0.3.1) — branch (later)
 
@@ -76,7 +80,7 @@
 | T-163 | 🟢 done | `/forge:autopilot` skill (`name: forge-autopilot`) — in-session loop: plan → per-stage run agent → check-gate → advance on pass / STOP on blocker (never force unless `allow_force`+reason); narrates + records run-log; checkpoint policy; honors always-rules. `autopilot.py record` subcommand (run-log via `_error_log.append_jsonl`). +3 record tests +4 structural. validate 0 |
 | T-164 | 🟢 done | `--mode background` substrate — `run_stage` dispatches one stage via `_background_agent.dispatch` (cost+capability gated, session reuse), clean `unavailable` no-op under kill switch / no capability; never raises. `autopilot.py dispatch` subcommand + config `autopilot.model`. Skill documents the background path. +6 tests |
 | T-165 | 🟢 done | `/forge:autopilot-stop` skill + session model in `autopilot.py` (`.forge/autopilot-session.json`): start (idempotent — warns already_running), stop (cooperative stop_requested flag checked between stages), status, finish (idle + clears flag). Skill starts/finishes the session; loop honors the flag. +7 tests |
-| T-166 | 🟡 staged | Release v0.3.1 prep — `bump-version.py 0.3.1` (manifests + CHANGELOG `[0.3.1]`), README "Autopilot" section + command rows, ROADMAP. Pre-release green. **Branching note:** T-162–166 landed on `feat/v0.3.0-rules` (PR #19), so #19 now spans both phases — shipping split (two tags) vs combined pending user decision. |
+| T-166 | 🟢 done | Release **v0.3.1** — bump 0.3.1, CHANGELOG `[0.3.1]`, README "Autopilot" + command rows, ROADMAP. Shipped combined with v0.3.0 in PR #19 (both phases); **tag `v0.3.1`** + GitHub release; mirrored to polygon. Manifests at 0.3.1; main `ebb94ef`. |
 
 ## v0.2 Task Status
 
