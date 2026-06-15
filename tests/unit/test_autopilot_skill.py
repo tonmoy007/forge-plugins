@@ -49,3 +49,21 @@ def test_skill_narrates_and_is_interruptible():
     body = _SKILL.read_text()
     assert "[Forge] autopilot:" in body
     assert "/forge:autopilot-stop" in body
+
+
+def test_skill_starts_and_finishes_session():
+    body = _SKILL.read_text()
+    assert "autopilot.py start" in body
+    assert "autopilot.py finish" in body
+
+
+_STOP_SKILL = _ROOT / "skills" / "forge-autopilot-stop" / "SKILL.md"
+
+
+def test_stop_skill_exists_and_requests_stop():
+    assert _STOP_SKILL.exists()
+    fm = _frontmatter(_STOP_SKILL.read_text())
+    assert fm.get("name") == "forge-autopilot-stop"
+    body = _STOP_SKILL.read_text()
+    assert "autopilot.py stop" in body
+    assert "--resume" in body  # tells the user how to continue later

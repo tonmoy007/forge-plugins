@@ -263,3 +263,46 @@ def test_cli_dispatch_requires_stage(tmp_path):
         capture_output=True, text=True,
     )
     assert r.returncode == 2
+
+
+# --- session / cancel (REQ-AP-007) -----------------------------------------
+
+def test_start_session_idempotent(tmp_path):
+    forge = tmp_path / ".forge"
+    assert _ap.start_session(forge)["status"] == "started"
+    assert _ap.start_session(forge)["status"] == "already_running"
+
+
+def test_request_stop_sets_flag(tmp_path):
+    forge = tmp_path / ".forge"
+    _ap.start_session(forge)
+    assert _ap.stop_requested(forge) is False
+    _ap.request_stop(forge)
+    assert _ap.stop_requested(forge) is True
+
+
+def test_finish_clears_stop_and_idles(tmp_path):
+    forge = tmp_path / ".forge"
+    _ap.start_session(forge)
+    _ap.request_stop(forge)
+    _ap.finish_session(forge)
+    assert _ap.stop_requested(forge) is False
+    assert _ap.read_session(forge)["status"] == "idle"
+    # After finishing, a fresh start is allowed again (not already_running).
+    assert _ap.start_session(forge)["status"] == "started"
+
+
+def test_read_session_absent_is_empty(tmp_path):
+    assert _ap.read_session(tmp_path / ".forge") == {}
+
+
+def test_cli_stop_then_status(tmp_path):
+    cwd = str(tmp_path)
+    subprocess.run([PYTHON, str(_mod_path), "start", "--cwd", cwd],
+                   capture_output=True, text=True)
+    r_stop = subprocess.run([PYTHON, str(_mod_path), "stop", "--cwd", cwd],
+                            capture_output=True, text=True)
+    assert r_stop.returncode == 0
+    r_status = subprocess.run([PYTHON, str(_mod_path), "status", "--cwd", cwd],
+                              capture_output=True, text=True)
+    assert json.loads(r_status.stdout)["stop_requested"] is True

@@ -37,6 +37,7 @@ import _background_agent  # noqa: E402  (the sole `claude -p` wrapper — backgr
 
 VALID_MODES = ("in-session", "background")
 _RUNLOG_NAME = "autopilot-runs.jsonl"
+_SESSION_NAME = "autopilot-session.json"
 _DONE_STATUSES = {"done", "passed", "advanced", "ok"}
 
 
@@ -190,6 +191,63 @@ def record_run(
     return _error_log.append_jsonl(Path(forge_dir) / _RUNLOG_NAME, entry)
 
 
+def read_session(forge_dir) -> dict:
+    """Read `.forge/autopilot-session.json` ({} if absent/unreadable). Never raises."""
+    path = Path(forge_dir) / _SESSION_NAME
+    try:
+        if not path.exists():
+            return {}
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_session(forge_dir, data: dict) -> bool:
+    forge = Path(forge_dir)
+    try:
+        forge.mkdir(parents=True, exist_ok=True)
+        tmp = forge / (_SESSION_NAME + ".tmp")
+        tmp.write_text(json.dumps(data))
+        os.replace(tmp, forge / _SESSION_NAME)
+        return True
+    except OSError:
+        return False
+
+
+def start_session(forge_dir) -> dict:
+    """Mark an autopilot run active. Idempotent: warns if already running (REQ-AP-007)."""
+    cur = read_session(forge_dir)
+    if cur.get("status") == "running":
+        return {"status": "already_running", "started_at": cur.get("started_at")}
+    now = _now_iso()
+    _write_session(forge_dir, {"status": "running", "started_at": now,
+                               "stop_requested": False, "updated_at": now})
+    return {"status": "started", "started_at": now}
+
+
+def request_stop(forge_dir) -> dict:
+    """Set the stop flag the loop checks between stages (REQ-AP-007)."""
+    data = dict(read_session(forge_dir))
+    data["stop_requested"] = True
+    data["status"] = "stopping"
+    data["updated_at"] = _now_iso()
+    _write_session(forge_dir, data)
+    return {"status": "stop_requested"}
+
+
+def stop_requested(forge_dir) -> bool:
+    return bool(read_session(forge_dir).get("stop_requested"))
+
+
+def finish_session(forge_dir) -> dict:
+    """Mark the run idle and clear the stop flag (call at run end)."""
+    started = read_session(forge_dir).get("started_at")
+    _write_session(forge_dir, {"status": "idle", "stop_requested": False,
+                               "started_at": started, "updated_at": _now_iso()})
+    return {"status": "idle"}
+
+
 def _background_available(forge_dir) -> tuple[bool, str]:
     """Is the background substrate usable? Honors the kill switch + capability cache."""
     if os.environ.get("FORGE_NO_BACKGROUND") == "1":
@@ -311,9 +369,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "walks this plan in-session).",
     )
     parser.add_argument("command", nargs="?", default="plan",
-                        choices=("plan", "record", "dispatch"),
-                        help="plan the run (default), record a completed stage, or "
-                             "dispatch one stage in the background substrate")
+                        choices=("plan", "record", "dispatch", "start", "stop", "status",
+                                 "finish"),
+                        help="plan (default) | record a stage | dispatch (background) | "
+                             "start/stop/status/finish the autopilot session")
     parser.add_argument("--cwd", default=os.getcwd(), help="project root (default: cwd)")
     parser.add_argument("--stage", type=int, default=None, metavar="N",
                         help="(record/dispatch) the target stage")
@@ -357,6 +416,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         result = run_stage(args.cwd, args.stage, args.skill, args.label,
                            mode="background", session_id=args.session, model=args.model)
         print(json.dumps(result))
+        return 0
+
+    if args.command in ("start", "stop", "status", "finish"):
+        forge = Path(args.cwd) / ".forge"
+        if args.command == "start":
+            print(json.dumps(start_session(forge)))
+        elif args.command == "stop":
+            print(json.dumps(request_stop(forge)))
+        elif args.command == "finish":
+            print(json.dumps(finish_session(forge)))
+        else:
+            print(json.dumps(read_session(forge)))
         return 0
 
     plan = plan_stages(

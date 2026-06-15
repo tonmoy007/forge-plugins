@@ -42,7 +42,13 @@ in-session (a script can't drive the Agent tool — ADR-006).
 
 ## Steps
 
-1. **Plan.** Translate the user's intent to flags and get the ordered plan:
+1. **Start + plan.** Mark the session active (idempotent — warns if one is already
+   running, so two autopilots don't run at once):
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py start --cwd .
+   ```
+   If it reports `already_running`, tell the user and stop unless they confirm. Then get
+   the ordered plan:
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py --cwd . --json \
      [--to N | --stages K | --until-gate] [--mode in-session|background] [--resume]
@@ -82,7 +88,12 @@ in-session (a script can't drive the Agent tool — ADR-006).
       gate blocks; `every` — pause for the user's OK between stages; `never` — run straight
       through.
 
-3. **Summarize**: stages completed, where it stopped, and the next step.
+3. **Finish.** Mark the session idle (also clears any stop flag), then summarize:
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py finish --cwd .
+   ```
+   Report stages completed, where it stopped (gate blocker or stop request), and the next
+   step (`/forge:autopilot --resume` to continue after a fix).
 
 ## Notes
 
