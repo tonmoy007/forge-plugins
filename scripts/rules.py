@@ -112,6 +112,8 @@ class Rule:
     globs: list = field(default_factory=list)
     priority: int = 0
     body: str = ""
+    enforce: bool = False  # REQ-AUTO-006: an enforcing glob rule BLOCKS a matching write
+    severity: str = "error"  # surfaced in the block message; reserved for future tiers
 
     def matches_stage(self, stage: Optional[int]) -> bool:
         return self.scope == "stage" and stage is not None and stage in self.stages
@@ -172,6 +174,7 @@ def load_rules(forge_dir) -> list[Rule]:
         scope = str(meta.get("scope", "")).strip().lower()
         if scope not in VALID_SCOPES:
             continue  # not a rule (README, missing/invalid scope) — fail-soft skip
+        severity = str(meta.get("severity", "error")).strip().lower() or "error"
         rules.append(
             Rule(
                 name=p.stem,
@@ -181,6 +184,8 @@ def load_rules(forge_dir) -> list[Rule]:
                 globs=_coerce_str_list(meta.get("globs")),
                 priority=_coerce_int(meta.get("priority"), 0),
                 body=body.strip(),
+                enforce=meta.get("enforce") is True,
+                severity=severity,
             )
         )
     rules.sort(key=lambda r: (-r.priority, r.name))
@@ -214,6 +219,16 @@ def select(
             out.append(r)
         # manual → never auto-selected
     return out
+
+
+def enforcing_for_file(rules: list[Rule], file_path: Optional[str]) -> list[Rule]:
+    """Return enforcing `glob` rules matching `file_path` (REQ-AUTO-006).
+
+    These are the governance guardrail: `pre-tool-write` blocks (exit 2) a write to a
+    matching path. Only `glob`-scoped rules with `enforce: true` qualify — advisory rules,
+    other scopes, and non-matching paths return []. Never raises.
+    """
+    return [r for r in select(rules, file_path=file_path, scope="glob") if r.enforce]
 
 
 def render(rules: list[Rule], max_chars: int = _DEFAULT_RENDER_BUDGET) -> str:
@@ -257,11 +272,15 @@ Frontmatter:
     stages: [6, 7]        # for scope: stage
     globs: ["**/*.tsx"]   # for scope: glob
     priority: 0           # higher shows first
+    enforce: false        # scope: glob only — true BLOCKS a matching write (exit 2)
+    severity: error       # surfaced in the block message
 
 Scopes:
     always  - injected every session (within the context budget)
     stage   - injected when the pipeline is on a listed stage
-    glob    - surfaced when writing a file matching globs (advisory, never blocks)
+    glob    - surfaced when writing a file matching globs (advisory by default;
+              add `enforce: true` to BLOCK writes to matching paths — a guardrail
+              for unattended autopilot)
     manual  - never auto-injected; reference it by name
 
 See `references/rules-format.md` for the full schema. Manage with `/forge:rules`.
@@ -391,6 +410,10 @@ def _cmd_validate(args) -> int:
             issues += 1
         if scope == "glob" and not _coerce_str_list(meta.get("globs")):
             print(f"WARN {p.name}: scope=glob but no `globs` list")
+            issues += 1
+        if meta.get("enforce") is True and scope != "glob":
+            print(f"WARN {p.name}: enforce: true only blocks on scope=glob (got {scope}); "
+                  "it will be advisory")
             issues += 1
         if not body.strip():
             print(f"WARN {p.name}: empty rule body")

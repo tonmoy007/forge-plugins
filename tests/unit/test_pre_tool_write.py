@@ -344,3 +344,38 @@ class TestGlobRules:
         ctx = data["hookSpecificOutput"]["additionalContext"]
         assert "Design system violations" in ctx
         assert "Rules for" not in ctx
+
+
+class TestEnforcingRules:
+    """T-175 / REQ-AUTO-006: a `glob` rule with `enforce: true` BLOCKS a matching write
+    (exit 2). Advisory rules and non-matching writes are unaffected."""
+
+    def test_enforcing_rule_blocks_matching_write(self, tmp_path):
+        _make_rule(tmp_path, "lock.md",
+                   "---\nscope: glob\nglobs: ['**/*.lock']\nenforce: true\n---\n"
+                   "Lockfiles are protected during autonomy.\n")
+        r = _run("Write", "poetry.lock", "deps", str(tmp_path))
+        assert r.returncode == 2                 # blocked
+        assert "BLOCKED" in r.stderr
+        assert "lock" in r.stderr                 # the rule name is surfaced
+
+    def test_enforcing_rule_ignores_non_matching_path(self, tmp_path):
+        _make_rule(tmp_path, "lock.md",
+                   "---\nscope: glob\nglobs: ['**/*.lock']\nenforce: true\n---\nx\n")
+        r = _run("Write", "app/main.py", "print(1)", str(tmp_path))
+        assert r.returncode == 0                 # different path → not blocked
+
+    def test_advisory_glob_rule_does_not_block(self, tmp_path):
+        # enforce omitted → advisory (v0.3.0 behavior): surfaced, never exit 2.
+        _make_rule(tmp_path, "py.md",
+                   "---\nscope: glob\nglobs: ['**/*.py']\n---\nNo bare except.\n")
+        r = _run("Write", "a.py", "print(1)", str(tmp_path))
+        assert r.returncode == 0
+        ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "Rules for a.py" in ctx
+
+    def test_enforcing_blocks_edit_too(self, tmp_path):
+        _make_rule(tmp_path, "env.md",
+                   "---\nscope: glob\nglobs: ['**/*.env']\nenforce: true\n---\nsecrets\n")
+        r = _run("Edit", "config/.env", "KEY=val", str(tmp_path), tool_type="Edit")
+        assert r.returncode == 2

@@ -204,3 +204,50 @@ def test_add_creates_and_refuses_clobber(tmp_path: Path) -> None:
 
 def test_add_invalid_scope_is_usage_error(tmp_path: Path) -> None:
     assert _rules.main(["add", "x", "--scope", "whenever", "--cwd", str(tmp_path)]) == 2
+
+
+# --- enforcing rules (T-175, REQ-AUTO-006) ---------------------------------
+
+def test_enforce_defaults_off_and_severity_error(tmp_path: Path) -> None:
+    forge = tmp_path / ".forge"
+    _write_rule(forge, "a.md", "---\nscope: glob\nglobs: ['**/*.py']\n---\nx\n")
+    r = _rules.load_rules(forge)[0]
+    assert r.enforce is False        # advisory by default — unchanged from v0.3.0
+    assert r.severity == "error"     # default severity
+
+
+def test_parses_enforce_and_severity(tmp_path: Path) -> None:
+    forge = tmp_path / ".forge"
+    _write_rule(
+        forge, "lock.md",
+        "---\nscope: glob\nglobs: ['**/*.lock']\nenforce: true\nseverity: error\n---\n"
+        "Do not touch lockfiles.\n",
+    )
+    r = _rules.load_rules(forge)[0]
+    assert r.enforce is True
+    assert r.severity == "error"
+
+
+def test_enforcing_for_file_matches_only_enforcing_globs(tmp_path: Path) -> None:
+    forge = tmp_path / ".forge"
+    _write_rule(forge, "lock.md",
+                "---\nscope: glob\nglobs: ['**/*.lock']\nenforce: true\n---\nprotected\n")
+    _write_rule(forge, "adv.md",
+                "---\nscope: glob\nglobs: ['**/*.py']\n---\nadvisory only\n")
+    rules = _rules.load_rules(forge)
+    # enforcing match on a lockfile:
+    hit = _rules.enforcing_for_file(rules, "poetry.lock")
+    assert [r.name for r in hit] == ["lock"]
+    # advisory glob rule is NOT enforcing:
+    assert _rules.enforcing_for_file(rules, "app/main.py") == []
+    # non-matching path:
+    assert _rules.enforcing_for_file(rules, "README.md") == []
+
+
+def test_enforcing_ignores_non_glob_scopes(tmp_path: Path) -> None:
+    forge = tmp_path / ".forge"
+    # enforce on a non-glob scope has nothing to match a file against → never blocks.
+    _write_rule(forge, "always.md",
+                "---\nscope: always\nenforce: true\n---\nx\n")
+    rules = _rules.load_rules(forge)
+    assert _rules.enforcing_for_file(rules, "anything.py") == []
