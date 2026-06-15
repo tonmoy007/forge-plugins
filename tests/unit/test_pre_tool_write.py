@@ -57,6 +57,12 @@ def _make_design_system(tmp_path: Path) -> None:
     (ds_dir / "design-system.md").write_text("# Design System\n\n## Colors\n")
 
 
+def _make_rule(tmp_path: Path, name: str, body: str) -> None:
+    d = tmp_path / ".forge" / "rules"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / name).write_text(body)
+
+
 class TestToolNameFiltering:
     def test_read_tool_no_output(self, tmp_path):
         _make_state(tmp_path)
@@ -288,3 +294,53 @@ class TestEdgeCases:
             text=True,
         )
         assert r.returncode == 0
+
+
+class TestGlobRules:
+    """T-160 / REQ-RULES-010: user `glob` rules surface as advisory feedback on a
+    matching write, for ANY file type, and never block (exit 0)."""
+
+    def test_glob_rule_on_non_ui_file_surfaced(self, tmp_path):
+        # No state / design-system needed; glob rules apply to any file (here, .py).
+        _make_rule(tmp_path, "py.md",
+                   "---\nscope: glob\nglobs: ['**/*.py']\n---\nNo bare except.\n")
+        r = _run("Write", "scripts/foo.py", "print(1)", str(tmp_path))
+        assert r.returncode == 0
+        data = json.loads(r.stdout)
+        ctx = data["hookSpecificOutput"]["additionalContext"]
+        assert "Rules for foo.py" in ctx
+        assert "py" in ctx  # rule name surfaced
+
+    def test_glob_rule_non_match_silent(self, tmp_path):
+        _make_rule(tmp_path, "ui.md",
+                   "---\nscope: glob\nglobs: ['**/*.tsx']\n---\nUse tokens.\n")
+        r = _run("Write", "README.md", "hello", str(tmp_path))
+        assert r.returncode == 0
+        assert r.stdout.strip() == ""  # no match, no design system → silent
+
+    def test_glob_rule_never_blocks(self, tmp_path):
+        _make_rule(tmp_path, "py.md",
+                   "---\nscope: glob\nglobs: ['**/*.py']\n---\nx\n")
+        r = _run("Write", "a.py", "print(1)", str(tmp_path))
+        assert r.returncode == 0  # advisory, never exit 2
+
+    def test_glob_and_design_violations_combined(self, tmp_path):
+        _make_state(tmp_path, stage=6)
+        _make_design_system(tmp_path)
+        _make_rule(tmp_path, "tsx.md",
+                   "---\nscope: glob\nglobs: ['**/*.tsx']\n---\nPrefer composition.\n")
+        r = _run("Write", "src/Button.tsx", "color: #fff;", str(tmp_path))
+        data = json.loads(r.stdout)
+        ctx = data["hookSpecificOutput"]["additionalContext"]
+        assert "Rules for Button.tsx" in ctx          # the glob rule
+        assert "Design system violations" in ctx       # plus the design check
+
+    def test_no_rules_dir_design_path_unchanged(self, tmp_path):
+        # Regression: with no .forge/rules, behavior matches pre-T-160.
+        _make_state(tmp_path, stage=6)
+        _make_design_system(tmp_path)
+        r = _run("Write", "src/app.tsx", "color: #fff;", str(tmp_path))
+        data = json.loads(r.stdout)
+        ctx = data["hookSpecificOutput"]["additionalContext"]
+        assert "Design system violations" in ctx
+        assert "Rules for" not in ctx

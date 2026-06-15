@@ -32,6 +32,7 @@ sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _state_lib as lib
 import _state_read
+import rules as user_rules  # user-authored rules surface — REQ-RULES-010
 from _hook_runner import run_hook
 
 _UI_EXTENSIONS = {".tsx", ".jsx", ".ts", ".js", ".vue", ".svelte", ".css", ".scss", ".html"}
@@ -107,6 +108,70 @@ def _scan_violations(content: str) -> list[str]:
     return violations
 
 
+def _glob_rules_message(cwd: Path, file_path: str) -> str:
+    """Render user `glob` rules matching the written file (REQ-RULES-010).
+
+    Advisory only — surfaced as additionalContext, NEVER blocks the write. Read-only,
+    applies to any file type, and never raises; '' when there is no match or no
+    `.forge/rules/` directory.
+    """
+    if not file_path:
+        return ""
+    try:
+        selected = user_rules.select(
+            user_rules.load_rules(cwd / ".forge"), file_path=file_path, scope="glob"
+        )
+        body = user_rules.render(selected, max_chars=600)
+        if not body:
+            return ""
+        return f"[Forge] Rules for {Path(file_path).name}:\n{body}"
+    except Exception:  # noqa: BLE001 — rule injection must never block a write
+        return ""
+
+
+def _design_violations_message(
+    cwd: Path, tool_name: str, tool_input: dict, file_path: str, session_id: str
+) -> str:
+    """Design-system feedback for UI writes after Stage 6 (existing behavior).
+
+    Returns '' when not applicable. Prints a state-read warning if one occurs
+    (REQ-SILENTSTATE-001).
+    """
+    if not _is_ui_file(file_path):
+        return ""
+    if not (cwd / "pipeline" / "state.md").exists():
+        return ""
+    state, warning = _state_read.read_state_safe(str(cwd), session_id)
+    if warning:
+        print(warning)
+    if state.get("current_stage", 0) < 6:
+        return ""
+    design_system = cwd / "pipeline" / "02-product-ux" / "design-system.md"
+    if not design_system.exists():
+        return ""
+    content = _extract_content(tool_name, tool_input)
+    if not content:
+        return ""
+    violations = _scan_violations(content)
+    if not violations:
+        return ""
+    # T-114: record the violation so the repeated-block / heredoc-bypass producers
+    # can see a pattern of fighting the design-system check on the same files.
+    _state_read.log_event(cwd / ".forge", "pretool_violation", file_path, session_id)
+    capped = violations[:10]
+    suffix = (
+        f"\n  ... and {len(violations) - 10} more violation(s)"
+        if len(violations) > 10
+        else ""
+    )
+    return (
+        f"[Forge] Design system violations in {Path(file_path).name}:\n"
+        + "\n".join(f"  • {v}" for v in capped)
+        + suffix
+        + "\n\nSee pipeline/02-product-ux/design-system.md for token reference."
+    )
+
+
 def main() -> None:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -120,53 +185,22 @@ def main() -> None:
     tool_input_raw = payload.get("tool_input", {})
     tool_input: dict = tool_input_raw if isinstance(tool_input_raw, dict) else {}
     file_path = tool_input.get("file_path", "")
-
-    if not _is_ui_file(file_path):
-        sys.exit(0)
-
     cwd = Path(payload.get("cwd", os.getcwd()))
+    session_id = payload.get("session_id", "")
 
-    # Only enforce after Stage 6
-    if not (cwd / "pipeline" / "state.md").exists():
+    blocks: list[str] = []
+    # (1) User glob rules — any file type, independent of stage/design-system.
+    rule_block = _glob_rules_message(cwd, file_path)
+    if rule_block:
+        blocks.append(rule_block)
+    # (2) Design-system enforcement — UI files after Stage 6 (existing behavior).
+    ds_block = _design_violations_message(cwd, tool_name, tool_input, file_path, session_id)
+    if ds_block:
+        blocks.append(ds_block)
+
+    if not blocks:
         sys.exit(0)
-    state, warning = _state_read.read_state_safe(str(cwd), payload.get("session_id", ""))
-    if warning:
-        print(warning)
-    if state.get("current_stage", 0) < 6:
-        sys.exit(0)
-
-    # Only enforce when a design system has been authored
-    design_system = cwd / "pipeline" / "02-product-ux" / "design-system.md"
-    if not design_system.exists():
-        sys.exit(0)
-
-    content = _extract_content(tool_name, tool_input)
-    if not content:
-        sys.exit(0)
-
-    violations = _scan_violations(content)
-    if not violations:
-        sys.exit(0)
-
-    # T-114: record the violation so the repeated-block / heredoc-bypass producers
-    # can see a pattern of fighting the design-system check on the same files.
-    _state_read.log_event(
-        cwd / ".forge", "pretool_violation", file_path, payload.get("session_id", "")
-    )
-
-    capped = violations[:10]
-    suffix = (
-        f"\n  ... and {len(violations) - 10} more violation(s)"
-        if len(violations) > 10
-        else ""
-    )
-    msg = (
-        f"[Forge] Design system violations in {Path(file_path).name}:\n"
-        + "\n".join(f"  • {v}" for v in capped)
-        + suffix
-        + "\n\nSee pipeline/02-product-ux/design-system.md for token reference."
-    )
-    print(json.dumps({"hookSpecificOutput": {"additionalContext": msg}}))
+    print(json.dumps({"hookSpecificOutput": {"additionalContext": "\n\n".join(blocks)}}))
     sys.exit(0)
 
 

@@ -5,8 +5,13 @@
 
 ## Current State
 
-- **Active program: v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
-  you": daemons, orchestration, brownfield, sprint.
+- **Active program: v0.3** — "Hands-off Forge — autonomy + governance": user-authored
+  **Rules** (v0.3.0) + **Autopilot** cross-stage execution (v0.3.1). On branch
+  `feat/v0.3.0-rules` off `main`; SRS `build/01-srs/srs-v0.3.md`, DAG
+  `build/04-plan/task-dag-v0.3.md` (T-157..T-166). See v0.3 Task Status below.
+- **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
+  you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
+  (sprint M4, T-153–156, deferred).
 - **v0.2.0 (M1 foundation) COMPLETE + RELEASED** — T-136..T-141. Cost cap + ledger,
   background-agent dispatch (`claude -p`, session reuse), capability probe wired into
   session-start, background skill-miner instrumentation, `/forge:set-profile`. Tag
@@ -47,6 +52,31 @@
 - **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.3 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.3.md` (T-157..T-166). Two phases: M1 Rules (v0.3.0,
+> T-157..T-161), M2 Autopilot (v0.3.1, T-162..T-166). SRS `build/01-srs/srs-v0.3.md`.
+
+### M1 — Rules / governance (v0.3.0) — branch `feat/v0.3.0-rules`
+
+| Task | Status | Completed | Commit | Notes |
+|------|--------|-----------|--------|-------|
+| T-157 | 🟢 done | 2026-06-15 | (this commit) | `scripts/rules.py` — `.forge/rules/*.md` loader: frontmatter (stdlib split + fail-soft PyYAML, no `frontmatter` dep), scope model always/stage/glob/manual, `select()` + budget-bounded `render()`, fnmatch globs with `**` handling, CLI list/validate (argparse SUPPRESS). Never-raises. +14 tests |
+| T-158 | 🟢 done | 2026-06-15 | (this commit) | `/forge:rules` skill (`name: forge-rules`) — init (idempotent scaffold) / add (no-clobber) / list / validate; `rules.py` gained those CLI subcommands. `references/rules-format.md` documents the schema + 4 scopes. +7 tests (init/add CLI + structural). validate-plugin 0 |
+| T-159 | 🟢 done | 2026-06-15 | (this commit) | `hooks/session-start.py` injects `always` + current-`stage` rules (`_rules_block`, render cap 500 chars) after lessons; budget path trims lessons then drops rules last-resort to hold ≤2000 tokens. Never-raises. +6 tests (always/stage/off-stage/no-dir/glob-excluded/budget) |
+| T-160 | 🟢 done | 2026-06-15 | (this commit) | `hooks/pre-tool-write.py` refactored into `_glob_rules_message` (any file type) + `_design_violations_message` (UI, existing); glob rules surface as advisory `additionalContext`, never block (exit 0). Design-system path behavior preserved. +5 tests. Full suite 1257 pass |
+| T-161 | 🟡 staged | 2026-06-15 | (this commit) | Release v0.3.0 prep — `bump-version.py 0.3.0` (manifests + CHANGELOG `[0.3.0]`), README "Project Rules" section + commands/hooks rows, ROADMAP rows. Pre-release green: 1257 unit pass, validate-plugin 0, full-pipeline 12/12. **Push/PR/tag/mirror pending user confirmation.** |
+
+### M2 — Autopilot / autonomy (v0.3.1) — branch (later)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| T-162 | 🟢 done | `scripts/autopilot.py` deterministic planner — resolve_plan (targets --to/--stages/--until-gate, cycle entry/exit + bounds clamp, config stop_before/max_stages), plan_stages (state → {stage,skill,label}, --resume skips run-log), load_config; never-raises (malformed state → []). CLI --json/--dry-run. +18 tests |
+| T-163 | 🟢 done | `/forge:autopilot` skill (`name: forge-autopilot`) — in-session loop: plan → per-stage run agent → check-gate → advance on pass / STOP on blocker (never force unless `allow_force`+reason); narrates + records run-log; checkpoint policy; honors always-rules. `autopilot.py record` subcommand (run-log via `_error_log.append_jsonl`). +3 record tests +4 structural. validate 0 |
+| T-164 | 🟢 done | `--mode background` substrate — `run_stage` dispatches one stage via `_background_agent.dispatch` (cost+capability gated, session reuse), clean `unavailable` no-op under kill switch / no capability; never raises. `autopilot.py dispatch` subcommand + config `autopilot.model`. Skill documents the background path. +6 tests |
+| T-165 | 🟢 done | `/forge:autopilot-stop` skill + session model in `autopilot.py` (`.forge/autopilot-session.json`): start (idempotent — warns already_running), stop (cooperative stop_requested flag checked between stages), status, finish (idle + clears flag). Skill starts/finishes the session; loop honors the flag. +7 tests |
+| T-166 | 🟡 staged | Release v0.3.1 prep — `bump-version.py 0.3.1` (manifests + CHANGELOG `[0.3.1]`), README "Autopilot" section + command rows, ROADMAP. Pre-release green. **Branching note:** T-162–166 landed on `feat/v0.3.0-rules` (PR #19), so #19 now spans both phases — shipping split (two tags) vs combined pending user decision. |
 
 ## v0.2 Task Status
 

@@ -14,6 +14,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] — 2026-06-15
+
+**Autopilot (v0.3 Milestone 2 — autonomy).** Hand Forge the wheel: `/forge:autopilot`
+runs pipeline stages back-to-back — per stage it runs the agent, checks the gate, and
+**advances only on a pass, stopping at the first blocker** (it never forces past a gate).
+Bounded, interruptible, and a clean no-op outside a pipeline. Generalizes
+`/forge:force-advance` (one gated advance) and `/forge:build --milestone` (within-stage).
+
+### Added
+- **Autopilot planner** (`scripts/autopilot.py`, T-162, REQ-AP-001..003): deterministic,
+  no-LLM stage-plan generator from the canonical stage table + state. Targets
+  `--to N` / `--stages K` / `--until-gate`; clamps to cycle entry/exit, stage bounds, and
+  config `autopilot.stop_before` / `max_stages`. `--resume` skips stages already recorded
+  in `.forge/autopilot-runs.jsonl`; `--dry-run`/`--json`. Never raises (malformed state →
+  empty plan).
+- **`/forge:autopilot` skill** (`skills/forge-autopilot/`, T-163, REQ-AP-004/005/008/009):
+  walks the plan in-session — run stage agent → `check-gate.py` → advance on a clean gate
+  via `state-manager.py`, or **STOP** on a blocker (never forces unless
+  `autopilot.allow_force` + a reason). Narrates each step and records a run-log row.
+- **Background substrate** (`run_stage(mode="background")` + `autopilot.py dispatch`,
+  T-164, REQ-AP-006): per-stage `claude -p` dispatch via the single `_background_agent`
+  wrapper — cost-gated, capability-gated, session-reused; a clean `unavailable` no-op
+  under `FORGE_NO_BACKGROUND=1` or when no background capability is present.
+- **`/forge:autopilot-stop` + session model** (`skills/forge-autopilot-stop/`, T-165,
+  REQ-AP-007): cooperative cancel via `.forge/autopilot-session.json` — `start` is
+  idempotent (warns if already running), `stop` sets a flag the loop honors between
+  stages (current stage finishes; nothing forced), `finish` idles and clears the flag.
+
+### Changed
+- `.forge/config.yaml` gains an optional `autopilot:` block (`max_stages`, `stop_before`,
+  `checkpoint`, `allow_force`, `model`), read fail-soft like `cost_cap`.
+
+### Fixed
+
+---
+
+## [0.3.0] — 2026-06-15
+
+**Project Rules (v0.3 Milestone 1 — governance).** A user-authored constraints surface
+that steers Forge's agents, in the spirit of Cursor's `.cursor/rules`. Rules live in
+`.forge/rules/*.md` (YAML frontmatter + a markdown body), are **advisory** (they never
+block a write), and degrade to a clean no-op when the directory is absent. This is the
+first phase of the v0.3 "Hands-off Forge" program; Autopilot follows in v0.3.1.
+
+### Added
+- **Rules loader** (`scripts/rules.py`, T-157, REQ-RULES-001..004): parses
+  `.forge/rules/*.md` with a scope model — `always`, `stage`, `glob`, `manual` —
+  exposing `load_rules` / `select` / budget-bounded `render`. Frontmatter is split with
+  a stdlib fence parser + fail-soft PyYAML (no third-party `frontmatter` dependency);
+  globs use `fnmatch` with sensible `**` handling. Malformed files are skipped and an
+  absent directory yields nothing — it **never raises** (it is imported by hooks).
+- **`/forge:rules` skill** (`skills/forge-rules/`, T-158, REQ-RULES-005..008):
+  `init` (idempotent scaffold of `.forge/rules/` with a README + example) / `add` (from a
+  template, never clobbers) / `list` / `validate`. Documented in
+  `references/rules-format.md`.
+- **Glob-rule injection on writes** (`hooks/pre-tool-write.py`, T-160, REQ-RULES-010):
+  user `glob` rules matching the written file surface as advisory `additionalContext`
+  for **any** file type, alongside the existing design-system feedback. Never blocks.
+
+### Changed
+- **Session-start injects rules** (`hooks/session-start.py`, T-159, REQ-RULES-009): the
+  context block now includes `always` + current-`stage` rules, kept within the existing
+  ≤2000-token budget (lessons trim first, then rules drop as a last resort).
+
+### Fixed
+
+---
+
 ## [0.2.3] — 2026-06-11
 
 **Background daemons (v0.2 Milestone 2).** With the O-2 cost gate cleared in v0.2.2,

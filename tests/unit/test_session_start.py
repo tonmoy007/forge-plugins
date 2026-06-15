@@ -64,6 +64,12 @@ def _make_lessons(tmp_path: Path, lessons: list[dict]) -> None:
     (forge_dir / "lessons.yaml").write_text(yaml.dump(data))
 
 
+def _make_rule(tmp_path: Path, name: str, body: str) -> None:
+    d = tmp_path / ".forge" / "rules"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / name).write_text(body)
+
+
 class TestNonForgeDir:
     def test_no_pipeline_silent_exit_0(self, tmp_path):
         r = _run(str(tmp_path))
@@ -373,3 +379,58 @@ class TestBackgroundCapability:
         _make_state(tmp_path, stage=2, project_type="api")
         r = _run(str(tmp_path))
         assert "Health alert" not in r.stdout
+
+
+class TestRulesInjection:
+    """T-159 / REQ-RULES-009: session-start injects always + current-stage rules
+    within the token budget; absent rules dir is a clean no-op."""
+
+    def _env(self, tmp_path):
+        # Isolate HOME so the global-lessons store can't add stray lines.
+        return {**os.environ, "HOME": str(tmp_path), "FORGE_NO_BACKGROUND": "1"}
+
+    def test_always_rule_injected_any_stage(self, tmp_path):
+        _make_state(tmp_path, stage=3, project_type="api")
+        _make_rule(tmp_path, "10-tone.md",
+                   "---\ndescription: Be terse\nscope: always\n---\nKeep prose short.\n")
+        r = _run(str(tmp_path), env=self._env(tmp_path))
+        assert "[Forge] Rules" in r.stdout
+        assert "10-tone" in r.stdout
+
+    def test_stage_rule_present_at_its_stage(self, tmp_path):
+        _make_state(tmp_path, stage=6, project_type="api")
+        _make_rule(tmp_path, "20-build.md",
+                   "---\ndescription: Build-stage rule\nscope: stage\nstages: [6]\n---\nx\n")
+        r = _run(str(tmp_path), env=self._env(tmp_path))
+        assert "[Forge] Rules" in r.stdout
+        assert "20-build" in r.stdout
+
+    def test_stage_rule_absent_off_stage(self, tmp_path):
+        _make_state(tmp_path, stage=3, project_type="api")
+        _make_rule(tmp_path, "20-build.md",
+                   "---\ndescription: Build-stage rule\nscope: stage\nstages: [6]\n---\nx\n")
+        r = _run(str(tmp_path), env=self._env(tmp_path))
+        assert "[Forge] Rules" not in r.stdout  # no always/matching-stage rules
+
+    def test_no_rules_dir_no_rules_line(self, tmp_path):
+        _make_state(tmp_path, stage=6, project_type="api")
+        r = _run(str(tmp_path), env=self._env(tmp_path))
+        assert "[Forge] Rules" not in r.stdout
+
+    def test_glob_rule_not_injected_at_session_start(self, tmp_path):
+        # glob rules are write-time only (pre-tool-write), not session-start.
+        _make_state(tmp_path, stage=6, project_type="api")
+        _make_rule(tmp_path, "30-ui.md",
+                   "---\nscope: glob\nglobs: ['**/*.tsx']\n---\nui rule\n")
+        r = _run(str(tmp_path), env=self._env(tmp_path))
+        assert "[Forge] Rules" not in r.stdout
+
+    def test_rules_stay_within_token_budget(self, tmp_path):
+        _make_state(tmp_path, stage=6, project_type="api")
+        for i in range(30):
+            _make_rule(tmp_path, f"r{i:02d}.md",
+                       f"---\nscope: always\npriority: {i}\n---\n" + ("x" * 300) + "\n")
+        r = _run(str(tmp_path), env=self._env(tmp_path))
+        assert r.returncode == 0
+        assert "[Forge] Rules" in r.stdout
+        assert len(r.stdout) < 8000  # ~2000-token budget (len/4)
