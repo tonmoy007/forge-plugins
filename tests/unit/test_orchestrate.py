@@ -128,3 +128,37 @@ def test_cost_summed() -> None:
     res = _orch.fan_out(["a", "b", "c"], lambda p: p, forge_dir=FORGE, feature="t",
                         dispatch_fn=lambda p, **kw: _ok({"item": p}, cost=0.02))
     assert abs(res.total_cost_usd - 0.06) < 1e-9
+
+
+# --- structured outputs (T-167, REQ-HARNESS-001) ---------------------------
+
+_SCHEMA = {
+    "type": "object",
+    "properties": {"item": {"type": "string"}},
+    "required": ["item"],
+    "additionalProperties": False,
+}
+
+
+def test_output_schema_threaded_to_dispatch() -> None:
+    captured: dict = {}
+
+    def disp(prompt, **kw):
+        captured.update(kw)
+        return _ok({"item": prompt})
+
+    res = _orch.fan_out(["a"], lambda p: p, forge_dir=FORGE, feature="t",
+                        output_schema=_SCHEMA, dispatch_fn=disp)
+    assert res.results == [{"item": "a"}]
+    assert captured.get("output_schema") == _SCHEMA  # passed through to dispatch
+
+
+def test_no_output_schema_not_passed() -> None:
+    captured: dict = {}
+
+    def disp(prompt, **kw):
+        captured.update(kw)
+        return _ok({"item": prompt})
+
+    _orch.fan_out(["a"], lambda p: p, forge_dir=FORGE, feature="t", dispatch_fn=disp)
+    assert "output_schema" not in captured  # absent unless requested

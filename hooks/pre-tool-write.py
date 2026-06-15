@@ -108,6 +108,37 @@ def _scan_violations(content: str) -> list[str]:
     return violations
 
 
+def _enforcing_block_message(cwd: Path, file_path: str) -> str:
+    """Return a denial message when an enforcing `glob` rule matches the write
+    (REQ-AUTO-006) — the governance guardrail that makes unattended autonomy safe.
+
+    Fail-soft: '' when no enforcing rule matches, there is no `.forge/rules/`, or anything
+    goes wrong. A bug in rule handling must NEVER wrongly block legitimate work, so any
+    exception degrades to "allow" (advisory behavior).
+    """
+    if not file_path:
+        return ""
+    try:
+        matched = user_rules.enforcing_for_file(
+            user_rules.load_rules(cwd / ".forge"), file_path
+        )
+        if not matched:
+            return ""
+        names = ", ".join(f"{r.name} ({r.severity})" for r in matched)
+        details = "\n".join(
+            f"  • {r.name}: {r.description or (r.body.splitlines()[0] if r.body else r.scope)}"
+            for r in matched
+        )
+        return (
+            f"[Forge] BLOCKED write to {Path(file_path).name} by enforcing rule(s): {names}.\n"
+            f"{details}\n"
+            "This path is governed by an enforcing rule. Change the target, or relax the "
+            "rule in .forge/rules/ to advisory (remove `enforce: true`)."
+        )
+    except Exception:  # noqa: BLE001 — enforcement must fail-soft, never wrongly block on a bug
+        return ""
+
+
 def _glob_rules_message(cwd: Path, file_path: str) -> str:
     """Render user `glob` rules matching the written file (REQ-RULES-010).
 
@@ -187,6 +218,13 @@ def main() -> None:
     file_path = tool_input.get("file_path", "")
     cwd = Path(payload.get("cwd", os.getcwd()))
     session_id = payload.get("session_id", "")
+
+    # (0) Enforcing rules — a matching enforcing `glob` rule BLOCKS the write (exit 2).
+    # pre-tool-write is a registered blocking hook, so this exit propagates (T-100).
+    denial = _enforcing_block_message(cwd, file_path)
+    if denial:
+        print(denial, file=sys.stderr)
+        sys.exit(2)
 
     blocks: list[str] = []
     # (1) User glob rules — any file type, independent of stage/design-system.

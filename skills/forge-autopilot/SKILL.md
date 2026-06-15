@@ -23,6 +23,7 @@ in-session (a script can't drive the Agent tool — ADR-006).
 
 - `/forge:autopilot` (optionally `to stage N`, `the next K stages`, or `until a gate`).
 - The user wants several stages run without issuing each `/forge:*` command by hand.
+- `/forge:autopilot --unattended` for a fully hands-free run (no checkpoints; see below).
 
 ## When NOT to Use
 
@@ -31,14 +32,36 @@ in-session (a script can't drive the Agent tool — ADR-006).
 
 ## Safety rails (always)
 
-- **Stop-on-gate.** On any blocking gate failure, autopilot STOPS and surfaces the
-  blockers. It **never** force-advances unless `.forge/config.yaml` →
-  `autopilot.allow_force: true` **and** the user supplied a reason.
+- **Bounded self-heal, then stop-on-gate.** On a blocking gate failure, autopilot makes a
+  bounded number of fix attempts via `/forge:resolve` (`autopilot.max_heal_attempts`,
+  default **1**; `0` restores classic stop-on-gate), re-checking the gate after each. When
+  heal is exhausted (or disabled) and blockers remain it STOPS and surfaces them. It
+  **never** force-advances unless `.forge/config.yaml` → `autopilot.allow_force: true`
+  **and** the user supplied a reason.
 - **Bounded.** It runs only the planned stages (target + `autopilot.max_stages` /
   `stop_before` caps); it never loops unbounded.
 - **Interruptible.** `/forge:autopilot-stop` halts it before the next stage.
 - **Background mode** (`--mode background`) is cost-capped + capability-gated and a clean
   no-op when background agents are unavailable or `FORGE_NO_BACKGROUND=1`.
+
+## Unattended mode (`--unattended`, REQ-AUTO-004/005)
+
+`/forge:autopilot --unattended` runs with **no per-stage checkpoints** (it ignores
+`checkpoint: every`) for a hands-free run. It stays inside the **full safety envelope** —
+the per-dispatch `max_budget_usd`, the `_cost_cap` ledger, `max_heal_attempts`,
+`max_stages`/`stop_before`, the `FORGE_NO_BACKGROUND` kill switch, and the
+`/forge:autopilot-stop` flag. Hitting **any** bound STOPS cleanly, leaving a resumable
+run-log (`/forge:autopilot --resume`).
+
+For interactive stages (SRS/spec/plan CLARIFY/CONFIRM), an unattended run does **not**
+silently guess:
+- It first loads pre-supplied answers — `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py
+  answers --cwd .` reads `.forge/autopilot-answers.{json,yaml}` (keyed by stage) — and uses
+  the matching answer.
+- Absent an answer, it adopts a **reasonable default and records it as an explicit
+  assumption** in the run-log: `autopilot.py record --cwd . --stage {stage} --status
+  assumption --note "{what was assumed and why}"`. Assumptions never mark a stage complete,
+  so they surface in the final summary for the user to review.
 
 ## Steps
 
@@ -51,7 +74,8 @@ in-session (a script can't drive the Agent tool — ADR-006).
    the ordered plan:
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py --cwd . --json \
-     [--to N | --stages K | --until-gate] [--mode in-session|background] [--resume]
+     [--to N | --stages K | --until-gate] [--mode in-session|background] [--resume] \
+     [--unattended]
    ```
    Each plan item is `{stage, skill, label}`. If the plan is empty, tell the user there's
    nothing to run (already at target, or no pipeline) and stop.
@@ -67,24 +91,64 @@ in-session (a script can't drive the Agent tool — ADR-006).
       reuse the returned session across stages for cost:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py dispatch --cwd . \
-        --stage {stage} --skill {skill} --label "{label}" [--session {prev_session_id}]
+        --stage {stage} --skill {skill} --label "{label}" \
+        [--session {prev_session_id}] [--dispatch-count {n}]
       ```
       A `status: unavailable` result means background agents are off — fall back to
-      in-session or stop. Carry the returned `session_id` into the next dispatch.
+      in-session or stop. Carry the returned `session_id` into the next dispatch, and
+      pass `--dispatch-count` (dispatches so far on this session) so a long run rotates
+      to a fresh session per `autopilot.session_max_dispatches`, bounding context growth.
+      Per-stage model routing (`autopilot.models`) and the per-dispatch `$` ceiling
+      (`autopilot.max_budget_usd`) are applied automatically from `.forge/config.yaml`.
    d. **Check the gate**:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage {stage} --cwd . \
         --plugin-dir ${CLAUDE_PLUGIN_ROOT}
       ```
-      Parse the JSON `details[]`. If any `severity: blocker` is not `passed` → **STOP**:
-      surface the blockers and tell the user to fix and re-run `/forge:autopilot --resume`,
-      or override with `/forge:force-advance --reason "…"`. Do **not** advance.
-   e. **Advance** on a clean gate:
+      Parse the JSON `details[]`. If any `severity: blocker` is not `passed`, **self-heal**
+      before giving up (see step e); only STOP when heal is exhausted or disabled.
+   e. **Self-heal a blocked gate** (REQ-AUTO-001/002). Track `attempts_used` per stage,
+      starting at 0. While the gate has blockers **and**
+      `autopilot.py` `should_heal` allows another attempt — i.e. `attempts_used <
+      autopilot.max_heal_attempts` (default **1**; `0` = classic stop-on-gate) — run one
+      bounded fix through the Stage-11 resolver, then re-check the gate:
+      - In `--mode in-session` (default): run `/forge:resolve` against this stage's
+        blockers (pass the failing `details[]` so the resolver knows what to fix).
+      - In `--mode background`: dispatch it headlessly (cost/budget/capability gated,
+        session reused):
+        ```bash
+        python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py heal --cwd . \
+          --stage {stage} --skill /forge:resolve --label "{label}" \
+          --blockers "{failing criteria}" [--session {sid}] [--dispatch-count {n}]
+        ```
+      After each heal, re-run `check-gate.py` (step d) and increment `attempts_used`. On a
+      now-clean gate → advance (step f). When `should_heal` returns false (cap reached or
+      `max_heal_attempts: 0`) and blockers remain → **STOP**: surface the remaining
+      blockers and tell the user to fix and re-run `/forge:autopilot --resume`, or override
+      with `/forge:force-advance --reason "…"`. Autopilot **never** force-advances on its
+      own (only `allow_force: true` + a reason does).
+   f. **Self-verify** (optional; only when `autopilot.verify: true` — REQ-AUTO-003). After
+      the gate is clean, run an **independent, fresh-context** verifier that checks the
+      artifact against the stage's intent beyond the mechanical gate:
+      - In `--mode in-session` (default): spawn a verifier subagent via the `Task` tool
+        (fresh context — do not hand it this loop's history) asking for a `pass`/`fail`
+        verdict with reasons on whether {skill}'s artifact genuinely satisfies stage
+        {stage}'s intent.
+      - In `--mode background`: dispatch a schema-constrained verdict headlessly:
+        ```bash
+        python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py verify --cwd . \
+          --stage {stage} --skill {skill} --label "{label}"
+        ```
+      A `fail` verdict is treated **exactly like a gate blocker**: route back into the
+      self-heal loop (step e), and STOP if heal is exhausted. A broken, empty, or
+      `unavailable` verifier does **not** block (it's an extra check on an already-passing
+      gate) — log it and advance.
+   g. **Advance** on a clean gate:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --cwd .
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py record --cwd . --stage {stage} --status done
       ```
-   f. **Checkpoint policy** (`autopilot.checkpoint`): `gate` (default) — continue unless a
+   h. **Checkpoint policy** (`autopilot.checkpoint`): `gate` (default) — continue unless a
       gate blocks; `every` — pause for the user's OK between stages; `never` — run straight
       through.
 

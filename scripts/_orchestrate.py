@@ -93,11 +93,17 @@ def fan_out(
     dispatch_fn=None,
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
+    output_schema: Optional[dict] = None,
 ) -> FanOutResult:
     """Fan `work_items` out across bounded parallel dispatches; return index-ordered,
     validated, deduplicated results. Never raises."""
     dispatch_fn = dispatch_fn or _background_agent.dispatch
     kwargs = {"forge_dir": forge_dir, "feature": feature, "claude_bin": claude_bin, "cwd": cwd}
+    if output_schema is not None:
+        # Structured outputs (REQ-HARNESS-001): the dispatch constrains the agent's
+        # result to this JSON Schema (CLI `--json-schema`). Only threaded when set, so
+        # custom dispatch_fns that don't accept it are unaffected.
+        kwargs["output_schema"] = output_schema
 
     dropped_reasons: list[str] = []
     dispatched = list(work_items[:max_total])

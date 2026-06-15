@@ -5,14 +5,22 @@
 
 ## Current State
 
-- **v0.3 program COMPLETE + RELEASED** — "Hands-off Forge — autonomy + governance":
-  user-authored **Rules** (v0.3.0) + **Autopilot** cross-stage execution (v0.3.1),
-  T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin + polygon;
-  GitHub releases published; main `ebb94ef`, manifests 0.3.1. SRS
-  `build/01-srs/srs-v0.3.md`, DAG `build/04-plan/task-dag-v0.3.md`. 1295 unit tests,
-  validate 0, full-pipeline 12/12.
-- **NEXT**: post-release docs/banner/social-preview refresh (per release routine); then
-  v0.2 M4 sprint (T-153–156) remains the open backlog item.
+- **v0.3.3 (complete autonomy + modernized harness) BUILT on `feat/v0.3.2-autonomy`** —
+  the **modernized harness** (structured outputs `--json-schema`, per-dispatch
+  `--max-budget-usd`, per-stage model routing, session rotation; T-167..T-170, originally
+  scoped as v0.3.2) **folds into this release** (no separate v0.3.2 tag), plus **complete
+  local autonomy**: self-heal loop (T-172), independent verifier subagents (T-173),
+  `--unattended` mode (T-174), enforcing rules guardrail (T-175). SRS
+  `build/01-srs/srs-v0.3.2.md`, DAG `build/04-plan/task-dag-v0.3.2.md`. Manifests 0.3.3;
+  CHANGELOG `[0.3.3]`. 1350 unit tests, validate 0. **Pre-release verification + ship
+  (PR develop→main→tag v0.3.3→mirror) in progress (T-176).**
+- **v0.3 program (v0.3.0 + v0.3.1) COMPLETE + RELEASED** — "Hands-off Forge — autonomy +
+  governance": user-authored **Rules** (v0.3.0) + **Autopilot** cross-stage execution
+  (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
+  polygon; GitHub releases published; main `ebb94ef`, manifests 0.3.1. SRS
+  `build/01-srs/srs-v0.3.md`, DAG `build/04-plan/task-dag-v0.3.md`.
+- **NEXT**: finish shipping v0.3.3; then **v0.3.4** (v0.2 M4 sprint — `/forge:sprint`,
+  `~/.forge` sync + opt-in telemetry, Windows-timeout spike; T-153..T-155).
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
   you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
   (sprint M4, T-153–156, deferred).
@@ -56,6 +64,32 @@
 - **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.3.2 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.3.2.md` (T-167..T-176). M1 Harness (v0.3.2,
+> T-167..T-171); M2 Autonomy (v0.3.3, T-172..T-176, planned). SRS
+> `build/01-srs/srs-v0.3.2.md`.
+
+### M1 — Modernized harness (v0.3.2) — branch `feat/v0.3.2-autonomy`
+
+| Task | Status | Notes |
+|------|--------|-------|
+| T-167 | 🟢 done | Structured outputs — `dispatch(output_schema)` → `claude -p --json-schema` (CLI 2.1.177+); `_orchestrate.fan_out` threads it; parse/retry/drop fallback. +4 tests |
+| T-168 | 🟢 done | Per-dispatch `--max-budget-usd` ceiling (config `autopilot.max_budget_usd`) atop `_cost_cap`. +4 tests |
+| T-169 | 🟢 done | Per-stage model routing — `autopilot.models` (numeric or command-word key); `model_for_stage()`. +5 tests |
+| T-170 | 🟢 done | Long-run session rotation — `autopilot.session_max_dispatches` + `should_rotate_session()`; CLI auto-compacts within a session, this bounds reuse across dispatches. +5 tests |
+| T-171 | 🟡 staged | Release v0.3.2 — bump 0.3.2, CHANGELOG `[0.3.2]`, README config note, ROADMAP/progress. Pre-release green. **Push/PR/tag/mirror pending user OK.** |
+
+### M2 — Complete autonomy (v0.3.3) — planned
+
+| Task | Status | Notes |
+|------|--------|-------|
+| T-172 | 🔲 todo | Self-heal loop (blocker → bounded `/forge:resolve` → re-gate) |
+| T-173 | 🔲 todo | Verifier subagents (independent fresh-context verification) |
+| T-174 | 🔲 todo | `--unattended` mode (no checkpoints; answers/assumptions; bounded) |
+| T-175 | 🔲 todo | Enforcing rules guardrail (`enforce: true` → block on write) |
+| T-176 | 🔲 todo | Release v0.3.3 |
 
 ## v0.3 Task Status
 
