@@ -1,4 +1,8 @@
-# SRS — Forge v0.3.2 + v0.3.3 (complete autonomy + modernized harness)
+# SRS — Forge v0.3.3 (complete autonomy + modernized harness)
+
+> **Note (2026-06-15):** Phase 1 (harness) was originally scoped to tag separately as
+> v0.3.2 but **folded into the v0.3.3 release**; both phases below shipped under `v0.3.3`.
+> (Renamed from `srs-v0.3.2.md`.)
 
 > **Status**: **Draft — ready for build** (2026-06-15). Continues the v0.3 program
 > (`srs-v0.3.md`: Rules v0.3.0 + Autopilot v0.3.1). Two phased sub-releases:
