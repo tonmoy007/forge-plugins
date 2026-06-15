@@ -1,6 +1,9 @@
-# Task DAG — Forge v0.3.2 + v0.3.3 (autonomy + modernized harness)
+# Task DAG — Forge v0.3.3 (autonomy + modernized harness)
 
-> **Status**: **Ready to build** (2026-06-15). Derived from `build/01-srs/srs-v0.3.2.md`.
+> **Note (2026-06-15):** the harness milestone (M1) was originally scoped to tag as v0.3.2
+> but **folded into the v0.3.3 release**. (Renamed from `task-dag-v0.3.2.md`.)
+
+> **Status**: **Ready to build** (2026-06-15). Derived from `build/01-srs/srs-v0.3.3.md`.
 > Numbering continues from v0.3.1 (T-157..T-166); this is **T-167..T-176**.
 >
 > Format: `T-NNN [size] title` — Size: S (~30min), M (~2hr), L (~half-day).
