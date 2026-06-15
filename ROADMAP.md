@@ -157,8 +157,8 @@ producing all 12 stage artifacts with traceability intact. ✅
 | sprint | ⚪ planned | Sprint plan/review over the DAG (M4, closes EF-011) + `~/.forge` sync, telemetry, Windows spike. T-153–T-156. |
 | **v0.3.0** | 🟢 released | **Rules (governance)** — user-authored `.forge/rules/*.md` that steer agents (scopes: always / stage / glob / manual); `/forge:rules` (init/add/list/validate); session-start + pre-tool-write injection. Advisory, fail-soft, no-op when absent. Tag `v0.3.0`, both remotes. T-157–T-161. |
 | **v0.3.1** | 🟢 released | **Autopilot (autonomy)** — cross-stage hands-off execution (bounded, stop-on-gate), dual in-session/background substrate (`--mode`), `/forge:autopilot` + `/forge:autopilot-stop`, resume. Tag `v0.3.1`, both remotes. T-162–T-166. |
-| **v0.3.2** | 🟡 staged | **Modernized harness** — structured outputs (`--json-schema`), per-dispatch `--max-budget-usd`, per-stage model routing (`autopilot.models`), long-run session rotation. Each verified against the live CLI, degrades gracefully. T-167–T-171. |
-| v0.3.3 | ⚪ planned | **Complete autonomy** — self-heal loop (blocker → `/forge:resolve` → re-gate), verifier subagents, `--unattended` mode, enforcing rules guardrail. T-172–T-176. |
+| ~~v0.3.2~~ | ⚪ folded | **Modernized harness** (structured outputs, per-dispatch budget, model routing, session rotation) — built as T-167–T-170 but **folded into the v0.3.3 release** rather than tagged separately. |
+| **v0.3.3** | 🟢 released | **Complete (local) autonomy + modernized harness** — self-heal loop (blocker → `/forge:resolve` → re-gate), independent verifier subagents, `--unattended` mode, and enforcing rules guardrail, on a harness rebuilt onto current Claude Code primitives (`--json-schema`, `--max-budget-usd`, per-stage `autopilot.models`, session rotation). Each verified against the live CLI, degrades gracefully. Tag `v0.3.3`, both remotes. T-167–T-176. |
 
 ---
 

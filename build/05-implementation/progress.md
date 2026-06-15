@@ -5,20 +5,22 @@
 
 ## Current State
 
-- **v0.3.2 (modernized harness) STAGED on `feat/v0.3.2-autonomy`** — structured outputs
-  (`--json-schema`), per-dispatch `--max-budget-usd`, per-stage model routing, long-run
-  session rotation (T-167..T-170). SRS `build/01-srs/srs-v0.3.2.md`, DAG
-  `build/04-plan/task-dag-v0.3.2.md`. Manifests bumped 0.3.2; pre-release green.
-  **Push/PR/tag/mirror pending user OK.**
-- **v0.3 program COMPLETE + RELEASED** — "Hands-off Forge — autonomy + governance":
-  user-authored **Rules** (v0.3.0) + **Autopilot** cross-stage execution (v0.3.1),
-  T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin + polygon;
-  GitHub releases published; main `ebb94ef`, manifests 0.3.1. SRS
-  `build/01-srs/srs-v0.3.md`, DAG `build/04-plan/task-dag-v0.3.md`. 1295 unit tests,
-  validate 0, full-pipeline 12/12.
-- **NEXT**: ship v0.3.2; then **v0.3.3** (complete autonomy — self-heal, verifier
-  subagents, `--unattended`, enforcing rules; T-172..T-176). v0.2 M4 sprint
-  (T-153–156) remains the open backlog item.
+- **v0.3.3 (complete autonomy + modernized harness) BUILT on `feat/v0.3.2-autonomy`** —
+  the **modernized harness** (structured outputs `--json-schema`, per-dispatch
+  `--max-budget-usd`, per-stage model routing, session rotation; T-167..T-170, originally
+  scoped as v0.3.2) **folds into this release** (no separate v0.3.2 tag), plus **complete
+  local autonomy**: self-heal loop (T-172), independent verifier subagents (T-173),
+  `--unattended` mode (T-174), enforcing rules guardrail (T-175). SRS
+  `build/01-srs/srs-v0.3.2.md`, DAG `build/04-plan/task-dag-v0.3.2.md`. Manifests 0.3.3;
+  CHANGELOG `[0.3.3]`. 1350 unit tests, validate 0. **Pre-release verification + ship
+  (PR develop→main→tag v0.3.3→mirror) in progress (T-176).**
+- **v0.3 program (v0.3.0 + v0.3.1) COMPLETE + RELEASED** — "Hands-off Forge — autonomy +
+  governance": user-authored **Rules** (v0.3.0) + **Autopilot** cross-stage execution
+  (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
+  polygon; GitHub releases published; main `ebb94ef`, manifests 0.3.1. SRS
+  `build/01-srs/srs-v0.3.md`, DAG `build/04-plan/task-dag-v0.3.md`.
+- **NEXT**: finish shipping v0.3.3; then **v0.3.4** (v0.2 M4 sprint — `/forge:sprint`,
+  `~/.forge` sync + opt-in telemetry, Windows-timeout spike; T-153..T-155).
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
   you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
   (sprint M4, T-153–156, deferred).

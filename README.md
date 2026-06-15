@@ -244,30 +244,45 @@ when `.forge/rules/` is absent. Full schema: `references/rules-format.md`.
 ## Autopilot
 
 Hand Forge the wheel. `/forge:autopilot` runs pipeline stages back-to-back — for each
-stage it runs the stage's agent, checks the gate, and **advances only on a pass**,
-**stopping at the first blocker** (it never forces past a gate).
+stage it runs the stage's agent, checks the gate, and **advances only on a pass**. On a
+blocking gate it now **self-heals** (a bounded `/forge:resolve` fix, then re-checks)
+before stopping — and never forces past a gate.
 
 ```bash
 /forge:autopilot                 # run from the current stage to the end of the cycle
 /forge:autopilot to stage 7      # run through a target stage
 /forge:autopilot the next 3      # run a bounded number of stages
-/forge:autopilot --resume        # continue after fixing a blocker (skips done stages)
+/forge:autopilot --unattended    # fully hands-free (no checkpoints; assumptions logged)
+/forge:autopilot --resume        # continue after a stop (skips done stages)
 /forge:autopilot-stop            # halt cleanly at the next stage boundary
 ```
 
-**Safety rails:** stop-on-gate by default (never forces unless you opt in via
-`autopilot.allow_force` + a reason), bounded by `autopilot.max_stages` / `stop_before`,
-and interruptible with `/forge:autopilot-stop`. Two substrates via `--mode`: **in-session**
-(default — reuses the stage agents, no extra spend) or **background** (`claude -p` per
-stage, cost-capped + capability-gated; a clean no-op when background agents are off or
-`FORGE_NO_BACKGROUND=1`).
+**Complete (local) autonomy (v0.3.3):**
+- **Self-heal** — a blocking gate triggers a bounded fix via `/forge:resolve`
+  (`autopilot.max_heal_attempts`, default 1; `0` = classic stop-on-gate), then a re-gate.
+- **Self-verify** — with `autopilot.verify: true`, a passing gate is double-checked by an
+  independent fresh-context verifier; a fail routes back into the heal loop.
+- **`--unattended`** — no per-stage checkpoints; interactive stages use
+  `.forge/autopilot-answers.{json,yaml}` or record **explicit assumptions** (never a silent
+  guess). Bounded by the full safety envelope; any bound STOPS cleanly and resumably.
+- **Enforcing rules** — a `.forge/rules/*.md` glob rule with `enforce: true` hard-blocks
+  writes to matching paths (e.g. lockfiles, secrets) — the guardrail that makes hands-off
+  runs safe. See [Project Rules](#project-rules).
+
+**Safety rails:** never forces a gate unless you opt in (`autopilot.allow_force` + a
+reason); bounded by `max_stages` / `stop_before`, `max_heal_attempts`, `max_budget_usd`,
+and the `_cost_cap` ledger; interruptible with `/forge:autopilot-stop` and the
+`FORGE_NO_BACKGROUND=1` kill switch. Two substrates via `--mode`: **in-session** (default —
+reuses the stage agents, no extra spend) or **background** (`claude -p` per stage,
+cost-capped + capability-gated; a clean no-op when background agents are off).
 
 It generalizes `/forge:force-advance` (one gated advance) and `/forge:build --milestone`
 (a within-stage batch) to a cross-stage loop. Configure under `autopilot:` in
 `.forge/config.yaml` — including `models` (per-stage model routing — a capable model for
-hard stages, a cheap one for checks), `max_budget_usd` (per-dispatch spend ceiling), and
-`session_max_dispatches` (rotate a long reused session to bound context). Background
-stages also request schema-constrained output via the CLI's `--json-schema`.
+hard stages, a cheap one for checks), `max_budget_usd` (per-dispatch spend ceiling),
+`session_max_dispatches` (rotate a long reused session to bound context),
+`max_heal_attempts`, and `verify`. Background stages also request schema-constrained
+output via the CLI's `--json-schema`.
 
 ---
 
