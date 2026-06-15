@@ -134,6 +134,8 @@ Forge tells you at every session start.
 | `/forge:rules` | Author project rules that steer agents (`init`/`add`/`list`/`validate`) — advisory, scope-based |
 | `/forge:review` | Fan four reviewers (correctness/security/performance/conventions) over a diff and synthesize one report |
 | `/forge:adopt` | Brownfield onboarding — detect type, infer SRS + architecture drafts, seed pipeline state |
+| `/forge:autopilot` | Run pipeline stages hands-off (bounded, stop-on-gate); `--resume`, `--mode in-session\|background` |
+| `/forge:autopilot-stop` | Halt a running autopilot cleanly at the next stage boundary |
 
 ### Background Daemons
 
@@ -236,6 +238,33 @@ Prefer composition over inheritance; use design tokens, not raw values.
 
 Rules share the session-start token budget with lessons and degrade to a clean no-op
 when `.forge/rules/` is absent. Full schema: `references/rules-format.md`.
+
+---
+
+## Autopilot
+
+Hand Forge the wheel. `/forge:autopilot` runs pipeline stages back-to-back — for each
+stage it runs the stage's agent, checks the gate, and **advances only on a pass**,
+**stopping at the first blocker** (it never forces past a gate).
+
+```bash
+/forge:autopilot                 # run from the current stage to the end of the cycle
+/forge:autopilot to stage 7      # run through a target stage
+/forge:autopilot the next 3      # run a bounded number of stages
+/forge:autopilot --resume        # continue after fixing a blocker (skips done stages)
+/forge:autopilot-stop            # halt cleanly at the next stage boundary
+```
+
+**Safety rails:** stop-on-gate by default (never forces unless you opt in via
+`autopilot.allow_force` + a reason), bounded by `autopilot.max_stages` / `stop_before`,
+and interruptible with `/forge:autopilot-stop`. Two substrates via `--mode`: **in-session**
+(default — reuses the stage agents, no extra spend) or **background** (`claude -p` per
+stage, cost-capped + capability-gated; a clean no-op when background agents are off or
+`FORGE_NO_BACKGROUND=1`).
+
+It generalizes `/forge:force-advance` (one gated advance) and `/forge:build --milestone`
+(a within-stage batch) to a cross-stage loop. Configure under `autopilot:` in
+`.forge/config.yaml`.
 
 ---
 

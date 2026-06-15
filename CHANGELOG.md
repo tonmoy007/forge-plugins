@@ -14,6 +14,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] — 2026-06-15
+
+**Autopilot (v0.3 Milestone 2 — autonomy).** Hand Forge the wheel: `/forge:autopilot`
+runs pipeline stages back-to-back — per stage it runs the agent, checks the gate, and
+**advances only on a pass, stopping at the first blocker** (it never forces past a gate).
+Bounded, interruptible, and a clean no-op outside a pipeline. Generalizes
+`/forge:force-advance` (one gated advance) and `/forge:build --milestone` (within-stage).
+
+### Added
+- **Autopilot planner** (`scripts/autopilot.py`, T-162, REQ-AP-001..003): deterministic,
+  no-LLM stage-plan generator from the canonical stage table + state. Targets
+  `--to N` / `--stages K` / `--until-gate`; clamps to cycle entry/exit, stage bounds, and
+  config `autopilot.stop_before` / `max_stages`. `--resume` skips stages already recorded
+  in `.forge/autopilot-runs.jsonl`; `--dry-run`/`--json`. Never raises (malformed state →
+  empty plan).
+- **`/forge:autopilot` skill** (`skills/forge-autopilot/`, T-163, REQ-AP-004/005/008/009):
+  walks the plan in-session — run stage agent → `check-gate.py` → advance on a clean gate
+  via `state-manager.py`, or **STOP** on a blocker (never forces unless
+  `autopilot.allow_force` + a reason). Narrates each step and records a run-log row.
+- **Background substrate** (`run_stage(mode="background")` + `autopilot.py dispatch`,
+  T-164, REQ-AP-006): per-stage `claude -p` dispatch via the single `_background_agent`
+  wrapper — cost-gated, capability-gated, session-reused; a clean `unavailable` no-op
+  under `FORGE_NO_BACKGROUND=1` or when no background capability is present.
+- **`/forge:autopilot-stop` + session model** (`skills/forge-autopilot-stop/`, T-165,
+  REQ-AP-007): cooperative cancel via `.forge/autopilot-session.json` — `start` is
+  idempotent (warns if already running), `stop` sets a flag the loop honors between
+  stages (current stage finishes; nothing forced), `finish` idles and clears the flag.
+
+### Changed
+- `.forge/config.yaml` gains an optional `autopilot:` block (`max_stages`, `stop_before`,
+  `checkpoint`, `allow_force`, `model`), read fail-soft like `cost_cap`.
+
+### Fixed
+
+---
+
 ## [0.3.0] — 2026-06-15
 
 **Project Rules (v0.3 Milestone 1 — governance).** A user-authored constraints surface

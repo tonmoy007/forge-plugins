@@ -76,7 +76,7 @@
 | T-163 | 🟢 done | `/forge:autopilot` skill (`name: forge-autopilot`) — in-session loop: plan → per-stage run agent → check-gate → advance on pass / STOP on blocker (never force unless `allow_force`+reason); narrates + records run-log; checkpoint policy; honors always-rules. `autopilot.py record` subcommand (run-log via `_error_log.append_jsonl`). +3 record tests +4 structural. validate 0 |
 | T-164 | 🟢 done | `--mode background` substrate — `run_stage` dispatches one stage via `_background_agent.dispatch` (cost+capability gated, session reuse), clean `unavailable` no-op under kill switch / no capability; never raises. `autopilot.py dispatch` subcommand + config `autopilot.model`. Skill documents the background path. +6 tests |
 | T-165 | 🟢 done | `/forge:autopilot-stop` skill + session model in `autopilot.py` (`.forge/autopilot-session.json`): start (idempotent — warns already_running), stop (cooperative stop_requested flag checked between stages), status, finish (idle + clears flag). Skill starts/finishes the session; loop honors the flag. +7 tests |
-| T-166 | 🔲 todo | release v0.3.1 |
+| T-166 | 🟡 staged | Release v0.3.1 prep — `bump-version.py 0.3.1` (manifests + CHANGELOG `[0.3.1]`), README "Autopilot" section + command rows, ROADMAP. Pre-release green. **Branching note:** T-162–166 landed on `feat/v0.3.0-rules` (PR #19), so #19 now spans both phases — shipping split (two tags) vs combined pending user decision. |
 
 ## v0.2 Task Status
 
