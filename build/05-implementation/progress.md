@@ -65,7 +65,7 @@
 | T-157 | 🟢 done | 2026-06-15 | (this commit) | `scripts/rules.py` — `.forge/rules/*.md` loader: frontmatter (stdlib split + fail-soft PyYAML, no `frontmatter` dep), scope model always/stage/glob/manual, `select()` + budget-bounded `render()`, fnmatch globs with `**` handling, CLI list/validate (argparse SUPPRESS). Never-raises. +14 tests |
 | T-158 | 🟢 done | 2026-06-15 | (this commit) | `/forge:rules` skill (`name: forge-rules`) — init (idempotent scaffold) / add (no-clobber) / list / validate; `rules.py` gained those CLI subcommands. `references/rules-format.md` documents the schema + 4 scopes. +7 tests (init/add CLI + structural). validate-plugin 0 |
 | T-159 | 🟢 done | 2026-06-15 | (this commit) | `hooks/session-start.py` injects `always` + current-`stage` rules (`_rules_block`, render cap 500 chars) after lessons; budget path trims lessons then drops rules last-resort to hold ≤2000 tokens. Never-raises. +6 tests (always/stage/off-stage/no-dir/glob-excluded/budget) |
-| T-160 | 🔲 todo | | | pre-tool-write glob injection (advisory, never block) |
+| T-160 | 🟢 done | 2026-06-15 | (this commit) | `hooks/pre-tool-write.py` refactored into `_glob_rules_message` (any file type) + `_design_violations_message` (UI, existing); glob rules surface as advisory `additionalContext`, never block (exit 0). Design-system path behavior preserved. +5 tests. Full suite 1257 pass |
 | T-161 | 🔲 todo | | | release v0.3.0 |
 
 ### M2 — Autopilot / autonomy (v0.3.1) — branch (later)
