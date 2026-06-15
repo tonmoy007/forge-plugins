@@ -23,7 +23,7 @@ import datetime as dt
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -52,6 +52,7 @@ class AutopilotConfig:
     allow_force: bool = False
     model: Optional[str] = None  # background-mode model override (else inherits default)
     max_budget_usd: Optional[float] = None  # per-dispatch hard $ ceiling (REQ-HARNESS-002)
+    models: dict = field(default_factory=dict)  # per-stage model routing (REQ-HARNESS-003)
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -101,7 +102,38 @@ def load_config(forge_dir) -> AutopilotConfig:
             cfg.max_budget_usd = float(budget)
         except (TypeError, ValueError):
             pass
+    models = section.get("models")
+    if isinstance(models, dict):
+        cfg.models = models
     return cfg
+
+
+def model_for_stage(config: AutopilotConfig, stage: int, plugin_root=None) -> Optional[str]:
+    """Resolve the model for a stage (REQ-HARNESS-003): per-stage `models` mapping first
+    (numeric key or the stage's command word, e.g. `build` from `/forge:build`), then the
+    single `model` override, else None (host default). Never raises.
+    """
+    models = config.models if isinstance(config.models, dict) else {}
+
+    def _clean(v):
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    for key in (stage, str(stage)):
+        if key in models:
+            m = _clean(models[key])
+            if m:
+                return m
+    try:
+        entry = _stage_table.stage(stage, plugin_root) or {}
+        skill = entry.get("skill") or ""
+        word = skill.split(":")[-1] if ":" in skill else ""
+        if word and word in models:
+            m = _clean(models[word])
+            if m:
+                return m
+    except Exception:  # noqa: BLE001 — routing must never crash a dispatch
+        pass
+    return config.model
 
 
 # --------------------------------------------------------------------------- #
@@ -423,8 +455,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             print("error: dispatch requires --stage N", file=sys.stderr)
             return 2
         cfg = load_config(Path(args.cwd) / ".forge")
+        model = args.model or model_for_stage(cfg, args.stage)
         result = run_stage(args.cwd, args.stage, args.skill, args.label,
-                           mode="background", session_id=args.session, model=args.model,
+                           mode="background", session_id=args.session, model=model,
                            max_budget_usd=cfg.max_budget_usd)
         print(json.dumps(result))
         return 0

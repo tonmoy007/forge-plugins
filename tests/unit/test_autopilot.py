@@ -292,6 +292,39 @@ def test_run_stage_background_passes_max_budget(tmp_path, monkeypatch):
     assert calls[0]["max_budget_usd"] == 0.25
 
 
+# --- per-stage model routing (T-169, REQ-HARNESS-003) ----------------------
+
+def test_load_config_reads_models(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text(
+        "autopilot:\n  models:\n    6: claude-opus-4-8\n    eval: claude-haiku-4-5\n"
+    )
+    cfg = _ap.load_config(forge)
+    assert isinstance(cfg.models, dict) and cfg.models
+
+
+def test_model_for_stage_numeric_key():
+    cfg = _ap.AutopilotConfig(models={6: "claude-opus-4-8", 7: "claude-haiku-4-5"})
+    assert _ap.model_for_stage(cfg, 6) == "claude-opus-4-8"
+    assert _ap.model_for_stage(cfg, 7) == "claude-haiku-4-5"
+
+
+def test_model_for_stage_command_word_key():
+    # stage 6's skill is /forge:build → keyable as "build"
+    cfg = _ap.AutopilotConfig(models={"build": "claude-opus-4-8"})
+    assert _ap.model_for_stage(cfg, 6) == "claude-opus-4-8"
+
+
+def test_model_for_stage_falls_back_to_single_model():
+    cfg = _ap.AutopilotConfig(model="claude-haiku-4-5")  # no per-stage map
+    assert _ap.model_for_stage(cfg, 6) == "claude-haiku-4-5"
+
+
+def test_model_for_stage_none_when_unset():
+    assert _ap.model_for_stage(_ap.AutopilotConfig(), 6) is None
+
+
 # --- session / cancel (REQ-AP-007) -----------------------------------------
 
 def test_start_session_idempotent(tmp_path):
