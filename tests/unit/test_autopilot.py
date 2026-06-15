@@ -536,3 +536,81 @@ def test_cli_heal_unavailable_killswitch(tmp_path):
     )
     assert r.returncode == 0
     assert json.loads(r.stdout)["status"] == "unavailable"
+
+
+# --- self-verification (T-173, REQ-AUTO-003) -------------------------------
+
+def test_verify_disabled_by_default():
+    assert _ap.AutopilotConfig().verify is False
+
+
+def test_load_config_reads_verify(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("autopilot:\n  verify: true\n")
+    assert _ap.load_config(forge).verify is True
+
+
+def test_run_verify_in_session_marker(tmp_path):
+    out = _ap.run_verify(tmp_path, 6, "/forge:build", "Build")
+    assert out["status"] == "in-session"
+    assert out["stage"] == 6
+
+
+def test_run_verify_background_fresh_context_and_schema(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+    calls = []
+
+    class _Res:
+        status = "ok"
+        session_id = "V1"
+        cost_usd = 0.003
+        reason = ""
+        result = '{"verdict": "pass"}'
+
+    def fake_dispatch(prompt, **kw):
+        calls.append((prompt, kw))
+        return _Res()
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch", fake_dispatch)
+    out = _ap.run_verify(tmp_path, 6, "/forge:build", "Build", mode="background")
+    prompt, kw = calls[0]
+    assert kw["feature"] == "autopilot-verify"
+    assert kw["resume"] is None                       # fresh context — never reuse the stage session
+    assert kw["output_schema"] == _ap.VERIFY_SCHEMA   # structured verdict
+    assert "independent" in prompt.lower()
+    assert out["result"] == '{"verdict": "pass"}'
+
+
+def test_verdict_failed_true_on_fail():
+    assert _ap.verdict_failed({"result": '{"verdict": "fail", "reasons": ["x"]}'}) is True
+
+
+def test_verdict_failed_false_on_pass():
+    assert _ap.verdict_failed({"result": '{"verdict": "pass"}'}) is False
+
+
+def test_verdict_failed_degrades_on_garbage():
+    # A broken/empty/unavailable verifier must NOT block an already-passing gate.
+    assert _ap.verdict_failed({"result": "not json"}) is False
+    assert _ap.verdict_failed({"status": "unavailable"}) is False
+    assert _ap.verdict_failed({}) is False
+
+
+def test_cli_verify_requires_stage(tmp_path):
+    r = subprocess.run([PYTHON, str(_mod_path), "verify", "--cwd", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert r.returncode == 2
+
+
+def test_cli_verify_unavailable_killswitch(tmp_path):
+    _make_state(tmp_path, 6)
+    env = {**os.environ, "FORGE_NO_BACKGROUND": "1"}
+    r = subprocess.run(
+        [PYTHON, str(_mod_path), "verify", "--cwd", str(tmp_path),
+         "--stage", "6", "--skill", "/forge:build"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["status"] == "unavailable"

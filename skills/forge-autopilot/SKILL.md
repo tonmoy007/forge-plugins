@@ -106,12 +106,28 @@ in-session (a script can't drive the Agent tool — ADR-006).
       blockers and tell the user to fix and re-run `/forge:autopilot --resume`, or override
       with `/forge:force-advance --reason "…"`. Autopilot **never** force-advances on its
       own (only `allow_force: true` + a reason does).
-   f. **Advance** on a clean gate:
+   f. **Self-verify** (optional; only when `autopilot.verify: true` — REQ-AUTO-003). After
+      the gate is clean, run an **independent, fresh-context** verifier that checks the
+      artifact against the stage's intent beyond the mechanical gate:
+      - In `--mode in-session` (default): spawn a verifier subagent via the `Task` tool
+        (fresh context — do not hand it this loop's history) asking for a `pass`/`fail`
+        verdict with reasons on whether {skill}'s artifact genuinely satisfies stage
+        {stage}'s intent.
+      - In `--mode background`: dispatch a schema-constrained verdict headlessly:
+        ```bash
+        python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py verify --cwd . \
+          --stage {stage} --skill {skill} --label "{label}"
+        ```
+      A `fail` verdict is treated **exactly like a gate blocker**: route back into the
+      self-heal loop (step e), and STOP if heal is exhausted. A broken, empty, or
+      `unavailable` verifier does **not** block (it's an extra check on an already-passing
+      gate) — log it and advance.
+   g. **Advance** on a clean gate:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --cwd .
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py record --cwd . --stage {stage} --status done
       ```
-   g. **Checkpoint policy** (`autopilot.checkpoint`): `gate` (default) — continue unless a
+   h. **Checkpoint policy** (`autopilot.checkpoint`): `gate` (default) — continue unless a
       gate blocks; `every` — pause for the user's OK between stages; `never` — run straight
       through.
 
