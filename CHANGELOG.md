@@ -14,6 +14,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.6] — 2026-06-16
+
+Context-aware autopilot. A long hands-off run now survives a context boundary —
+**checkpoint → compact → continue** — instead of degrading or losing its place.
+Opt-in (off until `autopilot.context_window_size` is set), default 80% threshold.
+Grounded in a research review of Claude Code compaction + hooks, the API/SDK
+context-management primitives, and long-run agent frameworks (Letta, OpenHands,
+Cline, Roo, Cognition/Devin, Anthropic harness guidance).
+
+### Added
+- **Context-pressure session rotation (background)** — `should_rotate_for_context`
+  rotates the reused `claude -p` session to a fresh one (a clean "compact →
+  continue") once a dispatch's `usage.input_tokens` crosses
+  `autopilot.context_threshold_percent` of `autopilot.context_window_size`. For a
+  resumed session, `input_tokens` ≈ current context size — a real pressure signal,
+  not just a dispatch count. OR-combines with the existing
+  `session_max_dispatches`. (REQ-CTX-001..003)
+- **Durable checkpoint artifact** — `.forge/autopilot-checkpoint.json` (atomic,
+  schema-versioned): current stage, remaining stages, next action, written before a
+  context boundary. New `autopilot.py checkpoint` subcommand. Stage-level
+  idempotency stays in the run-log + `--resume`, so resume never redoes work.
+  (REQ-CTX-004, 005, 008)
+- **PreCompact hook** (`hooks/pre-compact.py`) — checkpoints an active autopilot run
+  before Claude Code's native in-session compaction; never blocks, never raises.
+  (REQ-CTX-006)
+- **Post-compaction resume injection** — `SessionStart(source=compact)` re-injects
+  "resume at stage N — do not redo completed stages" when a run is active.
+  (REQ-CTX-007)
+- `references/autopilot-context.md` documenting both substrates and the config knobs.
+
+### Changed
+- `_background_agent` dispatch results surface `input_tokens`; the autopilot
+  dispatch/heal CLI gains `--last-input-tokens`; `/forge:autopilot` documents the
+  context-check loop step and the opt-in config.
+
+---
+
 ## [0.3.5] — 2026-06-16
 
 Semantic skill mining. Forge's skill-miner no longer guesses from tool-name

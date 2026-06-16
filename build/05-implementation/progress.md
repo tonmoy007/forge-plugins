@@ -5,6 +5,19 @@
 
 ## Current State
 
+- **v0.3.6 (context-aware autopilot) BUILT on `feat/v0.3.6-context-aware`** — at a
+  configurable context threshold, autopilot checkpoints → compacts → continues.
+  Background: `should_rotate_for_context` rotates the reused session on a real
+  token-pressure signal (`usage.input_tokens`) past `context_threshold_percent ×
+  context_window_size` (T-185); shared atomic, schema-versioned checkpoint
+  `.forge/autopilot-checkpoint.json` + `checkpoint` subcommand, run-log idempotency
+  (T-186). In-session: new `PreCompact` hook checkpoints before native compaction
+  (T-187); `SessionStart(source=compact)` re-injects resume state (T-188). Docs
+  (T-189). Opt-in, default 80%; zero change when `context_window_size` unset. 1496
+  tests pass; validate 0; full-pipeline 12/12. Manifests 0.3.6; CHANGELOG `[0.3.6]`.
+  SRS `build/01-srs/srs-v0.3.6.md`, DAG `build/04-plan/task-dag-v0.3.6.md`.
+  **Pre-release verification + ship (PR develop→main→tag v0.3.6→mirror) in progress.**
+
 - **v0.3.5 (semantic skill mining + skill-creator) BUILT on `feat/v0.3.5-skill-mining`** —
   replaces the tool-name-n-gram miner with a semantic, success-gated,
   anti-unification pipeline: enrichment + episode segmentation

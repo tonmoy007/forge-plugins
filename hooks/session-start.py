@@ -357,7 +357,34 @@ def _compose(
     return "\n".join(lines)
 
 
-def run(cwd: Path, session_id: str = "") -> Optional[str]:
+def _autopilot_resume_note(cwd: Path, source: str) -> str:
+    """REQ-CTX-007 (v0.3.6): after a compaction, if an autopilot run is active, re-inject a
+    concise resume pointer so the loop continues without redoing completed stages. The
+    PreCompact hook wrote the checkpoint just before compaction; this reads it back. Only
+    fires on `source == "compact"` with an active run. Never raises.
+    """
+    if source != "compact":
+        return ""
+    forge = cwd / ".forge"
+    try:
+        sess = json.loads((forge / "autopilot-session.json").read_text())
+    except (OSError, ValueError):
+        return ""
+    if not (isinstance(sess, dict) and sess.get("status") == "running"):
+        return ""
+    try:
+        cp = json.loads((forge / "autopilot-checkpoint.json").read_text())
+    except (OSError, ValueError):
+        cp = {}
+    if not isinstance(cp, dict):
+        cp = {}
+    stage = cp.get("current_stage")
+    nxt = cp.get("next_action") or (f"resume at stage {stage}" if stage else "resume the autopilot run")
+    return ("\n[Forge] Autopilot resuming after compaction — " + str(nxt)
+            + ". Completed stages are recorded in .forge/autopilot-runs.jsonl; do NOT redo them.")
+
+
+def run(cwd: Path, session_id: str = "", source: str = "") -> Optional[str]:
     """Return context string, or None to exit silently."""
     state_path = cwd / "pipeline" / "state.md"
     if not state_path.exists():
@@ -408,6 +435,7 @@ def run(cwd: Path, session_id: str = "") -> Optional[str]:
     # REQ-F-012: surface unread Observer findings; REQ-F-026: Health auto-disable alert
     context += _unread_findings_note(cwd)
     context += _health_surface_note(cwd)
+    context += _autopilot_resume_note(cwd, source)  # REQ-CTX-007: resume after compaction
 
     return context
 
@@ -419,7 +447,7 @@ def main() -> None:
         payload = {}
 
     cwd = Path(payload.get("cwd", os.getcwd()))
-    result = run(cwd, payload.get("session_id", ""))
+    result = run(cwd, payload.get("session_id", ""), payload.get("source", ""))
     if result is not None:
         print(result)
     sys.exit(0)
