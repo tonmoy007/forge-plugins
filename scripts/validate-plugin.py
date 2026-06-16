@@ -14,6 +14,7 @@ KNOWN_HOOK_EVENTS = {
     "Stop",
     "SubagentStop",
     "SessionEnd",
+    "PreCompact",
 }
 
 # Per the official Claude Code plugin manifest schema
