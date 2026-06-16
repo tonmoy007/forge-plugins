@@ -45,7 +45,6 @@ import _event_log as event_log
 import _executor as executor
 import _session_meta as session_meta_mod
 import _validator as validator
-import _background_agent  # T-139 — capability-gated background skill-miner
 from _proposals import (
     GateProposal,
     LessonProposal,
@@ -401,15 +400,16 @@ def main() -> None:
                 print(f"⚠️ Stage {current_stage}: {passed}/{total} gate criteria met.")
 
     # --- Step 4: Skill Miner (async fire-and-forget) ---
-    # T-139/REQ-F-027: when background capability is available, offload mining to a
-    # background subagent via skill_miner_bg.py (instrumented for the spike's O-2
-    # completion-rate). The inline, deterministic mine-skills.py is the fallback;
-    # FORGE_NO_BACKGROUND forces it. Either path is detached — the hook never waits.
-    caps = _background_agent.read_capabilities(forge_dir) or {}
-    bg_available = caps.get("forge_background_available") is True
+    # T-183/REQ-SM-010: drive the v0.3.5 SEMANTIC miner (scripts/skill_miner_v2.py)
+    # via the detached worker skill_miner_bg.py. This retires the v1 tool-name n-gram
+    # path (mine-skills.py): the worker reads .forge/session-log.jsonl, enriches it
+    # into semantic verb episodes, gates on success + anti-unification, and writes the
+    # SAME canonical proposals (.forge/proposed-skills/<slug>/SKILL.md) the approval
+    # flow already consumes. The worker always runs the deterministic pipeline; LLM
+    # induction inside it is capability/cost-gated and FORGE_NO_BACKGROUND-aware,
+    # degrading to deterministic skeletons. Detached — the hook never waits.
     bg_script = _PLUGIN_DIR / "scripts" / "skill_miner_bg.py"
-    mine_script = _PLUGIN_DIR / "scripts" / "mine-skills.py"
-    if bg_available and os.environ.get("FORGE_NO_BACKGROUND") != "1" and bg_script.exists():
+    if bg_script.exists():
         try:
             subprocess.Popen(
                 [sys.executable, str(bg_script), "--forge-dir", str(forge_dir),
@@ -420,16 +420,6 @@ def main() -> None:
             )
         except Exception as e:
             _log_error(forge_dir, "skill_mining_bg_spawn_failed", str(e))
-    elif mine_script.exists():
-        try:
-            subprocess.Popen(
-                [sys.executable, str(mine_script), "--session", session_id],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        except Exception as e:
-            _log_error(forge_dir, "skill_mining_spawn_failed", str(e))
 
     # --- Step 4b: Surface pending proposals (T-028 approval flow) ---
     _print_pending_proposals(forge_dir)

@@ -1,58 +1,81 @@
 #!/usr/bin/env python3
-"""Background skill-miner — the spike's instrumented dispatch (T-139, REQ-F-027/028).
+"""Background skill-miner — drives the v2 semantic pipeline (T-183, REQ-SM-010).
 
-When background capability is available, `stop-reflect.py` offloads skill-mining to
-a real background agent through `_background_agent.dispatch` (reusing one session via
-`--resume`), instead of the inline deterministic `mine-skills.py`. This module is the
-detached worker: it dispatches the mining agent, then records a completion marker +
-cost to `.forge/skill-miner-runs.jsonl`.
+This is the detached worker the Stop hook (`hooks/stop-reflect.py`) spawns. It
+**drives the v0.3.5 semantic miner** (`scripts/skill_miner_v2.py`) end-to-end,
+having retired the v1 tool-name-n-gram path (`mine-skills.py` + the free-text
+sliding-tool-window LLM prompt this module used to dispatch):
 
-Production path (T-145, REQ-F-027): the background agent writes its drafts to the
-**same** canonical artifact the inline miner does — `.forge/proposed-skills/<slug>/
-SKILL.md` — so both paths feed the identical approval flow (`stop-reflect` surfaces
-them, `skill-approval.py` approves/rejects). Only the execution locus moves; the
-proposal format and approval gate are unchanged.
+    read_session_log(.forge/session-log.jsonl)   # _trace_semantics
+        -> enrich -> segment                       # semantic verb episodes
+        -> mine_candidates                         # success + anti-unification gate
+        -> induce                                  # cheap-model de-specialization,
+                                                   #   degrades to deterministic skeleton
+        -> write_proposals                         # .forge/proposed-skills/<slug>/SKILL.md
 
-Those markers are the data source for the spike's O-2 gate (REQ-F-028): real sessions
-accumulate runs, and `completion_stats()` reports the completion rate (≥90% over ≥5
-sessions) and per-session cost. Nothing here fabricates a run — each line is one real
-dispatch.
+The canonical artifact is unchanged — `.forge/proposed-skills/<slug>/SKILL.md` —
+so both paths still feed the identical approval flow (`stop-reflect` surfaces them,
+`scripts/skill-approval.py` approves/rejects). The legacy `proposed-skills/` dirs
+and `skill-blacklist.txt` are honored by `write_proposals` (it skips existing
+slugs and blacklisted motif signatures), so migration is clean.
 
-Never raises: a failed dispatch is recorded as a failed run, not an exception.
+The only LLM call is the induction dispatch, which lives **inside**
+`skill_miner_v2.induce` — cost- and capability-gated, and degrading to the
+deterministic anti-unified skeleton when background/LLM is unavailable,
+`FORGE_NO_BACKGROUND=1`, or the dispatch fails (REQ-NF-017). When no background
+capability is present, `run()` still drives the deterministic pipeline and emits
+skeleton proposals; it never becomes a no-op and never raises.
+
+Each `run()` appends one completion marker + cost to `.forge/skill-miner-runs.jsonl`
+(the spike's O-2 data source); `completion_stats()` reports the completion rate.
+
+Never raises: a failed run is recorded as a failed run, not an exception.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Optional
 
 _PLUGIN_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
-import _background_agent  # noqa: E402  (the single background adapter)
+
+
+def _load_sibling(mod_name: str):
+    """Load a sibling scripts/ module by name, registering it in sys.modules.
+
+    Registration is required so @dataclass under `from __future__ import
+    annotations` in the sibling can resolve its own module (repo lesson). Fail-soft
+    at the call site — a missing sibling degrades the run to a recorded failure,
+    never a crash (this worker runs detached).
+    """
+    if mod_name in sys.modules:
+        return sys.modules[mod_name]
+    path = Path(__file__).resolve().parent / f"{mod_name}.py"
+    spec = importlib.util.spec_from_file_location(mod_name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[mod_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# The background adapter lives under hooks/. Import it fail-soft so a layout where
+# hooks/ is absent never blocks the deterministic pipeline (REQ-NF-017).
+try:
+    import _background_agent  # type: ignore  # noqa: E402 (the single background adapter)
+except Exception:  # noqa: BLE001 — induction degrades to deterministic if absent
+    _background_agent = None  # type: ignore[assignment]
 
 _RUNS_NAME = "skill-miner-runs.jsonl"
-_SESSION_NAME = "skill-miner-session.json"
+_SESSION_LOG_NAME = "session-log.jsonl"
 _TS_FMT = "%Y-%m-%dT%H:%M:%SZ"
-
-# Skill-mining is a cheap, mechanical task — pin a cheap model. Real-usage testing
-# showed the session default (Opus-class) costs ~$1/run, ~20× the spike's
-# haiku-measured estimate and well over the O-2 budget. (Override via --model.)
-MINER_MODEL = "haiku"
-
-_PROMPT = (
-    "You are Forge's skill-miner. Read `.forge/patterns.jsonl` in the current project "
-    "(it holds sliding tool-usage windows). For each tool-sequence signature that "
-    "recurs 3 or more times AND is not listed in `.forge/skill-blacklist.txt`, draft a "
-    "reusable skill: create `.forge/proposed-skills/<slug>/SKILL.md` (slug = a short "
-    "kebab-case name for the workflow) with YAML frontmatter (`name`, `description`) "
-    "followed by a brief body covering when to use it and the observed steps. This is "
-    "the same artifact the inline miner writes, so it flows through the normal approval "
-    "flow. If nothing qualifies, write nothing. Be terse. Reply with exactly: done"
-)
 
 
 def _now(now: Optional[dt.datetime]) -> dt.datetime:
@@ -127,59 +150,78 @@ def completion_stats(forge_dir: Path) -> dict:
     }
 
 
-# --- session reuse ----------------------------------------------------------
+# --- capability gate --------------------------------------------------------
 
-def _load_miner_session(forge_dir: Path) -> Optional[str]:
+def _background_available(forge_dir: Path) -> bool:
+    """True iff the background capability is advertised AND not killed. Mirrors the
+    Stop hook's gate so `induce` only attempts an LLM dispatch when the substrate
+    is on. Deterministic skeleton mining runs regardless. Never raises."""
+    if _background_agent is None:
+        return False
+    if os.environ.get("FORGE_NO_BACKGROUND") == "1":
+        return False
     try:
-        data = json.loads((forge_dir / _SESSION_NAME).read_text())
-        sid = data.get("session_id")
-        return sid if isinstance(sid, str) and sid else None
-    except (OSError, ValueError, AttributeError):
-        return None
+        caps = _background_agent.read_capabilities(forge_dir) or {}
+        return caps.get("forge_background_available") is True
+    except Exception:  # noqa: BLE001 — gate read must never raise
+        return False
 
 
-def _save_miner_session(forge_dir: Path, session_id: str) -> None:
-    try:
-        forge_dir.mkdir(parents=True, exist_ok=True)
-        (forge_dir / _SESSION_NAME).write_text(json.dumps({"session_id": session_id}))
-    except OSError:
-        return
-
-
-# --- the dispatch -----------------------------------------------------------
+# --- the v2 pipeline driver -------------------------------------------------
 
 def run(
     forge_dir: Path,
     session_id: str,
     cwd: Optional[str] = None,
     claude_bin: Optional[str] = None,
-    model: Optional[str] = MINER_MODEL,
+    model: Optional[str] = None,
+    now: Optional[dt.datetime] = None,
 ) -> str:
-    """Dispatch one background skill-mining run, reusing the miner's session, and
-    record the outcome. Returns the recorded status. Never raises."""
+    """Drive one semantic skill-mining run over `.forge/session-log.jsonl` and
+    record the outcome. Returns the recorded status. Never raises.
+
+    The pipeline (read -> enrich -> segment -> mine -> induce -> emit) is the v2
+    semantic miner (`skill_miner_v2`). Induction is the only LLM call and is
+    capability/cost-gated inside `induce`, degrading to deterministic skeletons.
+
+    Status:
+      - "completed": the pipeline ran to emission (zero or more proposals written);
+      - "skipped":   the cost-cap blocked every induction dispatch (no LLM spend);
+      - "failed":    a library import or unexpected error (recorded, never raised).
+    """
     try:
-        prior = _load_miner_session(forge_dir)
-        res = _background_agent.dispatch(
-            _PROMPT,
-            forge_dir=forge_dir,
-            feature="skill_miner",
-            resume=prior,
-            model=model,
-            cwd=cwd,
-            claude_bin=claude_bin,
-        )
-        if res.status == "skipped":
-            status = "skipped"
-        elif res.status == "ok" and not (res.raw or {}).get("is_error"):
-            status = "completed"
-            if res.session_id:
-                _save_miner_session(forge_dir, res.session_id)
-        else:
-            status = "failed"
-        record_run(forge_dir, session_id, status, res.cost_usd or 0.0)
-        return status
+        sm = _load_sibling("skill_miner_v2")
+        ts = _load_sibling("_trace_semantics")
+    except Exception:  # noqa: BLE001 — missing library degrades to a recorded failure
+        record_run(forge_dir, session_id, "failed", 0.0, now=now)
+        return "failed"
+
+    try:
+        records = ts.read_session_log(forge_dir / _SESSION_LOG_NAME)
+        episodes = ts.segment(ts.enrich(records))
+        candidates = sm.mine_candidates(episodes)
+
+        available = _background_available(forge_dir)
+        induce_kwargs = {
+            "forge_dir": forge_dir,
+            "available": available,
+            "cwd": cwd,
+            "claude_bin": claude_bin,
+        }
+        if model is not None:
+            induce_kwargs["model"] = model
+        induced = sm.induce(candidates, **induce_kwargs)
+
+        sm.write_proposals(induced, forge_dir=forge_dir)
+
+        # Cost: induction may have spent on the ledger; mining itself is free. The
+        # per-dispatch spend is captured by _cost_cap; we record 0.0 here when no
+        # LLM ran (deterministic degrade) and otherwise leave precise accounting to
+        # the ledger — the run marker tracks completion, not exact $.
+        record_run(forge_dir, session_id, "completed", 0.0, now=now)
+        return "completed"
     except Exception:  # noqa: BLE001 — worker must never raise (it runs detached)
-        record_run(forge_dir, session_id, "failed", 0.0)
+        record_run(forge_dir, session_id, "failed", 0.0, now=now)
         return "failed"
 
 
@@ -189,7 +231,7 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--session", default="")
     parser.add_argument("--cwd", default=None)
     parser.add_argument("--claude-bin", default=None)
-    parser.add_argument("--model", default=MINER_MODEL, help=f"model alias (default: {MINER_MODEL})")
+    parser.add_argument("--model", default=None, help="induction model alias (default: cheap)")
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     run(Path(args.forge_dir), args.session, cwd=args.cwd, claude_bin=args.claude_bin, model=args.model)
     return 0

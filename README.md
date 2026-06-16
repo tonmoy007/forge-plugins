@@ -39,8 +39,9 @@ What is genuinely Forge's, not Anthropic's:
   ID, end to end.
 - **Structured cross-project lessons** — not free-text memory: tagged, filterable,
   tied to project profiles, and promoted across repos.
-- **Automatic skill mining** — repeated workflows are detected and proposed as new
-  `/forge:*` commands.
+- **Automatic skill mining** — recurring *successful* workflows are detected in your
+  own session traces (semantic, success-gated, anti-unified) and proposed as
+  reusable skills for review. See [`references/skill-mining.md`](references/skill-mining.md).
 
 > Traceability in practice — each artifact references the requirement it satisfies:
 >
@@ -320,7 +321,7 @@ Forge installs 7 lifecycle hooks that run silently alongside your Claude Code se
 | `session-start.py` | Every session open | Injects current stage, task, blockers, top lessons, and active `always`/`stage` rules (≤ 2 000 tokens) |
 | `prompt-submit.py` | Every user message | Detects stage intent; flags corrections for lesson extraction |
 | `pre-tool-write.py` | Before Write/Edit | Checks design token compliance; surfaces matching `glob` project rules (advisory) |
-| `post-tool-use.py` | After Write/Edit/Bash | Logs tool use; appends to `patterns.jsonl` for skill mining |
+| `post-tool-use.py` | After Write/Edit/Bash | Logs each tool call to `session-log.jsonl` (the semantic skill miner's source trace) |
 | `stop-reflect.py` | End of Claude turn | Evaluates output against gate criteria; surfaces skill proposals |
 | `subagent-stop.py` | End of subagent turn | Captures subagent reflections |
 | `session-end.py` | Session close | Writes session summary to `.forge/sessions/`; syncs lessons |
