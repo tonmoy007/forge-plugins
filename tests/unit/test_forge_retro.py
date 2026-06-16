@@ -126,8 +126,11 @@ def test_retro_output_path_documented(skill_text: str):
     assert "pipeline/12-release/retro.md" in skill_text
 
 
-def test_calls_mine_skills_to_refresh_proposals(skill_text: str):
-    assert "mine-skills.py" in skill_text
+def test_calls_v2_miner_to_refresh_proposals(skill_text: str):
+    # v0.3.5 (REQ-SM-010): /forge:retro drives the semantic miner, not the
+    # retired v1 n-gram path (mine-skills.py).
+    assert "skill_miner_bg.py" in skill_text
+    assert "mine-skills.py" not in skill_text
 
 
 def test_directory_name_matches_skill_name():

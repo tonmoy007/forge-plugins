@@ -14,6 +14,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.5] — 2026-06-16
+
+Semantic skill mining. Forge's skill-miner no longer guesses from tool-name
+n-grams (`Bash`/`Read`/`Write` co-occurrence is noise); it now detects genuine
+*problem-solving workflows* and authors them into real skills, human-approved
+throughout. Grounded in a research review of Agent Workflow Memory,
+Stitch/babble anti-unification, ExpeL/TroVE, LILO, Nous Hermes Agent, and
+Xiaomi MiMo Code.
+
+### Added
+- **Semantic miner core** — tool calls are enriched into intent verbs and
+  segmented into outcome-bounded *episodes* (`scripts/_trace_semantics.py`);
+  recurring workflows are found by **anti-unification** (`scripts/_antiunify.py`)
+  and promoted only when ≥3 *distinct, successful* episodes share a coherent
+  parameterized shape (`scripts/skill_miner_v2.py`). Frequency alone is never
+  sufficient. (REQ-SM-001..004)
+- **LLM induction with graceful degradation** — a cheap-model structured-output
+  pass names and documents each candidate and cites the source trace lines;
+  degrades to the deterministic anti-unified skeleton when background/LLM is
+  unavailable or `FORGE_NO_BACKGROUND=1`. (REQ-SM-005)
+- **`/forge:skill-creator`** — authors a candidate into a tested, well-described
+  skill in-session (capture → write → test → grade → improve →
+  optimize-description), gated by the existing approval flow. (REQ-SM-007)
+- **agentskills.io `SKILL.md` emission** — proposals carry frontmatter +
+  *When to Use / Procedure / Pitfalls / Verification / Provenance*; never
+  unnamed. (REQ-SM-006)
+- **Replay verification** (`scripts/skill_verify.py`) — a candidate is admitted
+  only if its source episodes reproduce the successful red→green outcome; critic
+  fallback when no runnable oracle. (REQ-SM-008)
+- **Library curation** (`scripts/skill_curate.py`) — ExpeL-style voting
+  (ADD/UPVOTE/DOWNVOTE/EDIT, prune at weight 0), TroVE frequency trim, and a
+  `/dream`-style maintenance pass that merges near-duplicates, prunes stale
+  skills, and flags dangling file references. (REQ-SM-009)
+- `references/skill-mining.md` documenting the semantic pipeline.
+
+### Changed
+- The Stop hook and `/forge:retro` now drive the semantic miner
+  (`skill_miner_bg.py` → `skill_miner_v2.py`) instead of the n-gram path.
+  Proposals still land at `.forge/proposed-skills/<slug>/SKILL.md` and flow
+  through the same approval/blacklist gate (clean migration). (REQ-SM-010)
+
+### Fixed
+- `agents/skill-miner.md` doc-drift: it referenced a non-existent
+  `.forge/proposals.jsonl`; corrected to `.forge/proposed-skills/<slug>/SKILL.md`.
+
+### Deprecated
+- The v1 tool-name n-gram miner (`scripts/mine-skills.py`) and its
+  `.forge/patterns.jsonl` bus are retained for back-compat but are off all
+  active skill-mining paths.
+
+---
+
 ## [0.3.4] — 2026-06-15
 
 **Sprint planning + cross-machine guidance (M4).** Closes the long-deferred v0.2 M4

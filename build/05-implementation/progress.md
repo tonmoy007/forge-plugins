@@ -5,6 +5,19 @@
 
 ## Current State
 
+- **v0.3.5 (semantic skill mining + skill-creator) BUILT on `feat/v0.3.5-skill-mining`** —
+  replaces the tool-name-n-gram miner with a semantic, success-gated,
+  anti-unification pipeline: enrichment + episode segmentation
+  (`_trace_semantics.py`, T-177), anti-unify motif miner + success gate
+  (`_antiunify.py` / `skill_miner_v2.py`, T-178), LLM induction w/ graceful
+  degradation (T-179), `/forge:skill-creator` + agentskills.io `SKILL.md`
+  emission (T-180), replay verification (`skill_verify.py`, T-181), library
+  curation (`skill_curate.py`, T-182), n-gram path retired + docs (T-183).
+  Built autonomously via a fan-out workflow (sequential core spine →
+  parallel tail → integrate → adversarial verify). 1473 tests pass; validate
+  0; full-pipeline 12/12. Manifests 0.3.5; CHANGELOG `[0.3.5]`. SRS
+  `build/01-srs/srs-v0.3.5.md`, DAG `build/04-plan/task-dag-v0.3.5.md`.
+  **Pre-release verification + ship (PR develop→main→tag v0.3.5→mirror) in progress.**
 - **v0.3.4 (M4 sprint) BUILT on `feat/v0.3.4-m4-sprint`** — closes the long-deferred v0.2
   M4 backlog: `/forge:sprint` plan/review as a view over the task DAG (T-153),
   `docs/forge-sync.md` cross-machine guidance + opt-in local-only telemetry (T-154), and a
