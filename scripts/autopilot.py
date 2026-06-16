@@ -69,6 +69,10 @@ class AutopilotConfig:
     session_max_dispatches: Optional[int] = None  # rotate reused session after N (REQ-HARNESS-004)
     max_heal_attempts: int = 1  # bounded self-heal per stage (REQ-AUTO-002; 0 = stop-on-gate)
     verify: bool = False  # opt-in independent self-verification after a passing gate (REQ-AUTO-003)
+    # Context-pressure rotation (REQ-CTX-001..003, v0.3.6). Opt-in: the feature is OFF
+    # unless context_window_size is set (Forge cannot auto-detect the model's window).
+    context_window_size: Optional[int] = None  # estimated context window in tokens
+    context_threshold_percent: float = 80.0  # rotate when input_tokens ≥ this % of the window
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -128,6 +132,17 @@ def load_config(forge_dir) -> AutopilotConfig:
     if heal is not None:  # 0 is valid (stop-on-gate); only an absent/garbage value keeps the default
         cfg.max_heal_attempts = max(0, heal)
     cfg.verify = section.get("verify") is True
+    window = _coerce_int(section.get("context_window_size"))
+    if window is not None and window > 0:
+        cfg.context_window_size = window
+    pct = section.get("context_threshold_percent")
+    if pct is not None:
+        try:
+            pct_f = float(pct)
+        except (TypeError, ValueError):
+            pct_f = None
+        if pct_f is not None and 0 < pct_f <= 100:
+            cfg.context_threshold_percent = pct_f
     return cfg
 
 
@@ -165,6 +180,26 @@ def should_rotate_session(dispatch_count: int, config: AutopilotConfig) -> bool:
     """
     cap = config.session_max_dispatches
     return isinstance(cap, int) and cap > 0 and dispatch_count >= cap
+
+
+def should_rotate_for_context(last_input_tokens, config: AutopilotConfig) -> bool:
+    """True when the reused session should rotate because the last dispatch's input-token
+    count crossed the configured context-pressure threshold (REQ-CTX-003, v0.3.6). For a
+    *resumed* `claude -p` session, the envelope's `usage.input_tokens` approximates current
+    context size, so this is a real (if approximate) context-pressure signal — unlike the
+    pure dispatch-count proxy in `should_rotate_session`. Opt-in: returns False unless
+    `context_window_size` is set. Fail-soft on garbage input. Never raises.
+    """
+    window = config.context_window_size
+    if not isinstance(window, int) or window <= 0:
+        return False
+    tokens = _coerce_int(last_input_tokens)
+    if tokens is None or tokens < 0:
+        return False
+    pct = config.context_threshold_percent
+    if not isinstance(pct, (int, float)) or pct <= 0:
+        return False
+    return tokens >= (pct / 100.0) * window
 
 
 def model_for_stage(config: AutopilotConfig, stage: int, plugin_root=None) -> Optional[str]:
@@ -485,8 +520,22 @@ def _dispatch_background(
         "session_id": getattr(res, "session_id", None) or session_id,
         "cost_usd": getattr(res, "cost_usd", None),
         "result": getattr(res, "result", None),
+        "input_tokens": _dispatch_input_tokens(res),  # context-pressure signal (REQ-CTX-002)
         "stage": stage,
     }
+
+
+def _dispatch_input_tokens(res) -> Optional[int]:
+    """Pull `usage.input_tokens` from a dispatch result's raw envelope (REQ-CTX-002).
+    For a resumed session this approximates current context size. None when absent. Never raises.
+    """
+    raw = getattr(res, "raw", None)
+    if not isinstance(raw, dict):
+        return None
+    usage = raw.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    return _coerce_int(usage.get("input_tokens"))
 
 
 def run_stage(
@@ -651,6 +700,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--model", default=None, help="(dispatch) background model override")
     parser.add_argument("--dispatch-count", type=int, default=0,
                         help="(dispatch/heal) prior dispatches on this session — triggers rotation")
+    parser.add_argument("--last-input-tokens", type=int, default=None, metavar="N",
+                        help="(dispatch/heal) input_tokens reported by the prior dispatch on "
+                             "this session — triggers context-pressure rotation (REQ-CTX-003)")
     parser.add_argument("--blockers", default="",
                         help="(heal) blocking gate criteria summary to thread into the resolve prompt")
     parser.add_argument("--to", type=int, default=None, metavar="N",
@@ -690,7 +742,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
         cfg = load_config(Path(args.cwd) / ".forge")
         model = args.model or model_for_stage(cfg, args.stage)
-        rotate = should_rotate_session(args.dispatch_count, cfg)
+        rotate = (should_rotate_session(args.dispatch_count, cfg)
+                  or should_rotate_for_context(args.last_input_tokens, cfg))
         result = run_stage(args.cwd, args.stage, args.skill, args.label,
                            mode="background", session_id=args.session, rotate=rotate,
                            model=model, max_budget_usd=cfg.max_budget_usd)
@@ -703,7 +756,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
         cfg = load_config(Path(args.cwd) / ".forge")
         model = args.model or model_for_stage(cfg, args.stage)
-        rotate = should_rotate_session(args.dispatch_count, cfg)
+        rotate = (should_rotate_session(args.dispatch_count, cfg)
+                  or should_rotate_for_context(args.last_input_tokens, cfg))
         result = run_heal(args.cwd, args.stage, args.skill or "/forge:resolve", args.label,
                           mode="background", session_id=args.session, rotate=rotate,
                           model=model, max_budget_usd=cfg.max_budget_usd,
