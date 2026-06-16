@@ -271,6 +271,15 @@ before stopping — and never forces past a gate.
   writes to matching paths (e.g. lockfiles, secrets) — the guardrail that makes hands-off
   runs safe. See [Project Rules](#project-rules).
 
+**Context-aware — checkpoint → compact → continue (v0.3.6, opt-in):** a long hands-off run
+survives a context boundary without losing its place. Set `autopilot.context_window_size`
+(tokens) to enable; the run then checkpoints and, in **background** mode, rotates to a fresh
+session once a dispatch's context crosses `autopilot.context_threshold_percent` (default
+80). **In-session**, a `PreCompact` hook writes the checkpoint before Claude Code's native
+auto-compaction and `SessionStart` re-injects "resume at stage N — don't redo completed
+stages" after. Off entirely until `context_window_size` is set. See
+[`references/autopilot-context.md`](references/autopilot-context.md).
+
 **Safety rails:** never forces a gate unless you opt in (`autopilot.allow_force` + a
 reason); bounded by `max_stages` / `stop_before`, `max_heal_attempts`, `max_budget_usd`,
 and the `_cost_cap` ledger; interruptible with `/forge:autopilot-stop` and the
