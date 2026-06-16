@@ -345,6 +345,132 @@ def test_load_config_reads_session_max_dispatches(tmp_path):
     assert _ap.load_config(forge).session_max_dispatches == 8
 
 
+# --- v0.3.6 context-pressure rotation (REQ-CTX-001..003) -------------------
+
+def test_should_rotate_for_context_threshold_boundary():
+    cfg = _ap.AutopilotConfig(context_window_size=200000, context_threshold_percent=80.0)
+    assert _ap.should_rotate_for_context(160000, cfg) is True   # exactly 80% of 200k
+    assert _ap.should_rotate_for_context(170000, cfg) is True   # above threshold
+    assert _ap.should_rotate_for_context(159999, cfg) is False  # below threshold
+
+
+def test_should_rotate_for_context_window_unset_never():
+    cfg = _ap.AutopilotConfig(context_threshold_percent=80.0)  # no window ⇒ feature off
+    assert _ap.should_rotate_for_context(10_000_000, cfg) is False
+
+
+def test_should_rotate_for_context_garbage_never_raises():
+    cfg = _ap.AutopilotConfig(context_window_size=200000)
+    assert _ap.should_rotate_for_context(None, cfg) is False
+    assert _ap.should_rotate_for_context("lots", cfg) is False
+    assert _ap.should_rotate_for_context(-5, cfg) is False
+
+
+def test_load_config_context_defaults(tmp_path):
+    cfg = _ap.load_config(tmp_path / ".forge")
+    assert cfg.context_window_size is None          # opt-in: off by default
+    assert cfg.context_threshold_percent == 80.0    # default trigger
+
+
+def test_load_config_reads_context_knobs(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text(
+        "autopilot:\n  context_window_size: 200000\n  context_threshold_percent: 70\n")
+    cfg = _ap.load_config(forge)
+    assert cfg.context_window_size == 200000
+    assert cfg.context_threshold_percent == 70.0
+
+
+def test_load_config_ignores_bad_context_values(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text(
+        "autopilot:\n  context_window_size: huge\n  context_threshold_percent: nope\n")
+    cfg = _ap.load_config(forge)
+    assert cfg.context_window_size is None
+    assert cfg.context_threshold_percent == 80.0    # bad value ⇒ keep default
+
+
+def test_dispatch_surfaces_input_tokens(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
+    _caps(tmp_path / ".forge", True)
+
+    class _Res:
+        status = "ok"
+        session_id = "S"
+        cost_usd = 0.0
+        reason = ""
+        result = None
+        raw = {"usage": {"input_tokens": 170000, "output_tokens": 12}}
+
+    monkeypatch.setattr(_ap._background_agent, "dispatch", lambda prompt, **kw: _Res())
+    out = _ap.run_stage(tmp_path, 6, "/forge:build", mode="background", session_id="S")
+    assert out["input_tokens"] == 170000  # surfaced for the context-pressure check
+
+
+# --- v0.3.6 checkpoint artifact (REQ-CTX-004, 005, 008) --------------------
+
+def test_read_checkpoint_absent_returns_empty(tmp_path):
+    assert _ap.read_checkpoint(tmp_path / ".forge") == {}
+
+
+def test_read_checkpoint_malformed_returns_empty(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / _ap._CHECKPOINT_NAME).write_text("{not json")
+    assert _ap.read_checkpoint(forge) == {}
+
+
+def test_write_checkpoint_round_trips(tmp_path):
+    forge = tmp_path / ".forge"
+    ok = _ap.write_checkpoint(forge, {"current_stage": 6, "remaining_stages": [6, 7],
+                                      "dispatch_count": 3, "last_input_tokens": 170000,
+                                      "last_session_id": "S", "next_action": "resume at 6"})
+    assert ok is True
+    cp = _ap.read_checkpoint(forge)
+    assert cp["current_stage"] == 6
+    assert cp["remaining_stages"] == [6, 7]
+    assert cp["last_input_tokens"] == 170000
+    assert cp["schema_version"] == _ap._CHECKPOINT_SCHEMA_VERSION
+    assert cp["ts"]  # stamped
+
+
+def test_write_checkpoint_is_atomic_no_tmp_left(tmp_path):
+    forge = tmp_path / ".forge"
+    _ap.write_checkpoint(forge, {"current_stage": 1})
+    assert list(forge.glob("*.tmp")) == []
+
+
+def test_write_checkpoint_preserves_run_started_at(tmp_path):
+    forge = tmp_path / ".forge"
+    _ap.write_checkpoint(forge, {"current_stage": 1})
+    first = _ap.read_checkpoint(forge)["run_started_at"]
+    _ap.write_checkpoint(forge, {"current_stage": 2})
+    assert _ap.read_checkpoint(forge)["run_started_at"] == first  # stable across updates
+
+
+def test_build_and_write_checkpoint_derives_from_planner(tmp_path):
+    _make_state(tmp_path, 6)
+    ok = _ap.build_and_write_checkpoint(tmp_path, dispatch_count=2,
+                                        last_input_tokens=170000, last_session_id="S")
+    assert ok is True
+    cp = _ap.read_checkpoint(tmp_path / ".forge")
+    assert cp["current_stage"] == 6
+    assert cp["remaining_stages"][0] == 6
+    assert cp["last_input_tokens"] == 170000
+    assert "6" in cp["next_action"]
+
+
+def test_checkpoint_cli_writes_artifact(tmp_path):
+    _make_state(tmp_path, 6)
+    res = subprocess.run([PYTHON, str(_mod_path), "checkpoint", "--cwd", str(tmp_path),
+                          "--dispatch-count", "2", "--last-input-tokens", "170000",
+                          "--session", "S"], capture_output=True, text=True)
+    assert res.returncode == 0
+    assert (tmp_path / ".forge" / _ap._CHECKPOINT_NAME).exists()
+
+
 def test_run_stage_rotate_starts_fresh_session(tmp_path, monkeypatch):
     monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
     _caps(tmp_path / ".forge", True)

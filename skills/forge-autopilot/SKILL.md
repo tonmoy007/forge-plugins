@@ -43,6 +43,12 @@ in-session (a script can't drive the Agent tool — ADR-006).
 - **Interruptible.** `/forge:autopilot-stop` halts it before the next stage.
 - **Background mode** (`--mode background`) is cost-capped + capability-gated and a clean
   no-op when background agents are unavailable or `FORGE_NO_BACKGROUND=1`.
+- **Context-aware (v0.3.6, opt-in).** Set `autopilot.context_window_size` (tokens; Forge
+  cannot auto-detect the model window) to enable context-pressure handling; the run then
+  checkpoints and rotates/resumes once context crosses
+  `autopilot.context_threshold_percent` (default **80**). Off entirely when
+  `context_window_size` is unset — identical to prior behavior. See step 2.i and
+  `references/autopilot-context.md`.
 
 ## Unattended mode (`--unattended`, REQ-AUTO-004/005)
 
@@ -92,14 +98,20 @@ silently guess:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py dispatch --cwd . \
         --stage {stage} --skill {skill} --label "{label}" \
-        [--session {prev_session_id}] [--dispatch-count {n}]
+        [--session {prev_session_id}] [--dispatch-count {n}] \
+        [--last-input-tokens {prev_input_tokens}]
       ```
       A `status: unavailable` result means background agents are off — fall back to
       in-session or stop. Carry the returned `session_id` into the next dispatch, and
       pass `--dispatch-count` (dispatches so far on this session) so a long run rotates
       to a fresh session per `autopilot.session_max_dispatches`, bounding context growth.
-      Per-stage model routing (`autopilot.models`) and the per-dispatch `$` ceiling
-      (`autopilot.max_budget_usd`) are applied automatically from `.forge/config.yaml`.
+      The result also carries `input_tokens` (the dispatch's context size) — carry it into
+      the next dispatch as `--last-input-tokens` so the run **rotates on context pressure**
+      (checkpoint → fresh session → continue) once it crosses
+      `autopilot.context_threshold_percent` of `autopilot.context_window_size` (v0.3.6,
+      opt-in — off until `context_window_size` is set). Per-stage model routing
+      (`autopilot.models`) and the per-dispatch `$` ceiling (`autopilot.max_budget_usd`) are
+      applied automatically from `.forge/config.yaml`.
    d. **Check the gate**:
       ```bash
       python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage {stage} --cwd . \
@@ -151,6 +163,22 @@ silently guess:
    h. **Checkpoint policy** (`autopilot.checkpoint`): `gate` (default) — continue unless a
       gate blocks; `every` — pause for the user's OK between stages; `never` — run straight
       through.
+   i. **Context checkpoint → compact → continue** (v0.3.6, REQ-CTX). A long hands-off run
+      crosses a context boundary; Forge checkpoints so it resumes cleanly. On each advance
+      the loop refreshes a durable checkpoint (`.forge/autopilot-checkpoint.json`); you can
+      also write it explicitly before a heavy dispatch:
+      ```bash
+      python3 ${CLAUDE_PLUGIN_ROOT}/scripts/autopilot.py checkpoint --cwd . \
+        [--dispatch-count {n}] [--last-input-tokens {t}] [--session {sid}]
+      ```
+      - **Background**: once a dispatch's `input_tokens` crosses the configured threshold,
+        the next `dispatch` rotates to a fresh session automatically (checkpoint first) —
+        the run compacts and continues without losing its place.
+      - **In-session**: you cannot measure or trigger Claude Code's native compaction, but
+        Forge's **PreCompact** hook writes the checkpoint just before it and
+        **SessionStart(`compact`)** re-injects "resume at stage N — do not redo completed
+        stages" right after. Keep walking the plan; `--resume` + the run-log guarantee no
+        stage repeats across the compaction boundary.
 
 3. **Finish.** Mark the session idle (also clears any stop flag), then summarize:
    ```bash

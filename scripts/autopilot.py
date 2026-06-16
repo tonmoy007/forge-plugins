@@ -69,6 +69,10 @@ class AutopilotConfig:
     session_max_dispatches: Optional[int] = None  # rotate reused session after N (REQ-HARNESS-004)
     max_heal_attempts: int = 1  # bounded self-heal per stage (REQ-AUTO-002; 0 = stop-on-gate)
     verify: bool = False  # opt-in independent self-verification after a passing gate (REQ-AUTO-003)
+    # Context-pressure rotation (REQ-CTX-001..003, v0.3.6). Opt-in: the feature is OFF
+    # unless context_window_size is set (Forge cannot auto-detect the model's window).
+    context_window_size: Optional[int] = None  # estimated context window in tokens
+    context_threshold_percent: float = 80.0  # rotate when input_tokens ≥ this % of the window
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -128,6 +132,17 @@ def load_config(forge_dir) -> AutopilotConfig:
     if heal is not None:  # 0 is valid (stop-on-gate); only an absent/garbage value keeps the default
         cfg.max_heal_attempts = max(0, heal)
     cfg.verify = section.get("verify") is True
+    window = _coerce_int(section.get("context_window_size"))
+    if window is not None and window > 0:
+        cfg.context_window_size = window
+    pct = section.get("context_threshold_percent")
+    if pct is not None:
+        try:
+            pct_f = float(pct)
+        except (TypeError, ValueError):
+            pct_f = None
+        if pct_f is not None and 0 < pct_f <= 100:
+            cfg.context_threshold_percent = pct_f
     return cfg
 
 
@@ -165,6 +180,26 @@ def should_rotate_session(dispatch_count: int, config: AutopilotConfig) -> bool:
     """
     cap = config.session_max_dispatches
     return isinstance(cap, int) and cap > 0 and dispatch_count >= cap
+
+
+def should_rotate_for_context(last_input_tokens, config: AutopilotConfig) -> bool:
+    """True when the reused session should rotate because the last dispatch's input-token
+    count crossed the configured context-pressure threshold (REQ-CTX-003, v0.3.6). For a
+    *resumed* `claude -p` session, the envelope's `usage.input_tokens` approximates current
+    context size, so this is a real (if approximate) context-pressure signal — unlike the
+    pure dispatch-count proxy in `should_rotate_session`. Opt-in: returns False unless
+    `context_window_size` is set. Fail-soft on garbage input. Never raises.
+    """
+    window = config.context_window_size
+    if not isinstance(window, int) or window <= 0:
+        return False
+    tokens = _coerce_int(last_input_tokens)
+    if tokens is None or tokens < 0:
+        return False
+    pct = config.context_threshold_percent
+    if not isinstance(pct, (int, float)) or pct <= 0:
+        return False
+    return tokens >= (pct / 100.0) * window
 
 
 def model_for_stage(config: AutopilotConfig, stage: int, plugin_root=None) -> Optional[str]:
@@ -399,6 +434,82 @@ def finish_session(forge_dir) -> dict:
     return {"status": "idle"}
 
 
+# --------------------------------------------------------------------------- #
+# Checkpoint (REQ-CTX-004..008, v0.3.6) — a durable, schema-versioned snapshot
+# of "where the run is / what's next", written BEFORE a context boundary (a
+# background session rotation, or a native in-session compaction via the
+# PreCompact hook) so the run resumes cleanly. Stage-level idempotency stays in
+# the run-log (`autopilot-runs.jsonl` + `--resume`); the checkpoint adds the
+# next-action pointer. `.forge`-only, atomic, never raises.
+# --------------------------------------------------------------------------- #
+_CHECKPOINT_NAME = "autopilot-checkpoint.json"
+_CHECKPOINT_SCHEMA_VERSION = 1
+
+
+def read_checkpoint(forge_dir) -> dict:
+    """Read `.forge/autopilot-checkpoint.json` ({} if absent/unreadable/malformed). Never raises."""
+    path = Path(forge_dir) / _CHECKPOINT_NAME
+    try:
+        if not path.exists():
+            return {}
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_checkpoint(forge_dir, fields: dict) -> bool:
+    """Atomically write/refresh the checkpoint, stamping `schema_version` + `ts` and
+    preserving `run_started_at` across updates (existing checkpoint → session start → now).
+    `.forge`-only; mirrors `_write_session`'s temp-then-rename. Never raises.
+    """
+    forge = Path(forge_dir)
+    fields = dict(fields) if isinstance(fields, dict) else {}
+    existing = read_checkpoint(forge)
+    run_started = (existing.get("run_started_at")
+                   or read_session(forge).get("started_at")
+                   or _now_iso())
+    payload = {"schema_version": _CHECKPOINT_SCHEMA_VERSION, "run_started_at": run_started}
+    payload.update(fields)
+    payload["ts"] = _now_iso()
+    try:
+        forge.mkdir(parents=True, exist_ok=True)
+        tmp = forge / (_CHECKPOINT_NAME + ".tmp")
+        tmp.write_text(json.dumps(payload))
+        os.replace(tmp, forge / _CHECKPOINT_NAME)
+        return True
+    except OSError:
+        return False
+
+
+def build_and_write_checkpoint(
+    cwd,
+    *,
+    dispatch_count: int = 0,
+    last_input_tokens: Optional[int] = None,
+    last_session_id: Optional[str] = None,
+    next_action: str = "",
+) -> bool:
+    """Derive the checkpoint fields from the deterministic planner (current stage +
+    remaining stages, skipping completed work via `--resume`) and write it. Used by both
+    the `checkpoint` CLI subcommand and the PreCompact hook. Never raises.
+    """
+    plan = plan_stages(cwd, resume=True)
+    remaining = [p["stage"] for p in plan] if plan else []
+    current = remaining[0] if remaining else None
+    if not next_action:
+        next_action = (f"resume at stage {current} via {plan[0]['skill']}"
+                       if plan else "autopilot run complete — nothing remaining")
+    return write_checkpoint(Path(cwd) / ".forge", {
+        "current_stage": current,
+        "remaining_stages": remaining,
+        "dispatch_count": dispatch_count,
+        "last_input_tokens": _coerce_int(last_input_tokens),
+        "last_session_id": last_session_id,
+        "next_action": next_action,
+    })
+
+
 def _background_available(forge_dir) -> tuple[bool, str]:
     """Is the background substrate usable? Honors the kill switch + capability cache."""
     if os.environ.get("FORGE_NO_BACKGROUND") == "1":
@@ -485,8 +596,22 @@ def _dispatch_background(
         "session_id": getattr(res, "session_id", None) or session_id,
         "cost_usd": getattr(res, "cost_usd", None),
         "result": getattr(res, "result", None),
+        "input_tokens": _dispatch_input_tokens(res),  # context-pressure signal (REQ-CTX-002)
         "stage": stage,
     }
+
+
+def _dispatch_input_tokens(res) -> Optional[int]:
+    """Pull `usage.input_tokens` from a dispatch result's raw envelope (REQ-CTX-002).
+    For a resumed session this approximates current context size. None when absent. Never raises.
+    """
+    raw = getattr(res, "raw", None)
+    if not isinstance(raw, dict):
+        return None
+    usage = raw.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    return _coerce_int(usage.get("input_tokens"))
 
 
 def run_stage(
@@ -635,7 +760,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument("command", nargs="?", default="plan",
                         choices=("plan", "record", "dispatch", "heal", "verify", "answers",
-                                 "start", "stop", "status", "finish"),
+                                 "start", "stop", "status", "finish", "checkpoint"),
                         help="plan (default) | record a stage | dispatch (background) | "
                              "heal a blocked stage (background) | verify a passed stage "
                              "(background) | answers (echo unattended answers file) | "
@@ -651,6 +776,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--model", default=None, help="(dispatch) background model override")
     parser.add_argument("--dispatch-count", type=int, default=0,
                         help="(dispatch/heal) prior dispatches on this session — triggers rotation")
+    parser.add_argument("--last-input-tokens", type=int, default=None, metavar="N",
+                        help="(dispatch/heal) input_tokens reported by the prior dispatch on "
+                             "this session — triggers context-pressure rotation (REQ-CTX-003)")
     parser.add_argument("--blockers", default="",
                         help="(heal) blocking gate criteria summary to thread into the resolve prompt")
     parser.add_argument("--to", type=int, default=None, metavar="N",
@@ -690,7 +818,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
         cfg = load_config(Path(args.cwd) / ".forge")
         model = args.model or model_for_stage(cfg, args.stage)
-        rotate = should_rotate_session(args.dispatch_count, cfg)
+        rotate = (should_rotate_session(args.dispatch_count, cfg)
+                  or should_rotate_for_context(args.last_input_tokens, cfg))
         result = run_stage(args.cwd, args.stage, args.skill, args.label,
                            mode="background", session_id=args.session, rotate=rotate,
                            model=model, max_budget_usd=cfg.max_budget_usd)
@@ -703,7 +832,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
         cfg = load_config(Path(args.cwd) / ".forge")
         model = args.model or model_for_stage(cfg, args.stage)
-        rotate = should_rotate_session(args.dispatch_count, cfg)
+        rotate = (should_rotate_session(args.dispatch_count, cfg)
+                  or should_rotate_for_context(args.last_input_tokens, cfg))
         result = run_heal(args.cwd, args.stage, args.skill or "/forge:resolve", args.label,
                           mode="background", session_id=args.session, rotate=rotate,
                           model=model, max_budget_usd=cfg.max_budget_usd,
@@ -726,6 +856,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.command == "answers":
         print(json.dumps(read_answers(Path(args.cwd) / ".forge")))
         return 0
+
+    if args.command == "checkpoint":
+        ok = build_and_write_checkpoint(
+            args.cwd, dispatch_count=args.dispatch_count,
+            last_input_tokens=args.last_input_tokens, last_session_id=args.session,
+        )
+        if not ok:
+            print("warning: checkpoint write failed", file=sys.stderr)
+        print(json.dumps(read_checkpoint(Path(args.cwd) / ".forge")))
+        return 0  # never fail the loop on a checkpoint write
 
     if args.command in ("start", "stop", "status", "finish"):
         forge = Path(args.cwd) / ".forge"

@@ -76,7 +76,7 @@
   <!-- Stats pills -->
   <rect x="60" y="365" width="175" height="34" rx="17" fill="none" stroke="#2a2a5a" stroke-width="1" />
   <text x="80" y="387" font-family="ui-monospace, monospace" font-size="13" fill="#4ade80">●</text>
-  <text x="96" y="387" font-family="-apple-system, sans-serif" font-size="13" fill="#8888aa">1,470+ tests passing</text>
+  <text x="96" y="387" font-family="-apple-system, sans-serif" font-size="13" fill="#8888aa">1,490+ tests passing</text>
 
   <rect x="255" y="365" width="110" height="34" rx="17" fill="none" stroke="#2a2a5a" stroke-width="1" />
   <text x="275" y="387" font-family="ui-monospace, monospace" font-size="13" fill="#6c63ff">●</text>
