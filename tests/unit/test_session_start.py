@@ -70,6 +70,47 @@ def _make_rule(tmp_path: Path, name: str, body: str) -> None:
     (d / name).write_text(body)
 
 
+class TestAutopilotResumeAfterCompact:
+    """T-188 / REQ-CTX-007: after a compaction, re-inject a resume pointer when an
+    autopilot run is active so the loop continues without redoing completed stages."""
+
+    def _run_src(self, cwd: str, source: str) -> subprocess.CompletedProcess:
+        payload = json.dumps({"cwd": cwd, "hook_event_name": "SessionStart", "source": source})
+        env = {**os.environ, "FORGE_NO_BACKGROUND": "1"}
+        return subprocess.run([PYTHON, HOOK], input=payload, capture_output=True,
+                              text=True, env=env)
+
+    def _activate(self, tmp_path: Path, stage: int = 6) -> None:
+        forge = tmp_path / ".forge"
+        forge.mkdir(parents=True, exist_ok=True)
+        (forge / "autopilot-session.json").write_text(json.dumps({"status": "running"}))
+        (forge / "autopilot-checkpoint.json").write_text(json.dumps(
+            {"schema_version": 1, "current_stage": stage,
+             "next_action": f"resume at stage {stage} via /forge:build"}))
+
+    def test_compact_with_active_run_injects_resume(self, tmp_path):
+        _make_state(tmp_path, stage=6)
+        self._activate(tmp_path, 6)
+        r = self._run_src(str(tmp_path), "compact")
+        assert r.returncode == 0
+        assert "resuming after compaction" in r.stdout.lower()
+        assert "do not redo" in r.stdout.lower()
+        assert "stage 6" in r.stdout.lower()
+
+    def test_compact_without_active_run_no_resume(self, tmp_path):
+        _make_state(tmp_path, stage=6)  # no session/checkpoint ⇒ no active run
+        r = self._run_src(str(tmp_path), "compact")
+        assert r.returncode == 0
+        assert "resuming after compaction" not in r.stdout.lower()
+
+    def test_non_compact_source_no_resume(self, tmp_path):
+        _make_state(tmp_path, stage=6)
+        self._activate(tmp_path, 6)
+        r = self._run_src(str(tmp_path), "startup")
+        assert r.returncode == 0
+        assert "resuming after compaction" not in r.stdout.lower()
+
+
 class TestNonForgeDir:
     def test_no_pipeline_silent_exit_0(self, tmp_path):
         r = _run(str(tmp_path))
