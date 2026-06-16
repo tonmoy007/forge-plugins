@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Aggregate .forge/patterns.jsonl by signature and emit SKILL.md drafts.
 
+DEPRECATED (v0.3.5, REQ-SM-010): this is the legacy v1 tool-name-n-gram miner.
+It is no longer on any active path — the Stop hook and `/forge:retro` now drive
+the semantic miner (`skill_miner_v2.py` via `skill_miner_bg.py`). Retained for
+back-compat and reference only; see `references/skill-mining.md`.
+
 Input:
     .forge/patterns.jsonl         — sliding 3-tool windows from T-026
     .forge/skill-blacklist.txt    — signatures the user rejected (one per line)

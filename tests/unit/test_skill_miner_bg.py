@@ -1,9 +1,15 @@
-"""Tests for scripts/skill_miner_bg.py (v0.2 P0 — T-139, REQ-F-027/028).
+"""Tests for scripts/skill_miner_bg.py.
 
-The background skill-miner is the spike's guinea pig: a real background dispatch,
-instrumented so every run records a completion marker + cost to
-.forge/skill-miner-runs.jsonl. completion_stats() reads those markers to produce
-the O-2 number (≥90% completion over ≥5 sessions). Must never raise.
+The background skill-miner now DRIVES the v0.3.5 semantic miner
+(scripts/skill_miner_v2.py) over .forge/session-log.jsonl, having retired the v1
+n-gram dispatch (T-183, REQ-SM-010). It reads the session log, enriches it into
+semantic verb episodes, gates on success + anti-unification, induces (LLM, gated +
+degrading), and emits .forge/proposed-skills/<slug>/SKILL.md — the same canonical
+artifact the approval flow consumes.
+
+It remains instrumented for the spike's O-2 number: every run records a completion
+marker + cost to .forge/skill-miner-runs.jsonl; completion_stats() reads those
+markers. Must never raise.
 """
 
 from __future__ import annotations
@@ -11,7 +17,6 @@ from __future__ import annotations
 import datetime as dt
 import importlib.util
 import json
-import stat
 import sys
 from pathlib import Path
 
@@ -23,21 +28,44 @@ sys.modules["skill_miner_bg"] = _smb
 _spec.loader.exec_module(_smb)
 
 NOW = dt.datetime(2026, 6, 10, 12, 0, 0, tzinfo=dt.timezone.utc)
-_ENVELOPE = (
-    '{"session_id":"miner-1","total_cost_usd":0.0046,'
-    '"usage":{"input_tokens":5,"output_tokens":3},'
-    '"is_error":false,"result":"done"}'
-)
 
 
-def _fake_claude(tmp_path: Path, body: str) -> str:
-    script = tmp_path / "claude"
-    script.write_text("#!/bin/sh\n" + body + "\n")
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
-    return str(script)
+# --- session-log fixtures ---------------------------------------------------
+
+def _call(tool: str, file: str = "", success: bool = True,
+          session: str = "s1", command: str = "") -> dict:
+    rec: dict = {
+        "ts": "2026-06-16T12:00:00Z",
+        "session": session,
+        "tool": tool,
+        "file": file,
+        "success": success,
+        "stage": 6,
+    }
+    if command:
+        rec["command"] = command
+    return rec
 
 
-# --- completion stats math --------------------------------------------------
+def _fix_episode(src: str, test_cmd: str, test_file: str, session: str) -> list[dict]:
+    """A successful failure->fix->regression episode (ends green)."""
+    return [
+        _call("Bash", success=False, session=session, command=test_cmd),
+        _call("Read", file=src, session=session),
+        _call("Edit", file=src, session=session),
+        _call("Bash", success=True, session=session, command=test_cmd),
+        _call("Write", file=test_file, session=session),
+    ]
+
+
+def _write_log(forge: Path, records: list[dict]) -> None:
+    forge.mkdir(parents=True, exist_ok=True)
+    (forge / "session-log.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8"
+    )
+
+
+# --- completion stats math (unchanged contract) ----------------------------
 
 def test_completion_stats_excludes_skipped(tmp_path: Path) -> None:
     forge = tmp_path / ".forge"
@@ -67,73 +95,109 @@ def test_completion_stats_90_boundary(tmp_path: Path) -> None:
     assert _smb.completion_stats(forge)["completion_rate"] == 0.9
 
 
-# --- run() dispatch + recording --------------------------------------------
+# --- run() drives the v2 pipeline ------------------------------------------
 
-def test_run_records_completed_and_saves_session(tmp_path: Path) -> None:
-    bin_ = _fake_claude(tmp_path, f"cat <<'EOF'\n{_ENVELOPE}\nEOF")
-    forge = tmp_path / ".forge"
-    status = _smb.run(forge, session_id="sess", cwd=str(tmp_path), claude_bin=bin_)
-    assert status == "completed"
-    runs = [json.loads(l) for l in (forge / "skill-miner-runs.jsonl").read_text().splitlines() if l.strip()]
-    assert runs[-1]["status"] == "completed"
-    assert runs[-1]["cost_usd"] == 0.0046
-    # session persisted for reuse
-    assert _smb._load_miner_session(forge) == "miner-1"
-
-
-def test_run_failure_records_failed_never_raises(tmp_path: Path) -> None:
-    bin_ = _fake_claude(tmp_path, "echo boom >&2; exit 1")
-    forge = tmp_path / ".forge"
-    status = _smb.run(forge, session_id="sess", cwd=str(tmp_path), claude_bin=bin_)
-    assert status == "failed"
-    runs = [json.loads(l) for l in (forge / "skill-miner-runs.jsonl").read_text().splitlines() if l.strip()]
-    assert runs[-1]["status"] == "failed"
-
-
-def test_run_over_cap_records_skipped(tmp_path: Path) -> None:
+def test_run_empty_log_completes_no_proposals(tmp_path: Path) -> None:
     forge = tmp_path / ".forge"
     forge.mkdir(parents=True)
-    # The ledger entry must fall in the cost-cap's "today" bucket, which _cost_cap
-    # computes from the real wall clock (run()→dispatch()→precheck() does not inject a
-    # clock). Stamp it with the actual current UTC time, not a frozen constant —
-    # otherwise the entry ages into "yesterday" the day after this test was written and
-    # the over-cap precheck stops firing (regression: 'completed' != 'skipped').
-    ts = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    (forge / "cost-ledger.jsonl").write_text(
-        json.dumps({"ts": ts, "feature": "x", "session_id": "s",
-                    "input_tokens": 1, "output_tokens": 1,
-                    "estimated_usd": 0.49, "actual_usd": 0.49}) + "\n"
+    # No session-log → fail-soft read → zero episodes → zero candidates.
+    status = _smb.run(forge, session_id="sess", cwd=str(tmp_path), now=NOW)
+    assert status == "completed"
+    assert not (forge / "proposed-skills").exists() or not list(
+        (forge / "proposed-skills").glob("*/SKILL.md")
     )
-    bin_ = _fake_claude(tmp_path, f"cat <<'EOF'\n{_ENVELOPE}\nEOF")
-    status = _smb.run(forge, session_id="sess", cwd=str(tmp_path), claude_bin=bin_)
-    assert status == "skipped"
     runs = [json.loads(l) for l in (forge / "skill-miner-runs.jsonl").read_text().splitlines() if l.strip()]
-    assert runs[-1]["status"] == "skipped"
+    assert runs[-1]["status"] == "completed"
 
 
-def test_run_pins_cheap_model(tmp_path: Path) -> None:
-    # Regression: background mining must dispatch on a cheap model (haiku), not the
-    # expensive session default (real usage showed ~$1/run on the default model).
-    argv_log = tmp_path / "argv.log"
-    bin_ = _fake_claude(tmp_path, f'printf "%s\\n" "$*" >> "{argv_log}"\ncat <<\'EOF\'\n{_ENVELOPE}\nEOF')
+def test_run_emits_deterministic_proposal_when_background_off(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # FORGE_NO_BACKGROUND forces the deterministic path: the miner still mines the
+    # semantic episodes and emits a skeleton proposal — no LLM, no crash.
+    monkeypatch.setenv("FORGE_NO_BACKGROUND", "1")
     forge = tmp_path / ".forge"
-    _smb.run(forge, session_id="s", cwd=str(tmp_path), claude_bin=bin_)
-    assert "--model haiku" in argv_log.read_text()
+    records: list[dict] = []
+    # Three distinct SUCCESSFUL fix episodes with differing names → one candidate.
+    for i in range(3):
+        records += _fix_episode(f"src/a{i}.py", "pytest", f"test_a{i}.py", session=f"s{i}")
+    _write_log(forge, records)
+
+    status = _smb.run(forge, session_id="sess", cwd=str(tmp_path), now=NOW)
+    assert status == "completed"
+
+    proposals = list((forge / "proposed-skills").glob("*/SKILL.md"))
+    assert proposals, "deterministic miner should emit at least one proposal"
+    body = proposals[0].read_text()
+    assert "status: proposed" in body
+    assert "source: deterministic" in body  # degraded, never an LLM call
 
 
-def test_prompt_targets_canonical_approval_artifact() -> None:
-    # T-145: the background miner must produce the SAME artifact as the inline miner —
-    # `.forge/proposed-skills/<slug>/SKILL.md` — so both feed the identical approval
-    # flow. Regression guard against reverting to the dead-end `proposals.jsonl`.
-    assert "proposed-skills" in _smb._PROMPT
-    assert "SKILL.md" in _smb._PROMPT
-    assert "proposals.jsonl" not in _smb._PROMPT
+def test_run_honors_blacklist(tmp_path: Path, monkeypatch) -> None:
+    # Clean migration: a blacklisted motif signature is not re-proposed.
+    monkeypatch.setenv("FORGE_NO_BACKGROUND", "1")
+    forge = tmp_path / ".forge"
+    records: list[dict] = []
+    for i in range(3):
+        records += _fix_episode(f"src/a{i}.py", "pytest", f"test_a{i}.py", session=f"s{i}")
+    _write_log(forge, records)
+
+    # First run to discover the signature this stream produces, then blacklist it.
+    _smb.run(forge, session_id="sess", cwd=str(tmp_path), now=NOW)
+    first = sorted((forge / "proposed-skills").glob("*/SKILL.md"))
+    assert first
+    sig_line = next(
+        ln for ln in first[0].read_text().splitlines() if "Pattern signature:" in ln
+    )
+    signature = sig_line.split("`")[1]
+
+    # New forge dir, same stream, signature blacklisted → nothing emitted.
+    forge2 = tmp_path / ".forge2"
+    _write_log(forge2, records)
+    forge2.mkdir(parents=True, exist_ok=True)
+    (forge2 / "skill-blacklist.txt").write_text(signature + "\n", encoding="utf-8")
+    _smb.run(forge2, session_id="sess", cwd=str(tmp_path), now=NOW)
+    assert not list((forge2 / "proposed-skills").glob("*/SKILL.md"))
+
+
+def test_run_preserves_existing_proposal_dir(tmp_path: Path, monkeypatch) -> None:
+    # Clean migration: an existing proposed-skills/<slug>/ (e.g. a user edit) is
+    # never clobbered by a re-mine.
+    monkeypatch.setenv("FORGE_NO_BACKGROUND", "1")
+    forge = tmp_path / ".forge"
+    records: list[dict] = []
+    for i in range(3):
+        records += _fix_episode(f"src/a{i}.py", "pytest", f"test_a{i}.py", session=f"s{i}")
+    _write_log(forge, records)
+    _smb.run(forge, session_id="sess", cwd=str(tmp_path), now=NOW)
+    slug_dir = sorted((forge / "proposed-skills").glob("*"))[0]
+    sentinel = slug_dir / "SKILL.md"
+    sentinel.write_text("USER EDIT", encoding="utf-8")
+
+    _smb.run(forge, session_id="sess", cwd=str(tmp_path), now=NOW)
+    assert sentinel.read_text() == "USER EDIT"  # untouched
+
+
+def test_run_never_raises_on_garbage_log(tmp_path: Path) -> None:
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "session-log.jsonl").write_text("not json\n{broken\n", encoding="utf-8")
+    status = _smb.run(forge, session_id="sess", cwd=str(tmp_path), now=NOW)
+    # Malformed lines are skipped by the fail-soft reader; run still completes.
+    assert status == "completed"
+
+
+def test_run_no_longer_references_ngram_artifact() -> None:
+    # T-183 regression guard: the dead-end proposals.jsonl / patterns.jsonl n-gram
+    # path must be fully retired from the worker.
+    src = _mod_path.read_text()
+    assert "proposals.jsonl" not in src
+    assert "patterns.jsonl" not in src
+    assert "skill_miner_v2" in src  # drives v2
 
 
 def test_main_cli_smoke(tmp_path: Path) -> None:
-    bin_ = _fake_claude(tmp_path, f"cat <<'EOF'\n{_ENVELOPE}\nEOF")
     forge = tmp_path / ".forge"
-    rc = _smb.main(["--forge-dir", str(forge), "--session", "s",
-                    "--cwd", str(tmp_path), "--claude-bin", bin_])
+    rc = _smb.main(["--forge-dir", str(forge), "--session", "s", "--cwd", str(tmp_path)])
     assert rc == 0
     assert (forge / "skill-miner-runs.jsonl").exists()

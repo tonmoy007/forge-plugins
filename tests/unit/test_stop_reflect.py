@@ -189,7 +189,7 @@ class TestGateCheck:
 
 class TestSkillMining:
     def test_skill_mining_spawn_no_crash(self, tmp_path):
-        """mine-skills.py exists (T-027) and is spawned async; hook should not crash."""
+        """skill_miner_bg.py (the v2 semantic miner driver) is spawned async; hook should not crash."""
         _make_state(tmp_path, stage=3)
         r = _run({"hook_event_name": "Stop", "session_id": "s1"}, cwd=str(tmp_path))
         assert r.returncode == 0

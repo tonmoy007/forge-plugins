@@ -2,10 +2,13 @@
 """PostToolUse hook: session logging, stage-6 activity tracking, pattern tracking.
 
 Writes to:
-  .forge/session-log.jsonl — every tool call (file, success, stage marker)
+  .forge/session-log.jsonl — every tool call (file, success, stage marker);
+                            the v0.3.5 semantic miner (`skill_miner_v2.py`,
+                            driven by `skill_miner_bg.py`) consumes this stream
   .forge/patterns.jsonl   — sliding 3-tool window with stable signature
-                            (one entry per tool call once ≥3 tools are in the log;
-                            downstream `mine-skills.py` aggregates by signature)
+                            (legacy v1 n-gram bus; retained for back-compat, no
+                            longer on any active skill-mining path — see
+                            `references/skill-mining.md`)
 
 No stdout output. Never blocks. Always exits 0.
 """

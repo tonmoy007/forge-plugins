@@ -36,8 +36,7 @@ complete and ask whether to proceed early (acceptable for mid-cycle pulse checks
 Refresh the skill-mining results so the retro shows the latest proposals:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/mine-skills.py --cwd . \
-  --plugin-dir ${CLAUDE_PLUGIN_ROOT}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/skill_miner_bg.py --forge-dir .forge --cwd .
 ```
 
 ## Steps
@@ -191,6 +190,7 @@ The skill worked correctly if:
 - If the user disagrees with a bullet, treat the disagreement as a correction
   (`prompt-submit.py` will flag it) and add a lesson via the standard flow rather
   than silently editing the retro.
-- This skill calls `mine-skills.py` and `skill-approval.py list` directly. If
-  either is missing in the project's `.claude-plugin/` install (older Forge
-  version), surface that clearly rather than failing silently.
+- This skill calls `skill_miner_bg.py` (the v0.3.5 semantic miner) and
+  `skill-approval.py list` directly. If either is missing in the project's
+  `.claude-plugin/` install (older Forge version), surface that clearly rather
+  than failing silently.

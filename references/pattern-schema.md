@@ -3,6 +3,11 @@
 > Versioned schema for the pattern bus that feeds the skill-miner
 > (REQ-PATTERN-001 / T-120). One JSON object per line. `post-tool-use.py` is the
 > producer; `scripts/mine-skills.py` is the consumer.
+>
+> **Deprecated (v0.3.5, REQ-SM-010):** this n-gram pattern bus is the legacy v1
+> path. The active skill-miner is now the semantic pipeline in
+> `scripts/skill_miner_v2.py` (it consumes `.forge/session-log.jsonl`, not this
+> bus). See `references/skill-mining.md`. This schema is retained for back-compat.
 
 ## Common envelope
 
