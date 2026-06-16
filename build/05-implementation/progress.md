@@ -5,38 +5,34 @@
 
 ## Current State
 
-- **v0.3.6 (context-aware autopilot) BUILT on `feat/v0.3.6-context-aware`** — at a
-  configurable context threshold, autopilot checkpoints → compacts → continues.
-  Background: `should_rotate_for_context` rotates the reused session on a real
-  token-pressure signal (`usage.input_tokens`) past `context_threshold_percent ×
-  context_window_size` (T-185); shared atomic, schema-versioned checkpoint
-  `.forge/autopilot-checkpoint.json` + `checkpoint` subcommand, run-log idempotency
-  (T-186). In-session: new `PreCompact` hook checkpoints before native compaction
-  (T-187); `SessionStart(source=compact)` re-injects resume state (T-188). Docs
-  (T-189). Opt-in, default 80%; zero change when `context_window_size` unset. 1496
-  tests pass; validate 0; full-pipeline 12/12. Manifests 0.3.6; CHANGELOG `[0.3.6]`.
-  SRS `build/01-srs/srs-v0.3.6.md`, DAG `build/04-plan/task-dag-v0.3.6.md`.
-  **Pre-release verification + ship (PR develop→main→tag v0.3.6→mirror) in progress.**
+- **v0.3.6 (context-aware autopilot) RELEASED** — at a configurable context threshold,
+  autopilot checkpoints → compacts → continues. Background: `should_rotate_for_context`
+  rotates the reused session on a real token-pressure signal (`usage.input_tokens`) past
+  `context_threshold_percent × context_window_size` (T-185); shared atomic,
+  schema-versioned checkpoint `.forge/autopilot-checkpoint.json` + `checkpoint` subcommand,
+  run-log idempotency (T-186). In-session: new `PreCompact` hook checkpoints before native
+  compaction (T-187); `SessionStart(source=compact)` re-injects resume state (T-188). Docs
+  (T-189). Opt-in, default 80%; zero change when `context_window_size` unset. Tag `v0.3.6`
+  (merge `029f2c0`) on origin + polygon; GitHub releases published; manifests 0.3.6. 1496
+  tests pass; validate 0; full-pipeline 12/12. SRS `build/01-srs/srs-v0.3.6.md`, DAG
+  `build/04-plan/task-dag-v0.3.6.md`.
 
-- **v0.3.5 (semantic skill mining + skill-creator) BUILT on `feat/v0.3.5-skill-mining`** —
-  replaces the tool-name-n-gram miner with a semantic, success-gated,
-  anti-unification pipeline: enrichment + episode segmentation
-  (`_trace_semantics.py`, T-177), anti-unify motif miner + success gate
-  (`_antiunify.py` / `skill_miner_v2.py`, T-178), LLM induction w/ graceful
-  degradation (T-179), `/forge:skill-creator` + agentskills.io `SKILL.md`
-  emission (T-180), replay verification (`skill_verify.py`, T-181), library
-  curation (`skill_curate.py`, T-182), n-gram path retired + docs (T-183).
-  Built autonomously via a fan-out workflow (sequential core spine →
-  parallel tail → integrate → adversarial verify). 1473 tests pass; validate
-  0; full-pipeline 12/12. Manifests 0.3.5; CHANGELOG `[0.3.5]`. SRS
-  `build/01-srs/srs-v0.3.5.md`, DAG `build/04-plan/task-dag-v0.3.5.md`.
-  **Pre-release verification + ship (PR develop→main→tag v0.3.5→mirror) in progress.**
-- **v0.3.4 (M4 sprint) BUILT on `feat/v0.3.4-m4-sprint`** — closes the long-deferred v0.2
-  M4 backlog: `/forge:sprint` plan/review as a view over the task DAG (T-153),
-  `docs/forge-sync.md` cross-machine guidance + opt-in local-only telemetry (T-154), and a
-  cross-platform hook-timeout fix (Windows degrades, never crashes; T-155). Manifests
-  0.3.4; CHANGELOG `[0.3.4]`. **Pre-release verification + ship (PR develop→main→tag
-  v0.3.4→mirror) in progress.**
+- **v0.3.5 (semantic skill mining + skill-creator) RELEASED** — replaces the
+  tool-name-n-gram miner with a semantic, success-gated, anti-unification pipeline:
+  enrichment + episode segmentation (`_trace_semantics.py`, T-177), anti-unify motif miner
+  + success gate (`_antiunify.py` / `skill_miner_v2.py`, T-178), LLM induction w/ graceful
+  degradation (T-179), `/forge:skill-creator` + agentskills.io `SKILL.md` emission (T-180),
+  replay verification (`skill_verify.py`, T-181), library curation (`skill_curate.py`,
+  T-182), n-gram path retired + docs (T-183). Built autonomously via a fan-out workflow
+  (sequential core spine → parallel tail → integrate → adversarial verify). Tag `v0.3.5`
+  (merge `3da32b8`) on origin + polygon; GitHub releases published; manifests 0.3.5. 1473
+  tests pass; validate 0; full-pipeline 12/12. SRS `build/01-srs/srs-v0.3.5.md`, DAG
+  `build/04-plan/task-dag-v0.3.5.md`.
+- **v0.3.4 (M4 sprint) RELEASED** — closes the long-deferred v0.2 M4 backlog:
+  `/forge:sprint` plan/review as a view over the task DAG (T-153), `docs/forge-sync.md`
+  cross-machine guidance + opt-in local-only telemetry (T-154), and a cross-platform
+  hook-timeout fix (Windows degrades, never crashes; T-155). Tag `v0.3.4` on origin +
+  polygon; GitHub releases published; manifests 0.3.4; CHANGELOG `[0.3.4]`.
 - **v0.3.3 (complete autonomy + modernized harness) RELEASED** — modernized harness
   (T-167..T-170, folded; no separate v0.3.2 tag) + complete local autonomy: self-heal
   (T-172), verifier subagents (T-173), `--unattended` (T-174), enforcing rules (T-175).
@@ -47,7 +43,9 @@
   (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
   polygon; GitHub releases published. SRS `build/01-srs/srs-v0.3.md`, DAG
   `build/04-plan/task-dag-v0.3.md`.
-- **NEXT**: finish shipping v0.3.4. The v0.2 M4 backlog is now closed.
+- **NEXT**: v0.3.6 is shipped (both remotes, tag + releases). No active build. Future:
+  v0.3.7+ (see ROADMAP "Out of scope" notes — in-session configurable-% trigger awaits
+  upstream Claude Code support; cross-project skill graduation).
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
   you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
   (sprint M4, T-153–156, deferred).
