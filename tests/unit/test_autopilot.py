@@ -409,6 +409,68 @@ def test_dispatch_surfaces_input_tokens(tmp_path, monkeypatch):
     assert out["input_tokens"] == 170000  # surfaced for the context-pressure check
 
 
+# --- v0.3.6 checkpoint artifact (REQ-CTX-004, 005, 008) --------------------
+
+def test_read_checkpoint_absent_returns_empty(tmp_path):
+    assert _ap.read_checkpoint(tmp_path / ".forge") == {}
+
+
+def test_read_checkpoint_malformed_returns_empty(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / _ap._CHECKPOINT_NAME).write_text("{not json")
+    assert _ap.read_checkpoint(forge) == {}
+
+
+def test_write_checkpoint_round_trips(tmp_path):
+    forge = tmp_path / ".forge"
+    ok = _ap.write_checkpoint(forge, {"current_stage": 6, "remaining_stages": [6, 7],
+                                      "dispatch_count": 3, "last_input_tokens": 170000,
+                                      "last_session_id": "S", "next_action": "resume at 6"})
+    assert ok is True
+    cp = _ap.read_checkpoint(forge)
+    assert cp["current_stage"] == 6
+    assert cp["remaining_stages"] == [6, 7]
+    assert cp["last_input_tokens"] == 170000
+    assert cp["schema_version"] == _ap._CHECKPOINT_SCHEMA_VERSION
+    assert cp["ts"]  # stamped
+
+
+def test_write_checkpoint_is_atomic_no_tmp_left(tmp_path):
+    forge = tmp_path / ".forge"
+    _ap.write_checkpoint(forge, {"current_stage": 1})
+    assert list(forge.glob("*.tmp")) == []
+
+
+def test_write_checkpoint_preserves_run_started_at(tmp_path):
+    forge = tmp_path / ".forge"
+    _ap.write_checkpoint(forge, {"current_stage": 1})
+    first = _ap.read_checkpoint(forge)["run_started_at"]
+    _ap.write_checkpoint(forge, {"current_stage": 2})
+    assert _ap.read_checkpoint(forge)["run_started_at"] == first  # stable across updates
+
+
+def test_build_and_write_checkpoint_derives_from_planner(tmp_path):
+    _make_state(tmp_path, 6)
+    ok = _ap.build_and_write_checkpoint(tmp_path, dispatch_count=2,
+                                        last_input_tokens=170000, last_session_id="S")
+    assert ok is True
+    cp = _ap.read_checkpoint(tmp_path / ".forge")
+    assert cp["current_stage"] == 6
+    assert cp["remaining_stages"][0] == 6
+    assert cp["last_input_tokens"] == 170000
+    assert "6" in cp["next_action"]
+
+
+def test_checkpoint_cli_writes_artifact(tmp_path):
+    _make_state(tmp_path, 6)
+    res = subprocess.run([PYTHON, str(_mod_path), "checkpoint", "--cwd", str(tmp_path),
+                          "--dispatch-count", "2", "--last-input-tokens", "170000",
+                          "--session", "S"], capture_output=True, text=True)
+    assert res.returncode == 0
+    assert (tmp_path / ".forge" / _ap._CHECKPOINT_NAME).exists()
+
+
 def test_run_stage_rotate_starts_fresh_session(tmp_path, monkeypatch):
     monkeypatch.delenv("FORGE_NO_BACKGROUND", raising=False)
     _caps(tmp_path / ".forge", True)

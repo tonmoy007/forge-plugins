@@ -434,6 +434,82 @@ def finish_session(forge_dir) -> dict:
     return {"status": "idle"}
 
 
+# --------------------------------------------------------------------------- #
+# Checkpoint (REQ-CTX-004..008, v0.3.6) — a durable, schema-versioned snapshot
+# of "where the run is / what's next", written BEFORE a context boundary (a
+# background session rotation, or a native in-session compaction via the
+# PreCompact hook) so the run resumes cleanly. Stage-level idempotency stays in
+# the run-log (`autopilot-runs.jsonl` + `--resume`); the checkpoint adds the
+# next-action pointer. `.forge`-only, atomic, never raises.
+# --------------------------------------------------------------------------- #
+_CHECKPOINT_NAME = "autopilot-checkpoint.json"
+_CHECKPOINT_SCHEMA_VERSION = 1
+
+
+def read_checkpoint(forge_dir) -> dict:
+    """Read `.forge/autopilot-checkpoint.json` ({} if absent/unreadable/malformed). Never raises."""
+    path = Path(forge_dir) / _CHECKPOINT_NAME
+    try:
+        if not path.exists():
+            return {}
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_checkpoint(forge_dir, fields: dict) -> bool:
+    """Atomically write/refresh the checkpoint, stamping `schema_version` + `ts` and
+    preserving `run_started_at` across updates (existing checkpoint → session start → now).
+    `.forge`-only; mirrors `_write_session`'s temp-then-rename. Never raises.
+    """
+    forge = Path(forge_dir)
+    fields = dict(fields) if isinstance(fields, dict) else {}
+    existing = read_checkpoint(forge)
+    run_started = (existing.get("run_started_at")
+                   or read_session(forge).get("started_at")
+                   or _now_iso())
+    payload = {"schema_version": _CHECKPOINT_SCHEMA_VERSION, "run_started_at": run_started}
+    payload.update(fields)
+    payload["ts"] = _now_iso()
+    try:
+        forge.mkdir(parents=True, exist_ok=True)
+        tmp = forge / (_CHECKPOINT_NAME + ".tmp")
+        tmp.write_text(json.dumps(payload))
+        os.replace(tmp, forge / _CHECKPOINT_NAME)
+        return True
+    except OSError:
+        return False
+
+
+def build_and_write_checkpoint(
+    cwd,
+    *,
+    dispatch_count: int = 0,
+    last_input_tokens: Optional[int] = None,
+    last_session_id: Optional[str] = None,
+    next_action: str = "",
+) -> bool:
+    """Derive the checkpoint fields from the deterministic planner (current stage +
+    remaining stages, skipping completed work via `--resume`) and write it. Used by both
+    the `checkpoint` CLI subcommand and the PreCompact hook. Never raises.
+    """
+    plan = plan_stages(cwd, resume=True)
+    remaining = [p["stage"] for p in plan] if plan else []
+    current = remaining[0] if remaining else None
+    if not next_action:
+        next_action = (f"resume at stage {current} via {plan[0]['skill']}"
+                       if plan else "autopilot run complete — nothing remaining")
+    return write_checkpoint(Path(cwd) / ".forge", {
+        "current_stage": current,
+        "remaining_stages": remaining,
+        "dispatch_count": dispatch_count,
+        "last_input_tokens": _coerce_int(last_input_tokens),
+        "last_session_id": last_session_id,
+        "next_action": next_action,
+    })
+
+
 def _background_available(forge_dir) -> tuple[bool, str]:
     """Is the background substrate usable? Honors the kill switch + capability cache."""
     if os.environ.get("FORGE_NO_BACKGROUND") == "1":
@@ -684,7 +760,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     parser.add_argument("command", nargs="?", default="plan",
                         choices=("plan", "record", "dispatch", "heal", "verify", "answers",
-                                 "start", "stop", "status", "finish"),
+                                 "start", "stop", "status", "finish", "checkpoint"),
                         help="plan (default) | record a stage | dispatch (background) | "
                              "heal a blocked stage (background) | verify a passed stage "
                              "(background) | answers (echo unattended answers file) | "
@@ -780,6 +856,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.command == "answers":
         print(json.dumps(read_answers(Path(args.cwd) / ".forge")))
         return 0
+
+    if args.command == "checkpoint":
+        ok = build_and_write_checkpoint(
+            args.cwd, dispatch_count=args.dispatch_count,
+            last_input_tokens=args.last_input_tokens, last_session_id=args.session,
+        )
+        if not ok:
+            print("warning: checkpoint write failed", file=sys.stderr)
+        print(json.dumps(read_checkpoint(Path(args.cwd) / ".forge")))
+        return 0  # never fail the loop on a checkpoint write
 
     if args.command in ("start", "stop", "status", "finish"):
         forge = Path(args.cwd) / ".forge"
