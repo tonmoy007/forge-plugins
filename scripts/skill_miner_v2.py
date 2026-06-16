@@ -49,6 +49,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -434,3 +435,166 @@ def _induce_one(
         return _deterministic_skill(candidate)
     parsed = _parse_induction_result(getattr(res, "result", None), candidate)
     return parsed if parsed is not None else _deterministic_skill(candidate)
+
+
+# ---------------------------------------------------------------------------
+# Emission (REQ-SM-006) — write each InducedSkill as an agentskills.io SKILL.md
+# at .forge/proposed-skills/<slug>/SKILL.md. Deterministic; never raises. The
+# output is consumed by the EXISTING skill-approval flow (it carries a
+# `Pattern signature:` line and `status: proposed`), so approve/reject/blacklist
+# are preserved, not duplicated (REQ-NF-019). LILO: never emit an unnamed
+# proposal — a deterministic fallback name is always supplied.
+# ---------------------------------------------------------------------------
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+# Fallback name when an induced proposal has no usable name (never emit unnamed).
+_FALLBACK_NAME = "recurring-procedure"
+
+
+def _slugify(name: object) -> str:
+    """Kebab-case slug from a name; falls back to `_FALLBACK_NAME` if empty."""
+    text = str(name or "").strip().lower()
+    slug = _SLUG_RE.sub("-", text).strip("-")
+    return slug or _FALLBACK_NAME
+
+
+def _motif_signature(candidate: object) -> str:
+    """Stable signature for a candidate: its `->`-joined verb motif.
+
+    This is the identity the blacklist keys on, so rejecting a proposal blocks
+    the same motif from being re-proposed (mirrors the v1 signature contract)."""
+    motif = tuple(getattr(candidate, "motif", ()) or ())
+    return "->".join(motif) if motif else _FALLBACK_NAME
+
+
+def _load_blacklist(forge_dir: Path) -> set[str]:
+    """Read `.forge/skill-blacklist.txt` signatures, defensively. Never raises."""
+    path = forge_dir / "skill-blacklist.txt"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    out: set[str] = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            out.add(line)
+    return out
+
+
+def render_skill_md(skill: object) -> str:
+    """Render an `InducedSkill` as an agentskills.io SKILL.md document.
+
+    Deterministic and never-raises: a malformed/None `skill` degrades to a
+    minimal, still-valid named proposal rather than failing (REQ-NF-016).
+
+    Frontmatter carries `name` + a non-empty THIRD-PERSON `description` +
+    `status: proposed`. The body has the standard sections (When to Use,
+    Procedure, Pitfalls, Verification, Provenance) with source-trace-line
+    citations under Provenance, plus a `Pattern signature:` line so the existing
+    skill-approval flow can blacklist it on reject.
+    """
+    name = _slugify(getattr(skill, "name", None))
+    description = str(getattr(skill, "description", "") or "").strip()
+    if not description:
+        description = (
+            f"Performs the recurring {name.replace('-', ' ')} workflow mined from "
+            "repeated successful episodes. Use when this procedure recurs."
+        )
+    procedure = getattr(skill, "procedure", None)
+    if not isinstance(procedure, (list, tuple)) or not procedure:
+        procedure = ["(no steps recorded)"]
+    citations = getattr(skill, "citations", None)
+    if not isinstance(citations, (list, tuple)) or not citations:
+        citations = ["(no citations)"]
+    source = str(getattr(skill, "source", "deterministic") or "deterministic")
+    candidate = getattr(skill, "candidate", None)
+    support = int(getattr(candidate, "support", 0) or 0)
+    signature = _motif_signature(candidate)
+
+    proc_block = "\n".join(
+        f"{i}. {str(step).strip()}" for i, step in enumerate(procedure, start=1)
+    )
+    cite_block = "\n".join(f"- `{str(c).strip()}`" for c in citations)
+
+    return (
+        f"---\n"
+        f"name: {name}\n"
+        f"description: {description}\n"
+        f"status: proposed\n"
+        f"---\n"
+        f"\n"
+        f"# {name} (proposed)\n"
+        f"\n"
+        f"> PROPOSED skill (auto-mined, source: {source}). Review, test via "
+        f"`/forge:skill-creator`, and approve before it installs.\n"
+        f"\n"
+        f"## When to Use\n"
+        f"\n"
+        f"{description}\n"
+        f"\n"
+        f"## Procedure\n"
+        f"\n"
+        f"{proc_block}\n"
+        f"\n"
+        f"## Pitfalls\n"
+        f"\n"
+        f"- This procedure was generalized from {support} successful episodes; the "
+        f"parameters may not cover every variation — confirm the steps fit your case.\n"
+        f"- Auto-mined: verify each step is still correct before relying on it.\n"
+        f"\n"
+        f"## Verification\n"
+        f"\n"
+        f"Replay this procedure against a source episode and confirm it reproduces "
+        f"the successful outcome (for coding, the oracle is the test suite: red→green) "
+        f"before approving.\n"
+        f"\n"
+        f"## Provenance\n"
+        f"\n"
+        f"- Pattern signature: `{signature}`\n"
+        f"- Induction source: {source}\n"
+        f"- Distinct successful episodes: {support}\n"
+        f"- Source-trace citations:\n"
+        f"{cite_block}\n"
+    )
+
+
+def write_proposals(induced: object, *, forge_dir: object) -> list[Path]:
+    """Persist each InducedSkill as `.forge/proposed-skills/<slug>/SKILL.md`.
+
+    Returns the list of paths written, in input order. Never raises.
+
+    Skips a slug whose directory already exists (so user edits survive
+    re-mining, mirroring the v1 mine-skills.py contract) and skips any candidate
+    whose motif signature is blacklisted (REQ-NF-019). A `None`/malformed
+    `forge_dir` or `induced` degrades to writing nothing.
+    """
+    if not isinstance(induced, (list, tuple)) or not induced:
+        return []
+    if forge_dir is None:
+        return []
+    try:
+        root = Path(forge_dir) / "proposed-skills"
+    except TypeError:
+        return []
+    blacklist = _load_blacklist(Path(forge_dir))
+
+    written: list[Path] = []
+    for skill in induced:
+        if skill is None:
+            continue
+        signature = _motif_signature(getattr(skill, "candidate", None))
+        if signature in blacklist:
+            continue
+        slug = _slugify(getattr(skill, "name", None))
+        dest_dir = root / slug
+        if dest_dir.exists():
+            continue  # preserve user edits / earlier proposals
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / "SKILL.md"
+            dest.write_text(render_skill_md(skill), encoding="utf-8")
+        except OSError:
+            continue
+        written.append(dest)
+    return written

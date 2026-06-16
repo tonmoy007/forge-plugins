@@ -382,3 +382,186 @@ def test_induce_falls_back_when_dispatch_raises(tmp_path) -> None:
 
 def test_induction_model_is_cheap() -> None:
     assert sm_mod.INDUCTION_MODEL == "haiku"
+
+
+# ---------------------------------------------------------------------------
+# T-180 (REQ-SM-006, AC-SM-005/006) — agentskills.io SKILL.md emission. Each
+# promoted+induced candidate is rendered as .forge/proposed-skills/<slug>/SKILL.md
+# in the standard format: YAML frontmatter (name + non-empty third-person
+# description) + body sections When to Use / Procedure / Pitfalls / Verification
+# / Provenance (with source-trace-line citations). Never emit an unnamed proposal.
+# The render is deterministic and never raises; it reuses _state_lib._split_frontmatter
+# for parse round-trips. Output is consumable by the EXISTING skill-approval flow
+# (carries a `Pattern signature:` line), preserving approve/reject/blacklist.
+# ---------------------------------------------------------------------------
+
+
+def _one_induced_deterministic():
+    """A single deterministic (background-off) InducedSkill from a real candidate."""
+    cands = _three_episode_candidates()
+    induced = sm_mod.induce(cands, forge_dir=Path("/nonexistent"), available=False)
+    assert len(induced) == 1
+    return induced[0]
+
+
+def _one_induced_llm():
+    """A single LLM-sourced InducedSkill with a clean name + description."""
+    cands = _three_episode_candidates()
+
+    def fake_dispatch(prompt, **kwargs):
+        import json as _json
+
+        payload = {
+            "name": "red-green-regression-fix",
+            "description": (
+                "Drives a failing test to green by inspecting the implicated source, "
+                "patching it, and adding a regression test. Use when a test is red."
+            ),
+            "procedure": [
+                "Run the failing test to confirm red",
+                "Inspect the implicated source file",
+                "Patch the source file",
+                "Re-run the test to confirm green",
+                "Add a regression test",
+            ],
+            "citations": ["src/a.py:run-tests", "src/b.py:patch"],
+        }
+        return _Dispatched("ok", result=_json.dumps(payload))
+
+    return sm_mod.induce(
+        cands, forge_dir=Path("/tmp"), available=True, dispatch_fn=fake_dispatch
+    )[0]
+
+
+def _frontmatter_of(text: str) -> dict:
+    """Parse the SKILL.md frontmatter the same way the repo does (_state_lib)."""
+    sl_path = _scripts / "_state_lib.py"
+    sl_spec = importlib.util.spec_from_file_location("_state_lib", sl_path)
+    assert sl_spec and sl_spec.loader
+    sl_mod = importlib.util.module_from_spec(sl_spec)
+    sys.modules["_state_lib"] = sl_mod
+    sl_spec.loader.exec_module(sl_mod)
+    meta, _body = sl_mod._split_frontmatter(text)
+    return meta
+
+
+def test_render_skill_md_is_valid_agentskills_format() -> None:
+    md = sm_mod.render_skill_md(_one_induced_llm())
+    meta = _frontmatter_of(md)
+    # Frontmatter: name + non-empty third-person description (AC-SM-005/006).
+    assert meta.get("name") == "red-green-regression-fix"
+    assert isinstance(meta.get("description"), str) and meta["description"].strip()
+    # status: proposed is carried so the approval flow can strip it on install.
+    assert meta.get("status") == "proposed"
+    # Body sections per the agentskills.io standard.
+    for section in (
+        "## When to Use",
+        "## Procedure",
+        "## Pitfalls",
+        "## Verification",
+        "## Provenance",
+    ):
+        assert section in md, f"missing section: {section}"
+
+
+def test_render_skill_md_carries_provenance_citations() -> None:
+    md = sm_mod.render_skill_md(_one_induced_llm())
+    # Source-trace-line citations appear under Provenance (REQ-SM-006).
+    assert "src/a.py:run-tests" in md
+    assert "src/b.py:patch" in md
+    # A Pattern signature line keeps the existing approval/blacklist flow working.
+    assert "Pattern signature:" in md
+
+
+def test_render_skill_md_never_emits_unnamed_proposal() -> None:
+    # A deterministic skeleton proposal still carries a real, non-empty name.
+    md = sm_mod.render_skill_md(_one_induced_deterministic())
+    meta = _frontmatter_of(md)
+    assert isinstance(meta.get("name"), str) and meta["name"].strip()
+    assert isinstance(meta.get("description"), str) and meta["description"].strip()
+
+
+def test_render_skill_md_is_parseable_by_skill_approval(tmp_path) -> None:
+    """The emitted SKILL.md must be consumable by the EXISTING skill-approval
+    flow (REQ-NF-019: approval/blacklist preserved, not duplicated)."""
+    sa_path = _scripts / "skill-approval.py"
+    sa_spec = importlib.util.spec_from_file_location("skill_approval", sa_path)
+    assert sa_spec and sa_spec.loader
+    sa_mod = importlib.util.module_from_spec(sa_spec)
+    sys.modules["skill_approval"] = sa_mod
+    sa_spec.loader.exec_module(sa_mod)
+
+    md = sm_mod.render_skill_md(_one_induced_llm())
+    d = tmp_path / ".forge" / "proposed-skills" / "red-green-regression-fix"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(md, encoding="utf-8")
+
+    proposal = sa_mod._parse_proposal(d / "SKILL.md")
+    assert proposal is not None
+    assert proposal.name == "red-green-regression-fix"
+    assert proposal.signature  # non-empty signature for blacklist
+    assert proposal.description.strip()
+
+
+def test_render_skill_md_never_raises_on_garbage() -> None:
+    # A malformed/None induced object degrades to a minimal valid proposal,
+    # never raises (REQ-NF-016 hot-path discipline).
+    md = sm_mod.render_skill_md(None)  # type: ignore[arg-type]
+    assert isinstance(md, str)
+    meta = _frontmatter_of(md)
+    assert meta.get("name")
+
+
+def test_render_skill_md_is_deterministic() -> None:
+    skill = _one_induced_llm()
+    assert sm_mod.render_skill_md(skill) == sm_mod.render_skill_md(skill)
+
+
+# ---------------------------------------------------------------------------
+# T-180 — write_proposals: persist induced skills to .forge/proposed-skills/<slug>/.
+# Skips slugs that already exist (so user edits survive re-mining, like the v1
+# path) and honors the blacklist + already-installed names. Never raises.
+# ---------------------------------------------------------------------------
+
+
+def test_write_proposals_writes_skill_md(tmp_path) -> None:
+    induced = sm_mod.induce(
+        _three_episode_candidates(), forge_dir=Path("/nonexistent"), available=False
+    )
+    written = sm_mod.write_proposals(induced, forge_dir=tmp_path / ".forge")
+    assert len(written) == 1
+    path = written[0]
+    assert path.exists()
+    assert path.name == "SKILL.md"
+    assert path.parent.parent.name == "proposed-skills"
+    assert "## Provenance" in path.read_text(encoding="utf-8")
+
+
+def test_write_proposals_skips_existing_slug(tmp_path) -> None:
+    induced = _one_induced_llm()
+    forge_dir = tmp_path / ".forge"
+    slug_dir = forge_dir / "proposed-skills" / "red-green-regression-fix"
+    slug_dir.mkdir(parents=True)
+    user_edited = slug_dir / "SKILL.md"
+    user_edited.write_text("USER EDITED — do not clobber", encoding="utf-8")
+
+    written = sm_mod.write_proposals([induced], forge_dir=forge_dir)
+    assert written == []  # nothing written; user edit preserved
+    assert user_edited.read_text(encoding="utf-8") == "USER EDITED — do not clobber"
+
+
+def test_write_proposals_honors_blacklist(tmp_path) -> None:
+    induced = _one_induced_llm()
+    forge_dir = tmp_path / ".forge"
+    forge_dir.mkdir(parents=True)
+    # signature for this candidate == its motif signature
+    sig = sm_mod._motif_signature(induced.candidate)
+    (forge_dir / "skill-blacklist.txt").write_text(sig + "\n", encoding="utf-8")
+
+    written = sm_mod.write_proposals([induced], forge_dir=forge_dir)
+    assert written == []
+
+
+def test_write_proposals_never_raises_on_garbage(tmp_path) -> None:
+    assert sm_mod.write_proposals(None, forge_dir=tmp_path) == []  # type: ignore[arg-type]
+    assert sm_mod.write_proposals([], forge_dir=tmp_path) == []
