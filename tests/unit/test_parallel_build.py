@@ -344,3 +344,145 @@ def test_worktree_isolation_off_does_not_create_worktrees(tmp_path) -> None:
         [_task("T1")], done=set(), config=cfg, forge_dir=FORGE, feature="t",
         dispatch_fn=_echo_dispatch, repo=repo)
     assert ".forge-worktrees" not in _git(repo, "worktree", "list").stdout
+
+
+# --------------------------------------------------------------------------- #
+# AC-WF-009 / T-198 — adversarial-verify join (N skeptics, refute; majority of DISPATCHED)
+# --------------------------------------------------------------------------- #
+
+
+def _skeptic_dispatch(verdicts: list, recorded: list = None):
+    """A dispatch_fn for skeptic verifiers: each call pops the next verdict from `verdicts`.
+    A verdict of `"skip"` simulates a cost-cap drop (status='skipped' — NOT dispatched). Any other
+    value (`pass`/`fail`/garbage) is returned as a verifier envelope."""
+    seq = list(verdicts)
+
+    def dispatch(prompt, **kwargs):
+        if recorded is not None:
+            recorded.append({"prompt": prompt, **kwargs})
+        v = seq.pop(0) if seq else "pass"
+        if v == "skip":
+            return SimpleNamespace(status="skipped", reason="cost cap", result=None, cost_usd=0.0)
+        if v == "garbage":
+            return SimpleNamespace(status="ok", reason="", result="not json", cost_usd=0.001)
+        return SimpleNamespace(status="ok", reason="dispatched",
+                               result=json.dumps({"verdict": v}), cost_usd=0.002)
+
+    return dispatch
+
+
+def test_adversarial_admit_majority_pass_admits() -> None:
+    """3 skeptics, 2 admit (pass) + 1 refute (fail) ⇒ majority of 3 dispatched ⇒ admitted."""
+    verdict = _pb.adversarial_admit(
+        {"work": "x"}, node_id="T1", skeptics=3,
+        dispatch_fn=_skeptic_dispatch(["pass", "fail", "pass"]),
+        forge_dir=FORGE, feature="t")
+    assert verdict.admitted is True
+    assert verdict.dispatched == 3
+    assert verdict.refutations == 1
+
+
+def test_adversarial_admit_majority_refute_excludes() -> None:
+    """2 of 3 refute ⇒ no majority to admit ⇒ excluded with a reason."""
+    verdict = _pb.adversarial_admit(
+        {"work": "x"}, node_id="T1", skeptics=3,
+        dispatch_fn=_skeptic_dispatch(["fail", "fail", "pass"]),
+        forge_dir=FORGE, feature="t")
+    assert verdict.admitted is False
+    assert verdict.dispatched == 3
+    assert verdict.refutations == 2
+    assert "refut" in verdict.reason.lower() or "majority" in verdict.reason.lower()
+
+
+def test_adversarial_admit_tie_is_not_majority() -> None:
+    """A tie (1 admit / 1 refute of 2 dispatched) is NOT a strict majority ⇒ excluded."""
+    verdict = _pb.adversarial_admit(
+        {"work": "x"}, node_id="T1", skeptics=2,
+        dispatch_fn=_skeptic_dispatch(["pass", "fail"]),
+        forge_dir=FORGE, feature="t")
+    assert verdict.admitted is False
+    assert verdict.dispatched == 2
+
+
+def test_adversarial_cap_dropped_skeptic_does_not_lower_denominator() -> None:
+    """AC-WF-009 core: 5 intended, 1 cap-dropped ⇒ denominator is the 4 DISPATCHED, so a
+    3-of-4 admit majority is required — a cap drop must NOT silently lower the bar.
+
+    Here: 4 dispatched (1 skipped); verdicts pass,pass,fail,fail ⇒ 2 admit of 4 ⇒ NOT majority.
+    If the dropped skeptic had (wrongly) lowered the denominator to 3-of-5-intended logic, the
+    bar could be gamed; the denominator MUST be the 4 actually dispatched."""
+    verdict = _pb.adversarial_admit(
+        {"work": "x"}, node_id="T1", skeptics=5,
+        dispatch_fn=_skeptic_dispatch(["pass", "pass", "fail", "fail", "skip"]),
+        forge_dir=FORGE, feature="t")
+    assert verdict.dispatched == 4                       # the cap-dropped skeptic is excluded
+    assert verdict.admitted is False                     # 2 admit of 4 is not a majority
+    # And the denominator is NOT 5 (intended) — it's the 4 dispatched.
+    assert verdict.skeptics_intended == 5
+
+
+def test_adversarial_cap_drop_with_admit_majority_of_dispatched() -> None:
+    """5 intended, 1 cap-dropped ⇒ 4 dispatched; 3 admit / 1 refute ⇒ 3-of-4 IS a majority."""
+    verdict = _pb.adversarial_admit(
+        {"work": "x"}, node_id="T1", skeptics=5,
+        dispatch_fn=_skeptic_dispatch(["pass", "pass", "pass", "fail", "skip"]),
+        forge_dir=FORGE, feature="t")
+    assert verdict.dispatched == 4
+    assert verdict.refutations == 1
+    assert verdict.admitted is True
+
+
+def test_adversarial_all_skeptics_dropped_degrades_to_admit(tmp_path=None) -> None:
+    """If EVERY skeptic is cost-cap dropped (zero dispatched), the verifier is unavailable —
+    degrade to admit (an unavailable extra check must not block, REQ-NF-013), never raise."""
+    verdict = _pb.adversarial_admit(
+        {"work": "x"}, node_id="T1", skeptics=3,
+        dispatch_fn=_skeptic_dispatch(["skip", "skip", "skip"]),
+        forge_dir=FORGE, feature="t")
+    assert verdict.dispatched == 0
+    assert verdict.admitted is True                      # degrade-to-admit, not block
+
+
+def test_adversarial_skeptics_run_fresh_session_to_refute() -> None:
+    """Each skeptic dispatches fresh-session (resume forced None) and is prompted to refute."""
+    recorded: list = []
+    _pb.adversarial_admit(
+        {"work": "x"}, node_id="T1", skeptics=2,
+        dispatch_fn=_skeptic_dispatch(["pass", "pass"], recorded),
+        forge_dir=FORGE, feature="t", resume="STAGE-SESSION")
+    assert len(recorded) == 2
+    for c in recorded:
+        assert c["resume"] is None                       # fresh session — independence
+        assert "refute" in c["prompt"].lower()           # adversarial framing
+
+
+# --- adversarial join wired into the isolated build: refuted nodes excluded from merge ---
+
+
+@_needs_git
+def test_adversarial_join_excludes_refuted_node_from_merge(tmp_path) -> None:
+    """With `adversarial_verify` configured, a node a majority of skeptics refute is EXCLUDED from
+    the merge (its file never lands), while an admitted node merges."""
+    repo = _init_repo(tmp_path)
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, worktree_isolation=True, max_parallel=2)
+
+    def dispatch(prompt, **kwargs):
+        if "refute" in prompt.lower():                   # skeptic verifier
+            # Refute only T2; admit T1.
+            verdict = "fail" if "T2" in prompt else "pass"
+            return SimpleNamespace(status="ok", reason="", result=json.dumps({"verdict": verdict}),
+                                   cost_usd=0.001)
+        wt = kwargs.get("cwd")                            # build node
+        if wt:
+            (Path(wt) / f"{_tid_of(prompt)}.txt").write_text(f"{_tid_of(prompt)}\n")
+        return _ok({"prompt": prompt})
+
+    res = _pb.run_parallel_build(
+        [_task("T1"), _task("T2")], done=set(), config=cfg, forge_dir=FORGE, feature="t",
+        dispatch_fn=dispatch, repo=repo, adversarial_skeptics=3)
+    assert "T1" in res.results                            # admitted ⇒ merged
+    assert "T2" not in res.results                        # refuted ⇒ excluded
+    assert (repo / "T1.txt").exists()
+    assert not (repo / "T2.txt").exists()                 # refuted node's work never landed
+    assert any("T2" in r and ("refut" in r.lower() or "adversar" in r.lower())
+               for r in res.dropped_reasons)

@@ -31,6 +31,7 @@ _PLUGIN_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 import _workflow as _wf  # noqa: E402  (the dynamic-workflow engine — T-191/192/196)
 import _worktree as _wt  # noqa: E402  (git-worktree isolation lifecycle — T-197)
+import _verify  # noqa: E402  (shared fresh-session verifier primitive — T-192, reused by T-198)
 
 
 @dataclass
@@ -65,6 +66,107 @@ def _default_build_prompt(task_id: str) -> str:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Adversarial-verify join (REQ-WF-009 / T-198)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class AdmissionVerdict:
+    """The outcome of the N-skeptic adversarial gate for one built node."""
+
+    admitted: bool
+    reason: str
+    cost_usd: float = 0.0
+    skeptics_intended: int = 0
+    dispatched: int = 0       # skeptics that ACTUALLY ran (the admission denominator)
+    refutations: int = 0      # dispatched skeptics that returned a clean `fail` (a refutation)
+
+
+def _skeptic_prompt(node_id: str, obj, index: int, total: int) -> str:
+    """Prompt for ONE adversarial skeptic judging a built node (REQ-WF-009). The skeptic is told
+    to actively REFUTE — find a concrete reason the work is wrong — and return a schema-constrained
+    `fail` (refuted) or `pass` (could not refute) verdict. Fresh context (independence)."""
+    import json as _json
+    try:
+        rendered = _json.dumps(obj, sort_keys=True)
+    except (TypeError, ValueError):
+        rendered = repr(obj)
+    return (
+        f"You are adversarial skeptic {index} of {total} for parallel-build node {node_id!r}, "
+        f"running in fresh context. Your job is to REFUTE this work: actively look for a concrete "
+        f"defect (wrong behavior, missed requirement, broken test, regression). Do NOT modify "
+        f"anything. Return verdict \"fail\" ONLY if you found a real defect (a refutation); "
+        f"otherwise \"pass\". \n\nProduced result:\n{rendered}"
+    )
+
+
+def adversarial_admit(
+    obj,
+    *,
+    node_id: str,
+    skeptics: int,
+    dispatch_fn,
+    forge_dir,
+    feature: str,
+    model: Optional[str] = None,
+    schema: Optional[dict] = None,
+    claude_bin: Optional[str] = None,
+    resume: Optional[str] = None,
+    cwd: Optional[str] = None,
+) -> AdmissionVerdict:
+    """Gate a built node through `skeptics` independent adversarial verifiers (REQ-WF-009).
+
+    Each skeptic is a fresh-session, schema-constrained dispatch prompted to *refute* the work
+    (reusing the `_verify.run_verify` primitive, which forces `resume=None` + a verdict schema and
+    never raises). Admission is by **majority of DISPATCHED skeptics**: the denominator is the
+    skeptics that actually ran — a cost-cap drop (`status=="skipped"`) is excluded from BOTH the
+    numerator and the denominator, so it can NEVER silently lower the bar. A node is admitted iff
+    a strict majority of dispatched skeptics did *not* refute it (`admit_votes * 2 > dispatched`);
+    a tie is not a majority. If zero skeptics dispatch (all cap-dropped), the verifier is
+    unavailable — degrade to admit (an extra check must not block, REQ-NF-013). Never raises."""
+    intended = max(0, int(skeptics or 0))
+    base_kwargs = {
+        "forge_dir": forge_dir, "feature": feature, "model": model,
+        "claude_bin": claude_bin, "resume": resume, "cwd": cwd,
+    }
+
+    dispatched = 0
+    refutations = 0
+    cost = 0.0
+    for i in range(1, intended + 1):
+        res = _verify.run_verify(
+            _skeptic_prompt(node_id, obj, i, intended),
+            dispatch_fn, base_kwargs, schema=schema,
+        )
+        cost += float((res.get("cost_usd") if isinstance(res, dict) else 0.0) or 0.0)
+        # A cost-cap drop never ran — it counts toward NEITHER the denominator nor the bar.
+        if isinstance(res, dict) and res.get("status") == "skipped":
+            continue
+        dispatched += 1
+        if _verify.verdict_failed(res):
+            refutations += 1
+
+    if dispatched == 0:
+        # No skeptic ran (all cap-dropped / unavailable) ⇒ verifier degrades to admit.
+        return AdmissionVerdict(
+            admitted=True, reason="adversarial verify unavailable (0 skeptics dispatched) — admitted",
+            cost_usd=cost, skeptics_intended=intended, dispatched=0, refutations=0,
+        )
+
+    admit_votes = dispatched - refutations
+    admitted = admit_votes * 2 > dispatched  # strict majority of DISPATCHED; a tie is not majority
+    if admitted:
+        reason = f"adversarial verify: {admit_votes}/{dispatched} dispatched skeptics admitted"
+    else:
+        reason = (f"adversarial verify refuted: {refutations}/{dispatched} dispatched skeptics "
+                  f"refuted (no admit majority)")
+    return AdmissionVerdict(
+        admitted=admitted, reason=reason, cost_usd=cost,
+        skeptics_intended=intended, dispatched=dispatched, refutations=refutations,
+    )
+
+
 def run_parallel_build(
     tasks: list,
     done: set,
@@ -79,6 +181,7 @@ def run_parallel_build(
     claude_bin: Optional[str] = None,
     resume: Optional[str] = None,
     repo: Optional[Path] = None,
+    adversarial_skeptics: int = 0,
 ) -> "object":
     """Fan the ready task-DAG nodes out through the engine and return its `WorkflowResult`.
 
@@ -89,8 +192,11 @@ def run_parallel_build(
 
     When `config.worktree_isolation` is on AND `repo` is a git work tree, each ready node runs in
     its **own git worktree** (branch-per-node), commits, and merges at a join where git surfaces
-    conflicts (T-197). When worktrees are unavailable it **degrades to a sequential single
-    worktree** — the plain path with `max_parallel=1`. Never raises (the engine never raises)."""
+    conflicts (T-197). With `adversarial_skeptics > 0`, each built node is gated through that many
+    adversarial skeptics BEFORE its merge — admitted only on a majority of *dispatched* skeptics,
+    refuted nodes excluded (T-198). When worktrees are unavailable it **degrades to a sequential
+    single worktree** — the plain path with `max_parallel=1`. Never raises (the engine never
+    raises)."""
     ids = ready_nodes(tasks, done)
     if not ids:
         return _wf.WorkflowResult(results={}, completed=0, dropped=0, total_cost_usd=0.0)
@@ -101,6 +207,7 @@ def run_parallel_build(
                 ids, config=config, forge_dir=forge_dir, feature=feature,
                 dispatch_fn=dispatch_fn, build_prompt=build_prompt,
                 claude_bin=claude_bin, resume=resume, repo=Path(repo),
+                adversarial_skeptics=adversarial_skeptics,
             )
         # Worktrees unavailable ⇒ degrade to a sequential single-worktree run (REQ-WF-008).
         return _run_plain(
@@ -154,11 +261,13 @@ def _run_plain(
 
 def _run_isolated(
     ids, *, config, forge_dir, feature, dispatch_fn, build_prompt, claude_bin, resume, repo,
+    adversarial_skeptics: int = 0,
 ) -> "object":
-    """Worktree-isolated parallel build (REQ-WF-008). Create one worktree+branch per ready node,
-    fan the nodes out through the engine (each dispatching in its own worktree), then **at the
-    join** — sequentially, in deterministic id order (git cannot merge two branches into one tree
-    concurrently) — commit each completed node and merge its branch back; a conflicting merge
+    """Worktree-isolated parallel build (REQ-WF-008/009). Create one worktree+branch per ready
+    node, fan the nodes out through the engine (each dispatching in its own worktree), then **at
+    the join** — sequentially, in deterministic id order (git cannot merge two branches into one
+    tree concurrently) — optionally gate each built node through `adversarial_skeptics` skeptics
+    (T-198; refuted ⇒ excluded), then commit and merge its branch back; a conflicting merge
     EXCLUDES that node with a reason (never silent clobber). Every worktree is torn down in a
     `finally`, so teardown happens on success AND on any drop/crash. Never raises."""
     builder = build_prompt or _default_build_prompt
@@ -187,12 +296,24 @@ def _run_isolated(
             resume=resume, dispatch_fn=dispatch_fn, claude_bin=claude_bin,
         )
 
-        # Phase 3: join — sequential, deterministic id order. Commit each completed node then
-        # merge its branch; a conflict (or commit/merge failure) excludes the node with a reason.
+        # Phase 3: join — sequential, deterministic id order. Optionally gate each completed node
+        # through the adversarial skeptics BEFORE its merge (T-198; refuted ⇒ excluded), then
+        # commit and merge; a conflict (or commit/merge failure) excludes the node with a reason.
         merged: dict = {}
         join_drops: list = []
+        skeptic_cost = 0.0
+        skeptics = max(0, int(adversarial_skeptics or 0))
         for tid in sorted(run.results):
             h = handles[tid]
+            if skeptics > 0:
+                verdict = adversarial_admit(
+                    run.results[tid], node_id=tid, skeptics=skeptics, dispatch_fn=dispatch_fn,
+                    forge_dir=forge_dir, feature=feature, claude_bin=claude_bin,
+                )
+                skeptic_cost += verdict.cost_usd
+                if not verdict.admitted:
+                    join_drops.append(f"node {tid!r}: {verdict.reason}")
+                    continue
             c = _wt.commit(h, message=f"feat({tid}): parallel build")
             if not c.ok:
                 join_drops.append(f"node {tid!r}: commit failed: {c.reason}")
@@ -206,13 +327,14 @@ def _run_isolated(
 
         ordered = {tid: merged[tid] for tid in sorted(merged)}
         reasons = list(run.dropped_reasons) + setup_drops + join_drops
-        # `dropped` is everything that did not merge: setup drops + engine drops + join drops.
+        # `dropped` is everything that did not merge: setup drops + engine drops + join drops
+        # (incl. adversarial refutations).
         dropped = len(ids) - len(ordered)
         return _wf.WorkflowResult(
             results=ordered,
             completed=len(ordered),
             dropped=dropped,
-            total_cost_usd=run.total_cost_usd,
+            total_cost_usd=run.total_cost_usd + skeptic_cost,
             dropped_reasons=reasons,
         )
     finally:
