@@ -65,6 +65,39 @@ class VerifySpec:
 
 
 @dataclass
+class DecomposeSpec:
+    """Declarative request to *generate* a bounded, pre-validated sub-DAG (REQ-WF-010).
+
+    A node carrying a `DecomposeSpec` is a `decompose` node: its own `build_prompt` is the
+    cheap-model, schema-constrained *generation* prompt, whose reply is a sub-DAG (a JSON
+    node/edge list). `parse_subdag` turns that parsed JSON into the child `WorkflowNode`s.
+
+    Generation NEVER escapes a validated slot (§1.4 "Validate before dispatch"): before ANY
+    child dispatches, the candidate sub-DAG is run through `validate_spec` (acyclicity + dup-id
+    + unknown-dep) PLUS a node-count cap (`max_nodes`) PLUS a deterministic token-budget proxy
+    (`max_chars`, measured as `len(json) // 4` — there is no stdlib tokenizer). Any violation —
+    or garbage/failed generation — drops the generated set with a reason and runs `fallback`, a
+    *deterministic* author-supplied sub-DAG (or `[]` for a pure no-op). The whole admission is a
+    pure function of the generated JSON: same JSON ⇒ same accept/reject + same dropped set.
+
+    Gated by `run_workflow(allow_generated_subdags=...)` (off by default); with it off the
+    decompose node is inert and behaves as a plain node (no generation, no children).
+    """
+
+    # Parse the validated sub-DAG JSON (a dict) into child WorkflowNodes. Called only AFTER the
+    # JSON parses; may raise — a raising parser is caught and treated as a generation failure.
+    parse_subdag: Callable[[dict], list]
+    # Deterministic fallback child nodes when generation is rejected/unavailable ([] ⇒ no-op).
+    fallback: list = field(default_factory=list)  # list[WorkflowNode]
+    max_nodes: int = 8  # node-count cap on the generated sub-DAG (REQ-WF-010)
+    # Token-budget proxy ceiling, in *characters* of the generated JSON; the proxy itself is
+    # `len(json) // 4` (≈ tokens), compared against `max_chars // 4`. Default ≈ 1024 tokens.
+    max_chars: int = 4096
+    schema: Optional[dict] = None  # constrains the generation reply (cheap, schema-constrained)
+    model: Optional[str] = None  # cheap generation model (else inherits the node's `model`)
+
+
+@dataclass
 class WorkflowNode:
     """One step in a workflow DAG.
 
@@ -84,6 +117,10 @@ class WorkflowNode:
     # git worktree (parallel build). `None` ⇒ inherit `run_workflow`'s scalar `cwd`, so every
     # existing caller — which sets only the scalar — is unaffected.
     cwd: Optional[str] = None
+    # Validated sub-DAG generation (T-199, REQ-WF-010): when set AND
+    # `run_workflow(allow_generated_subdags=True)`, this node generates a bounded, pre-validated
+    # sub-DAG instead of producing a leaf result. `None` ⇒ a plain node (default).
+    decompose: Optional[DecomposeSpec] = None
 
 
 @dataclass
@@ -249,6 +286,112 @@ def _run_node(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
     return None, "verify verdict failed after heal", cost
 
 
+# Generation prompt marker: the decompose node's reply is the *whole* sub-DAG, so the generation
+# call asks for a JSON node/edge list. The DecomposeSpec.schema (if any) constrains the shape.
+_DECOMPOSE_SCHEMA_HINT = (
+    "Reply ONLY with a JSON object {\"nodes\": [{\"id\": str, \"prompt\": str, "
+    "\"depends_on\": [str]}]} describing a sub-DAG of steps. No prose."
+)
+
+
+def _token_proxy(json_str: str) -> int:
+    """Deterministic stdlib token-budget proxy (REQ-WF-010): ≈ tokens as character count // 4.
+
+    A pure function of the input string — same string ⇒ same number — used to bound a *generated*
+    sub-DAG before any child dispatch. There is no stdlib tokenizer, so this is intentionally a
+    coarse char-based heuristic, never an import."""
+    return len(json_str) // 4
+
+
+def _admit_subdag(
+    sub: WorkflowSpec, raw_json: str, dspec: DecomposeSpec,
+) -> tuple[bool, Optional[str]]:
+    """Deterministically admit a *generated* sub-DAG (REQ-WF-010). Returns (admitted, reason).
+
+    Three gates, all pure functions of the candidate: `validate_spec` (acyclicity + dup-id +
+    unknown-dep), the node-count cap (`max_nodes`), and the token-budget proxy (`max_chars`).
+    The first failing gate yields a reason; on success returns (True, None). Never raises."""
+    nodes = list(getattr(sub, "nodes", []) or [])
+    if len(nodes) > dspec.max_nodes:
+        return False, f"generated sub-DAG node count {len(nodes)} exceeds cap {dspec.max_nodes}"
+    proxy = _token_proxy(raw_json)
+    budget = dspec.max_chars // 4
+    if proxy > budget:
+        return False, f"generated sub-DAG token proxy {proxy} exceeds budget {budget}"
+    errors = validate_spec(sub)
+    if errors:
+        return False, "; ".join(errors)
+    return True, None
+
+
+def _run_decompose(
+    node: WorkflowNode, prompt: str, dispatch_fn, kwargs, run_kwargs,
+) -> tuple:
+    """Run a `decompose` node (REQ-WF-010): generate → validate → admit → run children, or run
+    the deterministic fallback. Returns (result_obj_or_None, reason, total_cost). Never raises.
+
+    The generation call is a cheap-model, schema-constrained dispatch via the same adapter; its
+    reply is parsed to a candidate sub-DAG and gated by `_admit_subdag` *before* any child runs.
+    Admitted ⇒ the children run via a nested `run_workflow` and the node's result is
+    `{"children": {...}}`. Rejected/garbage/failed ⇒ the fallback sub-DAG runs and the node is
+    dropped-with-reason (its result is whatever the fallback produced, surfaced as `children`)."""
+    dspec = node.decompose
+    cost = 0.0
+
+    def _run_children(children: list) -> tuple:
+        """Run a child sub-DAG via a nested run_workflow; returns ({id: result}, cost)."""
+        if not children:
+            return {}, 0.0
+        child_spec = WorkflowSpec(nodes=children)
+        out = run_workflow(child_spec, dispatch_fn=dispatch_fn, **run_kwargs)
+        return out.results, out.total_cost_usd
+
+    def _fallback(reason: str) -> tuple:
+        """Drop the generated set with `reason`; run the deterministic fallback (no child of the
+        generated set ever dispatched)."""
+        fb_results, fb_cost = _run_children(list(dspec.fallback or []))
+        result = {"children": fb_results, "generated": False}
+        return result, reason, cost + fb_cost
+
+    # Generation dispatch: cheap model + schema-constrained (REQ-WF-010). Reuse the node-dispatch
+    # kwargs but override model/schema from the DecomposeSpec; never resume (fresh generation).
+    gkwargs = dict(kwargs)
+    gkwargs["resume"] = None
+    if dspec.model is not None:
+        gkwargs["model"] = dspec.model
+    gkwargs["output_schema"] = dspec.schema  # None ⇒ unconstrained generation
+    gen_prompt = f"{prompt}\n\n{_DECOMPOSE_SCHEMA_HINT}"
+    try:
+        res = dispatch_fn(gen_prompt, **gkwargs)
+    except Exception as exc:  # noqa: BLE001 — a generation dispatch must never raise the worker
+        return _fallback(f"decompose generation raised: {exc}")
+    cost += float(getattr(res, "cost_usd", 0.0) or 0.0)
+
+    if getattr(res, "status", None) != "ok":
+        return _fallback(f"decompose generation {getattr(res, 'status', 'error')}")
+    if (getattr(res, "raw", None) or {}).get("is_error"):
+        return _fallback("decompose generation reported is_error")
+    try:
+        parsed = json.loads(res.result or "")
+    except (ValueError, TypeError):
+        return _fallback("decompose generation returned non-JSON")
+    if not isinstance(parsed, dict):
+        return _fallback("decompose generation was not a JSON object")
+
+    # Build the candidate sub-DAG via the author's parser, then admit it deterministically.
+    try:
+        children = dspec.parse_subdag(parsed)
+    except Exception as exc:  # noqa: BLE001 — a raising parser ⇒ generation failure, not a crash
+        return _fallback(f"decompose parse failed: {exc}")
+    sub = WorkflowSpec(nodes=list(children or []))
+    admitted, reason = _admit_subdag(sub, res.result or "", dspec)
+    if not admitted:
+        return _fallback(f"generated sub-DAG rejected: {reason}")
+
+    child_results, child_cost = _run_children(list(children))
+    return {"children": child_results, "generated": True}, None, cost + child_cost
+
+
 def run_workflow(
     spec: WorkflowSpec,
     *,
@@ -261,6 +404,7 @@ def run_workflow(
     dispatch_fn=None,
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
+    allow_generated_subdags: bool = False,
 ) -> WorkflowResult:
     """Execute a workflow DAG wave-by-wave with bounded parallel fan-out per wave.
 
@@ -274,6 +418,12 @@ def run_workflow(
     *fixed* set independent of thread scheduling. `max_budget_usd` and `resume` are threaded
     into every node's `dispatch` call — the CLI enforces the per-dispatch ceiling and reuses
     the given session (cheaper than a fresh one).
+
+    Hybrid generation (REQ-WF-010): when `allow_generated_subdags=True`, a node carrying a
+    `DecomposeSpec` generates a bounded, pre-validated sub-DAG (cheap-model, schema-constrained)
+    that is admitted via `validate_spec` + node-count cap + token-budget proxy *before* any child
+    dispatches; a rejected/garbage/failed generation runs the deterministic fallback. With the
+    toggle off (default) such a node behaves as a plain node — no generation, no children.
     """
     dispatch_fn = dispatch_fn or _background_agent.dispatch
     nodes = list(getattr(spec, "nodes", []) or [])
@@ -353,23 +503,38 @@ def run_workflow(
 
         workers = max(1, min(max_parallel, len(prepared)))
         wave_out: dict = {}
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(
-                    _run_node, node, prompt, dispatch_fn,
-                    {"forge_dir": forge_dir, "feature": feature, "model": node.model,
-                     "output_schema": node.output_schema, "max_budget_usd": max_budget_usd,
-                     "resume": resume, "claude_bin": claude_bin,
-                     # Per-node `cwd` (T-196) overrides the scalar; unset ⇒ scalar fallback.
-                     "cwd": node.cwd if node.cwd is not None else cwd},
-                ): node.id
-                for node, prompt in prepared
+
+        def _submit(pool, node, prompt):
+            """Submit one node to the worker pool, routing active `decompose` nodes (REQ-WF-010)
+            to the generate→validate→admit path and every other node to the normal dispatch."""
+            node_kwargs = {
+                "forge_dir": forge_dir, "feature": feature, "model": node.model,
+                "output_schema": node.output_schema, "max_budget_usd": max_budget_usd,
+                "resume": resume, "claude_bin": claude_bin,
+                # Per-node `cwd` (T-196) overrides the scalar; unset ⇒ scalar fallback.
+                "cwd": node.cwd if node.cwd is not None else cwd,
             }
+            if allow_generated_subdags and node.decompose is not None:
+                # Nested run_workflow kwargs for the generated/fallback children: same bounds,
+                # same cwd/toggle, fresh sessions (generation never resumes a parent session).
+                run_kwargs = {
+                    "forge_dir": forge_dir, "feature": feature,
+                    "max_parallel": max_parallel, "max_total": max_total,
+                    "max_budget_usd": max_budget_usd, "claude_bin": claude_bin,
+                    "cwd": node.cwd if node.cwd is not None else cwd,
+                    "allow_generated_subdags": allow_generated_subdags,
+                }
+                return pool.submit(_run_decompose, node, prompt, dispatch_fn,
+                                   node_kwargs, run_kwargs)
+            return pool.submit(_run_node, node, prompt, dispatch_fn, node_kwargs)
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {_submit(pool, node, prompt): node.id for node, prompt in prepared}
             for fut in futures:
                 nid = futures[fut]
                 try:
                     wave_out[nid] = fut.result()
-                except Exception as exc:  # noqa: BLE001 — defensive; _run_node already guards
+                except Exception as exc:  # noqa: BLE001 — defensive; workers already guard
                     wave_out[nid] = (None, f"worker error: {exc}", 0.0)
 
         # Collect this wave's results in sorted id order so accumulation is deterministic.
@@ -380,6 +545,12 @@ def run_workflow(
                 dropped_reasons.append(f"node {nid!r}: {reason}")
                 _LOG.warning("run_workflow: dropped %s — %s", nid, reason)
                 continue
+            # A `decompose` node can complete *with* a reason: the generated sub-DAG was rejected
+            # (cycle / over-cap / garbage) so the deterministic fallback ran. The node keeps its
+            # (fallback) result, but the rejection is surfaced — drop-with-reason, never silent.
+            if reason is not None:
+                dropped_reasons.append(f"node {nid!r}: {reason}")
+                _LOG.warning("run_workflow: %s — %s", nid, reason)
             results[nid] = obj
 
     ordered = {nid: results[nid] for nid in sorted(results)}

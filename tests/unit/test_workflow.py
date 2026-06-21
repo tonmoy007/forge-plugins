@@ -398,3 +398,232 @@ def test_node_cwd_defaults_none_and_inherits_none_scalar() -> None:
     _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
                      dispatch_fn=_spy_dispatch(recorded))
     assert all(c["cwd"] is None for c in recorded)
+
+
+# --------------------------------------------------------------------------- #
+# REQ-WF-010 / T-199 / AC-WF-010 — validated sub-DAG generation (`decompose` node)
+#
+# A `decompose` node's dispatch is a cheap-model, schema-constrained LLM call that emits a
+# sub-DAG (a JSON node/edge list). Before ANY generated child node dispatches, the sub-DAG is
+# run through `validate_spec` (cycle/dup/unknown) PLUS a node-count cap PLUS a deterministic
+# token-budget proxy (`len(json) // 4`). Any violation ⇒ drop-with-reason + deterministic
+# fallback; generation never escapes this validated slot. Gated by `allow_generated_subdags`
+# (off by default) — when off the decompose node behaves as a plain node (no generation).
+# --------------------------------------------------------------------------- #
+
+
+def _subdag_json(node_ids, edges=None) -> str:
+    """Render a sub-DAG the shape a `decompose` generation call would emit: a JSON object
+    with a `nodes` list (each `{id, prompt, depends_on}`)."""
+    edges = edges or {}
+    return json.dumps({"nodes": [
+        {"id": nid, "prompt": f"do-{nid}", "depends_on": edges.get(nid, [])}
+        for nid in node_ids
+    ]})
+
+
+def _decompose_dispatch(recorded: list, *, subdag: str):
+    """Spy dispatch_fn that routes by prompt: the decompose generation prompt (contains
+    'DECOMPOSE') returns the supplied sub-DAG JSON; child/plain prompts echo themselves.
+    Records every call so we can assert which (if any) children dispatched."""
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "DECOMPOSE" in prompt:
+            return SimpleNamespace(status="ok", reason="dispatched", result=subdag,
+                                   cost_usd=0.005, raw={"is_error": False})
+        return _ok({"prompt": prompt})
+
+    return dispatch
+
+
+def _child_prompts(recorded: list) -> list:
+    """The prompts of generated-child dispatches (everything that isn't the generation call)."""
+    return [c["prompt"] for c in recorded if "DECOMPOSE" not in c["prompt"]]
+
+
+def _decompose_spec(dspec) -> "object":
+    return _wf.WorkflowSpec(nodes=[
+        _wf.WorkflowNode(id="root", build_prompt=lambda up: "DECOMPOSE: split the work",
+                         decompose=dspec),
+    ])
+
+
+def _dspec(*, max_nodes=8, max_chars=4096, schema=None, model=None):
+    """A DecomposeSpec wiring a sub-DAG JSON into child WorkflowNodes, with a deterministic
+    fallback that records that it ran (a single 'fallback' node)."""
+    def parse(subdag: dict) -> list:
+        return [
+            _wf.WorkflowNode(id=n["id"], build_prompt=(lambda p: lambda up: p)(n["prompt"]),
+                             depends_on=list(n.get("depends_on") or []))
+            for n in (subdag.get("nodes") or [])
+        ]
+
+    fallback = [_wf.WorkflowNode(id="fallback", build_prompt=lambda up: "fallback")]
+    return _wf.DecomposeSpec(parse_subdag=parse, fallback=fallback,
+                             max_nodes=max_nodes, max_chars=max_chars,
+                             schema=schema, model=model)
+
+
+def test_decompose_spec_type_and_defaults() -> None:
+    """`decompose` defaults to None; a DecomposeSpec needs a parser + fallback; caps default."""
+    plain = _wf.WorkflowNode(id="A", build_prompt=lambda up: "A")
+    assert plain.decompose is None
+
+    dspec = _dspec()
+    node = _wf.WorkflowNode(id="root", build_prompt=lambda up: "x", decompose=dspec)
+    assert node.decompose is dspec
+    assert dspec.max_nodes == 8
+    assert dspec.max_chars == 4096
+
+
+def test_decompose_off_by_default_is_inert_no_generation() -> None:
+    """`allow_generated_subdags` defaults OFF: the decompose node never runs the generation slot
+    and never spawns children — it behaves as a plain node (its raw build_prompt is dispatched
+    once, with NO schema-hint suffix, and the reply is treated as a leaf result)."""
+    recorded: list = []
+    spec = _decompose_spec(_dspec())
+    res = _wf.run_workflow(spec, forge_dir=FORGE, feature="t",
+                           dispatch_fn=_decompose_dispatch(recorded, subdag=_subdag_json(["x"])))
+    # Exactly one dispatch — the plain node — with the raw prompt (no generation schema hint).
+    assert len(recorded) == 1
+    assert recorded[0]["prompt"] == "DECOMPOSE: split the work"
+    assert _wf._DECOMPOSE_SCHEMA_HINT not in recorded[0]["prompt"]
+    # No children/fallback ran; the root's result is the echoed leaf, not a {"children": ...} dict.
+    assert "root" in res.results
+    assert "children" not in res.results["root"]
+
+
+def test_decompose_admits_valid_subdag_and_runs_children() -> None:
+    """With the toggle ON and a valid sub-DAG, children are generated, validated, and run; the
+    generation call uses the cheap model + schema."""
+    recorded: list = []
+    schema = {"type": "object"}
+    spec = _decompose_spec(_dspec(model="claude-haiku-4-5", schema=schema))
+    subdag = _subdag_json(["c1", "c2"], edges={"c2": ["c1"]})
+    res = _wf.run_workflow(
+        spec, forge_dir=FORGE, feature="t", allow_generated_subdags=True,
+        dispatch_fn=_decompose_dispatch(recorded, subdag=subdag),
+    )
+    # The generation call used the DecomposeSpec model + schema (cheap, schema-constrained).
+    gen = [c for c in recorded if "DECOMPOSE" in c["prompt"]][0]
+    assert gen["model"] == "claude-haiku-4-5"
+    assert gen["output_schema"] == schema
+    # Both validated children dispatched and produced results.
+    assert set(_child_prompts(recorded)) == {"do-c1", "do-c2"}
+    assert res.results["root"]["children"] == {"c1": {"prompt": "do-c1"},
+                                               "c2": {"prompt": "do-c2"}}
+    # The deterministic fallback did NOT run (valid sub-DAG admitted).
+    assert "fallback" not in _child_prompts(recorded)
+
+
+def test_decompose_cyclic_subdag_rejected_before_any_child_dispatch() -> None:
+    """AC-WF-010: a generated sub-DAG containing a CYCLE is rejected before any child dispatches;
+    the deterministic fallback runs instead."""
+    recorded: list = []
+    spec = _decompose_spec(_dspec())
+    cyclic = _subdag_json(["a", "b"], edges={"a": ["b"], "b": ["a"]})
+    res = _wf.run_workflow(
+        spec, forge_dir=FORGE, feature="t", allow_generated_subdags=True,
+        dispatch_fn=_decompose_dispatch(recorded, subdag=cyclic),
+    )
+    # ZERO generated children dispatched — only the fallback ran.
+    assert "do-a" not in _child_prompts(recorded)
+    assert "do-b" not in _child_prompts(recorded)
+    assert "fallback" in _child_prompts(recorded)
+    assert any("root" in r and "cycle" in r.lower() for r in res.dropped_reasons)
+
+
+def test_decompose_over_node_count_rejected_before_any_child_dispatch() -> None:
+    """AC-WF-010: a generated sub-DAG exceeding the node-count cap is rejected before any child
+    dispatch; the fallback runs."""
+    recorded: list = []
+    spec = _decompose_spec(_dspec(max_nodes=2))
+    too_many = _subdag_json(["n0", "n1", "n2"])  # 3 > cap of 2
+    res = _wf.run_workflow(
+        spec, forge_dir=FORGE, feature="t", allow_generated_subdags=True,
+        dispatch_fn=_decompose_dispatch(recorded, subdag=too_many),
+    )
+    assert not any(p.startswith("do-n") for p in _child_prompts(recorded))
+    assert "fallback" in _child_prompts(recorded)
+    assert any("root" in r and "node" in r.lower() for r in res.dropped_reasons)
+
+
+def test_decompose_over_token_proxy_rejected_before_any_child_dispatch() -> None:
+    """AC-WF-010: a generated sub-DAG exceeding the token-proxy budget (`len(json)//4`) is
+    rejected before any child dispatch; the fallback runs."""
+    recorded: list = []
+    subdag = _subdag_json(["c1", "c2"])
+    tiny_budget = len(subdag) // 4 - 1  # one below the proxy of this exact JSON ⇒ over-budget
+    spec = _decompose_spec(_dspec(max_chars=tiny_budget * 4))  # max_chars below len(subdag)
+    res = _wf.run_workflow(
+        spec, forge_dir=FORGE, feature="t", allow_generated_subdags=True,
+        dispatch_fn=_decompose_dispatch(recorded, subdag=subdag),
+    )
+    assert not any(p.startswith("do-c") for p in _child_prompts(recorded))
+    assert "fallback" in _child_prompts(recorded)
+    assert any("root" in r and "token" in r.lower() for r in res.dropped_reasons)
+
+
+def test_decompose_token_proxy_is_deterministic_pure_function() -> None:
+    """The token-proxy is a pure function of the JSON string: `len(s)//4`, no imports."""
+    s = _subdag_json(["x", "y", "z"])
+    assert _wf._token_proxy(s) == len(s) // 4
+    assert _wf._token_proxy(s) == _wf._token_proxy(s)  # deterministic
+    assert _wf._token_proxy("") == 0
+
+
+def test_decompose_admission_is_deterministic_same_json_same_outcome() -> None:
+    """Same generated JSON ⇒ same accept/reject + same children, every run (determinism)."""
+    subdag = _subdag_json(["c1", "c2", "c3"], edges={"c3": ["c1", "c2"]})
+    runs = []
+    for _ in range(4):
+        recorded: list = []
+        res = _wf.run_workflow(
+            _decompose_spec(_dspec()), forge_dir=FORGE, feature="t",
+            allow_generated_subdags=True,
+            dispatch_fn=_decompose_dispatch(recorded, subdag=subdag),
+        )
+        runs.append((sorted(res.results.get("root", {}).get("children", {})),
+                     "fallback" in _child_prompts(recorded)))
+    assert all(r == runs[0] for r in runs)
+    assert runs[0] == (["c1", "c2", "c3"], False)  # all admitted, no fallback
+
+
+def test_decompose_garbage_generation_falls_back_never_raises() -> None:
+    """Garbage / non-JSON generation output ⇒ deterministic fallback, never raises."""
+    recorded: list = []
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "DECOMPOSE" in prompt:
+            return SimpleNamespace(status="ok", reason="", result="not json at all{{",
+                                   cost_usd=0.005, raw={"is_error": False})
+        return _ok({"prompt": prompt})
+
+    res = _wf.run_workflow(
+        _decompose_spec(_dspec()), forge_dir=FORGE, feature="t",
+        allow_generated_subdags=True, dispatch_fn=dispatch,
+    )
+    assert "fallback" in _child_prompts(recorded)
+    assert any("root" in r for r in res.dropped_reasons)
+    # Never raised: a structured result came back.
+    assert isinstance(res, _wf.WorkflowResult)
+
+
+def test_decompose_generation_dispatch_failure_falls_back() -> None:
+    """A failed generation dispatch (status != ok) ⇒ fallback, no child dispatch, never raises."""
+    recorded: list = []
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "DECOMPOSE" in prompt:
+            return SimpleNamespace(status="error", reason="boom", result=None, cost_usd=0.0)
+        return _ok({"prompt": prompt})
+
+    res = _wf.run_workflow(
+        _decompose_spec(_dspec()), forge_dir=FORGE, feature="t",
+        allow_generated_subdags=True, dispatch_fn=dispatch,
+    )
+    assert "fallback" in _child_prompts(recorded)
+    assert isinstance(res, _wf.WorkflowResult)
