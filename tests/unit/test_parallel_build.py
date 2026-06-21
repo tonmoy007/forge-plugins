@@ -198,3 +198,149 @@ def test_default_build_prompt_mentions_task_id() -> None:
         [_task("T42")], done=set(), config=cfg, forge_dir=FORGE, feature="t",
         dispatch_fn=_spy_dispatch(recorded))
     assert any("T42" in c["prompt"] for c in recorded)
+
+
+# --------------------------------------------------------------------------- #
+# AC-WF-008 / T-197 — git worktree isolation + lifecycle + merge join
+# --------------------------------------------------------------------------- #
+
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+
+import pytest  # noqa: E402
+
+_needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
+
+
+def _git(repo, *args):
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+
+
+def _init_repo(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "checkout", "-q", "-b", "main")
+    (repo / "base.txt").write_text("base\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    return repo
+
+
+def _writer_dispatch(filename_for, content_for):
+    """A fake dispatch that simulates a build node mutating a file IN ITS OWN cwd (worktree),
+    then returns ok. `filename_for(prompt)`/`content_for(prompt)` derive the write from the task."""
+
+    def dispatch(prompt, **kwargs):
+        wt = kwargs.get("cwd")
+        if wt:
+            (Path(wt) / filename_for(prompt)).write_text(content_for(prompt))
+        return _ok({"prompt": prompt})
+
+    return dispatch
+
+
+def _tid_of(prompt):
+    """Extract the Tnn id the default build prompt embeds (`Implement task T1 ...`)."""
+    import re
+    m = re.search(r"\bT\d+\b", prompt)
+    return m.group(0) if m else "node"
+
+
+@_needs_git
+def test_worktree_each_node_gets_own_worktree_and_branch(tmp_path) -> None:
+    repo = _init_repo(tmp_path)
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, worktree_isolation=True, max_parallel=4)
+    tasks = [_task("T1"), _task("T2")]
+    # Each node writes a DISTINCT file → clean, independent merges.
+    dispatch = _writer_dispatch(lambda p: f"{_tid_of(p)}.txt", lambda p: f"{_tid_of(p)}\n")
+    res = _pb.run_parallel_build(
+        tasks, done=set(), config=cfg, forge_dir=FORGE, feature="t",
+        dispatch_fn=dispatch, repo=repo)
+    assert res.completed == 2
+    # Both nodes' files merged into the base checkout.
+    assert (repo / "T1.txt").read_text() == "T1\n"
+    assert (repo / "T2.txt").read_text() == "T2\n"
+    # Lifecycle: every worktree torn down on success — no orphaned worktrees / branches.
+    assert ".forge-worktrees" not in _git(repo, "worktree", "list").stdout
+    branches = _git(repo, "branch", "--list", "forge/wt/*").stdout.strip()
+    assert branches == ""
+
+
+@_needs_git
+def test_worktree_conflict_excludes_node_never_silent_clobber(tmp_path) -> None:
+    """Two nodes writing the SAME line conflict at the join: the loser is EXCLUDED from the merge
+    with a reason (never silently overwriting the winner)."""
+    repo = _init_repo(tmp_path)
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, worktree_isolation=True, max_parallel=2)
+    tasks = [_task("T1"), _task("T2")]
+    # Both write the SAME file with DIFFERENT content → second merge conflicts.
+    dispatch = _writer_dispatch(lambda p: "shared.txt", lambda p: f"{_tid_of(p)} content\n")
+    res = _pb.run_parallel_build(
+        tasks, done=set(), config=cfg, forge_dir=FORGE, feature="t",
+        dispatch_fn=dispatch, repo=repo)
+    # Exactly one node merges cleanly; the other is excluded (conflict).
+    merged = set(res.results)
+    assert len(merged) == 1                                   # one winner only
+    assert res.dropped >= 1
+    assert any("conflict" in r.lower() for r in res.dropped_reasons)
+    # The base file holds the winner's content (a real line), not a silent clobber / merge marker.
+    content = (repo / "shared.txt").read_text()
+    assert "content" in content and "<<<<<<<" not in content
+    # No orphaned worktrees even though a node was excluded.
+    assert ".forge-worktrees" not in _git(repo, "worktree", "list").stdout
+
+
+@_needs_git
+def test_worktree_torn_down_on_dropped_node(tmp_path) -> None:
+    """A node whose dispatch fails (dropped) still has its worktree + branch removed (teardown on
+    failure, not only success) — no orphaned `.git/worktrees`."""
+    repo = _init_repo(tmp_path)
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, worktree_isolation=True, max_parallel=2)
+    tasks = [_task("T1"), _task("T2")]
+
+    def dispatch(prompt, **kwargs):
+        if "T2" in prompt:
+            raise RuntimeError("boom")                       # T2 always fails
+        wt = kwargs.get("cwd")
+        if wt:
+            (Path(wt) / "T1.txt").write_text("T1\n")
+        return _ok({"prompt": prompt})
+
+    res = _pb.run_parallel_build(
+        tasks, done=set(), config=cfg, forge_dir=FORGE, feature="t",
+        dispatch_fn=dispatch, repo=repo)
+    assert "T1" in res.results
+    assert "T2" not in res.results
+    # Both worktrees (including the dropped node's) are gone.
+    assert ".forge-worktrees" not in _git(repo, "worktree", "list").stdout
+    assert _git(repo, "branch", "--list", "forge/wt/*").stdout.strip() == ""
+
+
+@_needs_git
+def test_worktree_unavailable_degrades_to_sequential(tmp_path) -> None:
+    """With worktrees unavailable (a non-git dir) and isolation on, the build degrades to a
+    sequential single-worktree run — no per-node worktree, no raise."""
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, worktree_isolation=True, max_parallel=4)
+    recorded: list = []
+    res = _pb.run_parallel_build(
+        [_task("T1"), _task("T2")], done=set(), config=cfg, forge_dir=FORGE, feature="t",
+        dispatch_fn=_spy_dispatch(recorded), repo=plain, cwd=str(plain))
+    assert res.completed == 2                                 # still ran (degraded)
+    # Degraded: every dispatch ran in the single shared cwd, not a per-node worktree.
+    assert all(c["cwd"] == str(plain) for c in recorded)
+
+
+@_needs_git
+def test_worktree_isolation_off_does_not_create_worktrees(tmp_path) -> None:
+    """`worktree_isolation` off ⇒ no worktrees created even when the repo supports them."""
+    repo = _init_repo(tmp_path)
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, worktree_isolation=False, max_parallel=4)
+    _pb.run_parallel_build(
+        [_task("T1")], done=set(), config=cfg, forge_dir=FORGE, feature="t",
+        dispatch_fn=_echo_dispatch, repo=repo)
+    assert ".forge-worktrees" not in _git(repo, "worktree", "list").stdout
