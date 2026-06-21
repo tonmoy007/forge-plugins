@@ -39,6 +39,28 @@ _LOG = logging.getLogger(__name__)
 DEFAULT_MAX_PARALLEL = 4
 DEFAULT_MAX_TOTAL = 64
 
+# Per-node admission cost estimate (REQ-NF-029): each DAG node is a *fresh* dispatch and pays
+# the fresh-session cache-creation tax, so budget-aware admission charges one fresh floor per
+# node. Sourced from the single dispatch adapter so the estimate can never drift from the real
+# cost gate (`_background_agent.dispatch` charges the same floor in `_cost_cap.precheck`).
+FRESH_FLOOR_USD = _background_agent.FRESH_FLOOR_USD
+
+
+@dataclass
+class VerifySpec:
+    """Declarative per-node verification request (REQ-WF-001/002).
+
+    When a node carries a `VerifySpec`, an independent fresh-session verifier runs after the
+    node's own dispatch and gates its result (`verdict_failed` ⇒ drop-with-reason or one heal
+    attempt). The verifier runs `skill` under `model`, constraining its verdict to `schema`.
+    T-191 only introduces the type; the engine *wiring* of verification lands in T-192 via the
+    shared `scripts/_verify.py` primitive.
+    """
+
+    skill: str
+    model: Optional[str] = None
+    schema: Optional[dict] = None
+
 
 @dataclass
 class WorkflowNode:
@@ -55,7 +77,7 @@ class WorkflowNode:
     output_schema: Optional[dict] = None
     model: Optional[str] = None
     validate: Optional[Callable[[dict], Any]] = None
-    verify: bool = False  # reserved for per-node verification (v0.4.0 Phase 2)
+    verify: Optional[VerifySpec] = None  # per-node verification request (wired in T-192)
 
 
 @dataclass
@@ -160,6 +182,8 @@ def run_workflow(
     feature: str,
     max_parallel: int = DEFAULT_MAX_PARALLEL,
     max_total: int = DEFAULT_MAX_TOTAL,
+    max_budget_usd: Optional[float] = None,
+    resume: Optional[str] = None,
     dispatch_fn=None,
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
@@ -170,6 +194,12 @@ def run_workflow(
     fan out across at most `max_parallel` threads; results pass to downstream nodes via
     `build_prompt`. Index/id-ordered + retry-once-then-drop discipline mirrors
     `_orchestrate.fan_out`, so parallel and sequential runs are byte-identical. Never raises.
+
+    Bounding (REQ-NF-027/029): `max_total` caps the node count and `max_budget_usd` caps total
+    spend; both are pre-allocated in topological order (wave, then id) so cap pressure drops a
+    *fixed* set independent of thread scheduling. `max_budget_usd` and `resume` are threaded
+    into every node's `dispatch` call — the CLI enforces the per-dispatch ceiling and reuses
+    the given session (cheaper than a fresh one).
     """
     dispatch_fn = dispatch_fn or _background_agent.dispatch
     nodes = list(getattr(spec, "nodes", []) or [])
@@ -186,18 +216,36 @@ def run_workflow(
     by_id = {n.id: n for n in nodes}
     waves = plan_waves(spec)
 
-    # Enforce the total-dispatch cap deterministically over topological order: the first
-    # `max_total` nodes (by wave, then id) are allowed; the rest are dropped + logged.
+    # Deterministic budget-aware admission (REQ-NF-029): walk nodes in topological order
+    # (wave, then sorted id) and admit each while it fits *both* the count cap (`max_total`)
+    # and the spend cap (`max_budget_usd`, charged one fresh-session floor per node). Because
+    # admission is a single-threaded topological pass — never a thread race — cap pressure
+    # drops a *fixed* set, identical across parallel and sequential runs (REQ-NF-026b).
     allowed: set = set()
-    budget = max_total
+    count_budget = max_total
+    spend_budget = max_budget_usd  # None ⇒ no spend cap
+    capped_by_total = False
+    capped_by_budget = False
     for wave in waves:
         for nid in wave:  # sorted within wave
-            if budget > 0:
-                allowed.add(nid)
-                budget -= 1
+            if count_budget <= 0:
+                capped_by_total = True
+                continue
+            if spend_budget is not None and spend_budget < FRESH_FLOOR_USD:
+                capped_by_budget = True
+                continue
+            allowed.add(nid)
+            count_budget -= 1
+            if spend_budget is not None:
+                spend_budget -= FRESH_FLOOR_USD
     overflow = len(nodes) - len(allowed)
     if overflow > 0:
-        msg = f"exceeds max_total cap: dropped {overflow} node(s)"
+        caps = []
+        if capped_by_total:
+            caps.append("max_total")
+        if capped_by_budget:
+            caps.append(f"max_budget_usd (${max_budget_usd:.2f}, ${FRESH_FLOOR_USD:.2f}/node)")
+        msg = f"exceeds {' and '.join(caps)} cap: dropped {overflow} node(s)"
         dropped_reasons.append(msg)
         _LOG.warning("run_workflow: %s", msg)
 
@@ -236,7 +284,8 @@ def run_workflow(
                 pool.submit(
                     _run_node, node, prompt, dispatch_fn,
                     {"forge_dir": forge_dir, "feature": feature, "model": node.model,
-                     "output_schema": node.output_schema, "claude_bin": claude_bin, "cwd": cwd},
+                     "output_schema": node.output_schema, "max_budget_usd": max_budget_usd,
+                     "resume": resume, "claude_bin": claude_bin, "cwd": cwd},
                 ): node.id
                 for node, prompt in prepared
             }
