@@ -1,342 +1,177 @@
 ![Forge — SDLC Orchestrator for Claude Code](assets/banner.svg)
 
-> Forge turns Claude Code from a smart coding assistant into a disciplined
-> engineering partner. Memory isn't the problem Claude Code solves poorly —
-> **sequencing is**. Forge enforces it: gated stages, REQ-ID traceability,
-> and structured lesson capture across projects.
+> **Forge turns Claude Code from a smart coding assistant into a disciplined engineering
+> partner.** Claude already remembers — what it doesn't enforce is *process*. Forge does:
+> gated stages, requirement traceability, and learning that compounds across projects.
 
-[![Tests](https://img.shields.io/badge/tests-1237%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1616%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![Claude Code](https://img.shields.io/badge/claude--code-%3E%3D2.1.0-blueviolet)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)]()
 
 ---
 
-## What Forge Does
+## What is Forge?
 
-Claude Code already has memory — `CLAUDE.md`, persistent project context, subagents,
-Agent Teams. Forge does not try to out-remember it. What Claude Code does *not* enforce
-is **process**: that requirements come before design, design before code, and that
-nothing advances until the previous stage actually passed. That is the gap Forge fills.
+A Claude Code plugin that adds the one thing a coding assistant lacks — **enforced
+sequencing**. Forge gives you:
 
-Forge imposes a structured 12-stage pipeline — from requirements through release — where
-**every stage has a gate that must pass before the next begins**, and **every line of
-work traces back to a numbered requirement** (`REQ-NNN → gate → code → test`).
+- **A gated 12-stage pipeline** — requirements → design → build → ship. Each stage
+  **blocks until its gate passes**, and every artifact traces back to a numbered
+  requirement: `REQ-NNN → gate → code → test`.
+- **Learning that compounds** — tagged, filterable lessons and auto-mined skills that
+  carry from one repo to the next, so your mistake rate drops over time.
+- **A dynamic workflow engine** — run arbitrary **parallel agent DAGs** beyond the fixed
+  pipeline, opt-in (new in v0.4.0).
 
-**Without Forge**: a capable assistant with no enforced sequencing — requirements drift,
-design is skipped under deadline pressure, and "done" means whatever the last prompt
-asked for.
-
-**With Forge**: work proceeds only through gates you can inspect and, when justified,
-explicitly override (`/forge:force-advance` records *why*). Nothing advances silently,
-nothing is untraceable.
-
-What is genuinely Forge's, not Anthropic's:
-
-- **Gated sequencing** — stages block until their criteria pass; overrides are explicit
-  and audited, not silent.
-- **REQ-ID traceability** — every artifact, gate, and test links back to a requirement
-  ID, end to end.
-- **Structured cross-project lessons** — not free-text memory: tagged, filterable,
-  tied to project profiles, and promoted across repos.
-- **Automatic skill mining** — recurring *successful* workflows are detected in your
-  own session traces (semantic, success-gated, anti-unified) and proposed as
-  reusable skills for review. See [`references/skill-mining.md`](references/skill-mining.md).
-
-> Traceability in practice — each artifact references the requirement it satisfies:
->
-> ```
-> SRS            REQ-GATE-003  "force-advance override records a lesson"
->   └─ Gate      G7-001        eval asserts the requirement is met
->        └─ Code  scripts/force-advance.py
->             └─ Test  tests/unit/test_force_advance.py  (17 cases)
-> ```
->
-> See [`docs/gate-philosophy.md`](docs/gate-philosophy.md) for when a gate should be
-> resolved versus overridden.
+Nothing advances silently and nothing is untraceable. When you *do* need to skip a gate,
+`/forge:force-advance` records **why** — the override is explicit and audited.
 
 ---
 
-## Prerequisites
+## The pipeline at a glance
 
-- **Claude Code** ≥ 2.1.0
-- **Python** ≥ 3.11 (on PATH)
-- **pyyaml**: `pip install pyyaml`
+```mermaid
+flowchart LR
+    subgraph DEFINE["📐 Define — what &amp; how"]
+        direction LR
+        S1[1 · Requirements] --> S2[2 · Product / UX] --> S3[3 · Architecture] --> S4[4 · Spec] --> S5[5 · Plan]
+    end
+    subgraph BUILD["🔨 Build"]
+        direction LR
+        S6[6 · Implement] --> S7[7 · Evaluate]
+    end
+    subgraph SHIP["🚀 Ship &amp; iterate"]
+        direction LR
+        S8[8 · Deploy] --> S9[9 · Monitor] --> S10[10 · Feedback] --> S11[11 · Resolve] --> S12[12 · Release]
+    end
+    S5 --> S6
+    S7 --> S8
+    S12 -. retrospective · next cycle .-> S1
+```
+
+*Every arrow is a gate — work advances only when the previous stage's exit criteria pass.*
+
+| Stage | Command | Output |
+|-------|---------|--------|
+| 1 — Requirements | `/forge:srs` | SRS with REQ-IDs |
+| 2 — Product & UX | `/forge:product` | PRD, design system, user flows |
+| 3 — Architecture | `/forge:arch` | Architecture doc, ADRs, data model |
+| 4 — Technical Spec | `/forge:spec` | Tech spec, interface contracts, test strategy |
+| 5 — Planning | `/forge:plan` | Task DAG, milestones, risk register |
+| 6 — Implementation | `/forge:build` | Code, decisions log, progress tracker |
+| 7 — Evaluation | `/forge:eval` | Test results, security review, eval report |
+| 8 — Deployment | `/forge:deploy` | Deploy plan, runbook, deploy log |
+| 9 — Monitoring | `/forge:monitor` | Observability config, incident log |
+| 10 — Feedback | `/forge:feedback` | Feedback log, triage |
+| 11 — Resolution | `/forge:resolve` | Hotfixes, regression tests, backlog |
+| 12 — Release | `/forge:release` | Changelog, release notes, checklist |
 
 ---
 
 ## Install
 
-In Claude Code, run these two commands:
+In Claude Code:
 
 ```
 /plugin marketplace add tonmoy007/forge-plugins
 /plugin install forge@forge-plugins
 ```
 
-That's it. Forge activates automatically in any project where you've run `/forge:init`.
+**Prerequisites:** Claude Code ≥ 2.1.0 · Python ≥ 3.11 on PATH · `pip install pyyaml`.
 
 ---
 
 ## Quickstart (< 5 minutes)
 
-### 1. Initialize Forge in your project
-
 ```
-/forge:init
-```
-
-Forge detects your project type (API, full-stack, ML pipeline, CLI, library), scaffolds
-`pipeline/` in your project root, and writes `pipeline/state.md` — the single source of
-truth for where you are in the pipeline.
-
-### 2. Describe your project to get requirements
-
-```
-/forge:srs
+/forge:init      # detect project type, scaffold pipeline/, write state.md
+/forge:srs       # Claude interviews you → requirements with REQ-IDs
+/forge:status    # "where am I?" — Forge tells you at every session start
 ```
 
-Claude interviews you about your project and produces a requirements document
-(`pipeline/01-srs/srs.md`) with REQ-IDs you'll trace through every subsequent stage.
-
-### 3. Continue through the pipeline
-
-Each `/forge:*` command runs the next stage. You never need to remember where you are —
-Forge tells you at every session start.
+Then run each `/forge:<stage>` in turn. You never track where you are — Forge injects the
+current stage, task, and blockers into every session and always names the next step.
 
 ---
 
-## The 12-Stage Pipeline
+## How Forge works
 
-| Command | Stage | Output |
-|---------|-------|--------|
-| `/forge:srs` | 1 — Requirements | SRS with REQ-IDs |
-| `/forge:product` | 2 — Product & UX | PRD, design system, user flows |
-| `/forge:arch` | 3 — Architecture | Architecture doc, ADRs, data model |
-| `/forge:spec` | 4 — Technical Spec | Tech spec, interface spec, test strategy |
-| `/forge:plan` | 5 — Planning | Task DAG, milestones, risk register |
-| `/forge:build` | 6 — Implementation | Code, decisions log, progress tracker |
-| `/forge:eval` | 7 — Evaluation | Test results, security review, eval report |
-| `/forge:deploy` | 8 — Deployment | Deploy plan, deploy log |
-| `/forge:monitor` | 9 — Monitoring | Observability config, incident log |
-| `/forge:feedback` | 10 — Feedback | Feedback log, triage |
-| `/forge:resolve` | 11 — Resolution | Hotfixes, backlog updates |
-| `/forge:release` | 12 — Release | Release notes, release checklist |
+Forge runs as **silent lifecycle hooks** around your normal Claude Code session. They inject
+state at the start, enforce gates as you work, and quietly learn from what succeeds:
 
-### Utility Commands
-
-| Command | What it does |
-|---------|-------------|
-| `/forge:status` | Show current stage, task, blockers, Observer status, and recent history |
-| `/forge:resume` | Restore context after a session restart |
-| `/forge:retro` | Run a cycle-completion retrospective after Stage 12 |
-| `/forge:why` | Explain a gate criterion, lesson tag, stage, or current blocker |
-| `/forge:set-profile` | Set the project-type profile (api, library, cli, monorepo, …) |
-| `/forge:rules` | Author project rules that steer agents (`init`/`add`/`list`/`validate`) — advisory, scope-based |
-| `/forge:review` | Fan four reviewers (correctness/security/performance/conventions) over a diff and synthesize one report |
-| `/forge:adopt` | Brownfield onboarding — detect type, infer SRS + architecture drafts, seed pipeline state |
-| `/forge:autopilot` | Run pipeline stages hands-off (self-heal, optional verify, `--unattended`); `--resume`, `--mode` |
-| `/forge:autopilot-stop` | Halt a running autopilot cleanly at the next stage boundary |
-| `/forge:sprint` | Group the task DAG into bounded sprints and review them (`plan`/`review`/`list`) — opt-in |
-| `/forge:flow` | Run a user-defined workflow DAG from `.forge/workflows/*.yaml` (`list`/`<name>`/`--plan`) — opt-in |
-
-### Background Daemons
-
-Optional, cost-capped background agents (Milestone 2). Each reuses **one** cheap-model
-session, runs within a configurable spend cap, and is **capability-gated** — a clean
-no-op when background agents aren't available, so nothing breaks if the feature is off.
-
-| Command | What it does |
-|---------|-------------|
-| `/forge:watch` | Start the **Observer** — periodically records findings (risky changes, missing tests, drift) to `.forge/observer-findings.jsonl`, surfaced at session start and in `/forge:status` |
-| `/forge:watch-stop` | Stop the Observer, preserving its last poll output and findings |
-| `/forge:dreamer-run` | Run the **Dreamer** — consolidate lessons: confidence decay, duplicate & contradiction detection (flag-only), and a daily digest |
-| `/forge:health-check` | Run the **Health** daemon — hook-test + lesson-store integrity → `healthy / degraded / failing`; never silently disables anything |
-
-Background work records actual API cost to `.forge/cost-ledger.jsonl` and stops at the
-daily cap. See `references/daemon-bus.md` for the findings/poll contract.
-
----
-
-## Gate Enforcement
-
-Every stage has **exit criteria**. Forge will not let you advance until gates pass:
-
-- Stage 1 requires REQ-IDs in the SRS and an "Open Questions" section
-- Stage 2 requires design tokens (`--color-`, `--font-`, `--space-` CSS variables) and WCAG accessibility notes
-- Stage 3 requires at least one ADR in `pipeline/03-architecture/adr/`
-- Stage 6 checks that all tasks are done before calling the build complete
-- ...and so on through Stage 12
-
-Gates are defined in `references/gate-criteria.md` and enforced by `scripts/check-gate.py`.
-Blockers stop advancement; warnings are surfaced but don't block.
-
----
-
-## Adaptive Project Profiles
-
-Forge detects your project type at init and customizes the pipeline:
-
-| Type | How it adapts |
-|------|--------------|
-| `api` | Adds OpenAPI spec step; emphasizes auth and rate-limiting gates |
-| `fullstack` | Adds design system enforcement; CSS token gate in Stage 2 |
-| `ml-pipeline` | Adds data contract step; GPU memory and drift detection lessons |
-| `cli` | Skips UX flows; emphasizes help text and exit-code documentation |
-| `library` | Emphasizes API stability and semver constraints |
-| `monorepo` | Cross-package architecture + build orchestration; acyclic dependency-graph gate |
-| `mobile` | UI-heavy (Flutter/RN/iOS/Android); platform UX + app-store readiness gate |
-| `data-contract` | Schema-first (Protobuf/Avro/GraphQL/dbt); schema-hygiene + compatibility gate |
-
-Run `/forge:init` — Forge detects the type automatically, or you can override it.
-
----
-
-## Memory and Lessons
-
-Forge maintains three tiers of memory:
-
-1. **Session context** — injected at every `SessionStart` via the hook; current stage, active task, blockers, relevant lessons
-2. **Project memory** — `pipeline/` files accumulate decisions, reflections, and stage history across sessions
-3. **Cross-project lessons** — `~/.forge/global-lessons.yaml` promotes high-frequency patterns across all your Forge projects
-
-Lessons are extracted automatically after each stage completion. When a pattern appears
-3+ times, Forge proposes a new skill you can approve, modify, or reject.
-
----
-
-## Project Rules
-
-Author project-specific constraints that steer Forge's agents — a scoped, Forge-native
-take on Cursor's `.cursor/rules`. Rules live in `.forge/rules/*.md` (YAML frontmatter +
-a markdown body) and are **advisory**: they nudge the agents and surface as context, but
-never block a write.
-
-```bash
-/forge:rules init                                   # scaffold .forge/rules/ (README + example)
-/forge:rules add no-bare-except --scope glob        # add a new rule from a template
-/forge:rules list                                   # show active rules
-/forge:rules validate                               # check frontmatter / scopes
+```mermaid
+flowchart TD
+    B["SessionStart hook injects state<br/>stage · task · blockers · lessons · rules"]
+    C["You + Claude work the current stage"]
+    D{"Gate passes?"}
+    E["Advance · REQ-ID traceability recorded"]
+    F["Hooks capture tool-use traces"]
+    G["Lessons + skills mined<br/>semantic · success-gated · cross-project"]
+    B --> C --> D
+    D -- "no · blocker" --> C
+    D -- "yes" --> E
+    C --> F --> G
+    G -. feeds the next session .-> B
+    E -. next stage .-> B
 ```
 
-Each rule's **scope** decides when it activates:
+Three tiers of memory feed that loop:
 
-| Scope | Activates | Surfaces |
-|-------|-----------|----------|
-| `always` | every session | session-start context block |
-| `stage` | when on a listed pipeline stage | session-start context block |
-| `glob` | when writing a file matching `globs` | advisory feedback before the write |
-| `manual` | never automatically | referenced by name |
+1. **Session context** — injected at every `SessionStart` (≤ 2 000 tokens).
+2. **Project memory** — `pipeline/` accumulates decisions, reflections, and stage history.
+3. **Cross-project lessons** — `~/.forge/global-lessons.yaml` promotes high-frequency
+   patterns across all your repos.
 
-Example — `.forge/rules/00-style.md`:
+When a *successful* workflow recurs in your own traces, Forge mines it and **proposes a
+reusable skill** for you to approve, modify, or reject. See
+[`references/skill-mining.md`](references/skill-mining.md).
 
-```markdown
 ---
-description: House style for UI components
-scope: glob
-globs: ["**/*.tsx"]
----
-Prefer composition over inheritance; use design tokens, not raw values.
+
+## Beyond the pipeline
+
+All capabilities below are **opt-in** — a project that never enables them behaves exactly
+like the plain gated pipeline.
+
+### 🤖 Autopilot — hands-off runs
+
+`/forge:autopilot` runs stages back-to-back: run the stage agent → check the gate →
+**advance only on a pass**. A blocking gate triggers a bounded **self-heal** (`/forge:resolve`,
+then re-gate) instead of stopping; optional **self-verify** double-checks a pass with a
+fresh-context verifier; `--unattended` removes checkpoints (recording explicit assumptions,
+never silent guesses). Bounded by spend caps and stoppable any time.
+
+```
+/forge:autopilot              # current stage → end of cycle
+/forge:autopilot to stage 7   # run through a target
+/forge:autopilot --unattended # fully hands-free
+/forge:autopilot-stop         # halt cleanly at the next boundary
 ```
 
-Rules share the session-start token budget with lessons and degrade to a clean no-op
-when `.forge/rules/` is absent. Full schema: `references/rules-format.md`.
+Configure under `autopilot:` in `.forge/config.yaml` (per-stage model routing, budget,
+self-heal, verify). Long runs survive context limits via checkpoint → compact → continue —
+see [`references/autopilot-context.md`](references/autopilot-context.md).
 
----
+### 🔀 Dynamic workflows — parallel agent DAGs
 
-## Autopilot
+Beyond the linear pipeline, Forge has a general **workflow engine**: an arbitrary DAG of
+heterogeneous agent steps with per-node prompts, `depends_on` edges, inter-step data passing,
+and bounded parallel fan-out.
 
-Hand Forge the wheel. `/forge:autopilot` runs pipeline stages back-to-back — for each
-stage it runs the stage's agent, checks the gate, and **advances only on a pass**. On a
-blocking gate it now **self-heals** (a bounded `/forge:resolve` fix, then re-checks)
-before stopping — and never forces past a gate.
-
-```bash
-/forge:autopilot                 # run from the current stage to the end of the cycle
-/forge:autopilot to stage 7      # run through a target stage
-/forge:autopilot the next 3      # run a bounded number of stages
-/forge:autopilot --unattended    # fully hands-free (no checkpoints; assumptions logged)
-/forge:autopilot --resume        # continue after a stop (skips done stages)
-/forge:autopilot-stop            # halt cleanly at the next stage boundary
+```mermaid
+flowchart LR
+    R[research] --> A[draft A]
+    R --> B[draft B]
+    A --> S[synthesize]
+    B --> S
+    S --> V{{adversarial verify}}
 ```
 
-**Complete (local) autonomy (v0.3.3):**
-- **Self-heal** — a blocking gate triggers a bounded fix via `/forge:resolve`
-  (`autopilot.max_heal_attempts`, default 1; `0` = classic stop-on-gate), then a re-gate.
-- **Self-verify** — with `autopilot.verify: true`, a passing gate is double-checked by an
-  independent fresh-context verifier; a fail routes back into the heal loop.
-- **`--unattended`** — no per-stage checkpoints; interactive stages use
-  `.forge/autopilot-answers.{json,yaml}` or record **explicit assumptions** (never a silent
-  guess). Bounded by the full safety envelope; any bound STOPS cleanly and resumably.
-- **Enforcing rules** — a `.forge/rules/*.md` glob rule with `enforce: true` hard-blocks
-  writes to matching paths (e.g. lockfiles, secrets) — the guardrail that makes hands-off
-  runs safe. See [Project Rules](#project-rules).
-
-**Context-aware — checkpoint → compact → continue (v0.3.6, opt-in):** a long hands-off run
-survives a context boundary without losing its place. Set `autopilot.context_window_size`
-(tokens) to enable; the run then checkpoints and, in **background** mode, rotates to a fresh
-session once a dispatch's context crosses `autopilot.context_threshold_percent` (default
-80). **In-session**, a `PreCompact` hook writes the checkpoint before Claude Code's native
-auto-compaction and `SessionStart` re-injects "resume at stage N — don't redo completed
-stages" after. Off entirely until `context_window_size` is set. See
-[`references/autopilot-context.md`](references/autopilot-context.md).
-
-**Safety rails:** never forces a gate unless you opt in (`autopilot.allow_force` + a
-reason); bounded by `max_stages` / `stop_before`, `max_heal_attempts`, `max_budget_usd`,
-and the `_cost_cap` ledger; interruptible with `/forge:autopilot-stop` and the
-`FORGE_NO_BACKGROUND=1` kill switch. Two substrates via `--mode`: **in-session** (default —
-reuses the stage agents, no extra spend) or **background** (`claude -p` per stage,
-cost-capped + capability-gated; a clean no-op when background agents are off).
-
-It generalizes `/forge:force-advance` (one gated advance) and `/forge:build --milestone`
-(a within-stage batch) to a cross-stage loop. Configure under `autopilot:` in
-`.forge/config.yaml` — including `models` (per-stage model routing — a capable model for
-hard stages, a cheap one for checks), `max_budget_usd` (per-dispatch spend ceiling),
-`session_max_dispatches` (rotate a long reused session to bound context),
-`max_heal_attempts`, and `verify`. Background stages also request schema-constrained
-output via the CLI's `--json-schema`.
-
----
-
-## Sprints
-
-`/forge:sprint` slices your task DAG into bounded, reviewable chunks. It is a deterministic
-**view over `pipeline/05-plan/task-dag.md`** (T-IDs are the identity) — the DAG and
-`progress.md` stay the source of truth, and it is **fully opt-in** (a project that never
-runs it sees no change).
-
-```bash
-/forge:sprint plan              # commit the next ready tasks to pipeline/05-plan/sprint-NN.md
-/forge:sprint plan --size 6     # target a different sprint size (default 5)
-/forge:sprint review            # report done vs. carried → pipeline/12-release/sprint-NN-review.md
-/forge:sprint list              # sprints and their progress
-```
-
-`plan` selects the next ready tasks in dependency order and **carries over** anything from
-the previous sprint that is not yet done — keeping each task's T-ID, so history follows the
-work across sprints.
-
-Cross-machine note: see [`docs/forge-sync.md`](docs/forge-sync.md) for syncing `~/.forge`
-global lessons between machines (no server) and the opt-in, local-only skill-mining
-telemetry (off by default; data never leaves your machine without an explicit export).
-
----
-
-## Dynamic Workflows
-
-Beyond the fixed 12-stage pipeline, Forge has a general **dynamic-workflow engine**: an
-arbitrary DAG of heterogeneous agent steps with per-node prompts, `depends_on` edges,
-inter-step data passing, and bounded parallel fan-out. The engine is **always available** —
-Forge's own fan-outs (`/forge:review`, `/forge:adopt`, `/forge:why`) run on it — and every
-capability built on top of it is an **independent opt-in toggle, all default off**, so a
-project that never enables one sees **zero** behavior change from v0.3.6.
-
-A Python script cannot drive Claude's in-session Agent tool, so each node dispatches through
-the single cost-gated `claude -p` wrapper. Runs are deterministic (id-ordered results;
-parallel and sequential runs are byte-identical given the same dispatch outcomes) and
-never-raises (a dropped node is reported, never silently hidden).
-
-Enable capabilities in `.forge/config.yaml`:
+The engine is **always available** — Forge's own fan-outs (`/forge:review`, `/forge:adopt`,
+`/forge:why`) run on it. Runs are deterministic (parallel and sequential outputs are
+byte-identical) and never-raises (a dropped node is reported, never hidden). Enable the
+capabilities in `.forge/config.yaml`:
 
 ```yaml
 orchestration:
@@ -344,68 +179,133 @@ orchestration:
   parallel_build: false          # fan independent build tasks out in parallel
   worktree_isolation: false      # each parallel mutating node in its own git worktree
   allow_generated_subdags: false # the validated `decompose` sub-DAG node
-
   max_parallel: 4                # max concurrent dispatches per wave
   max_total: 64                  # hard cap on total nodes per run
-  max_budget_usd:                # optional per-run spend ceiling (omit = no cap)
+  max_budget_usd:                # optional admission ceiling (omit = no cap)
 ```
 
-**User-defined flows** (`flows_enabled`) — author a `.forge/workflows/<name>.yaml` declaring a
-DAG, then run it with `/forge:flow`:
+- **User-defined flows** (`flows_enabled`) — author `.forge/workflows/<name>.yaml`, then
+  `/forge:flow <name>` (or `--plan` to preview the dependency waves). Output flows through
+  the Proposal→Validator→Executor rails — nothing is written to your project unapproved.
+- **Parallel build + worktree isolation** — the build stage fans independent task-DAG nodes
+  out in parallel; each mutating node runs on its own `forge/wt/<node>` branch so conflicts
+  surface loudly at the merge instead of clobbering.
+- **Hybrid generation** (`allow_generated_subdags`) — a `decompose` node lets a cheap model
+  generate a *sub-DAG*, validated (acyclicity + node-count + token budget) **before** any
+  child runs.
 
-```bash
-/forge:flow                      # list available workflows
-/forge:flow research-brief       # run a workflow through the engine
-/forge:flow research-brief --plan  # show the dependency-wave plan without dispatching
-```
-
-Each node carries a `prompt` (or a `{{upstream_id}}`-interpolating `prompt_template`),
-`depends_on`, and an optional `schema`/`model`. Output flows through the
-Proposal→Validator→Executor rails — nothing is written to your project unapproved — and
-degrades to a deterministic dry-run plan when background dispatch is unavailable.
-
-**Parallel build + worktree isolation** (`parallel_build`, `worktree_isolation`) — the build
-stage fans independent, ready task-DAG nodes out in parallel; with worktree isolation each
-mutating node runs in its own git worktree on a `forge/wt/<node>` branch (never `main`/
-`develop`), so conflicts surface loudly at the merge instead of clobbering. Worktrees are torn
-down on success and on failure; with worktrees unavailable it degrades to sequential.
-
-**Hybrid generation** (`allow_generated_subdags`) — an optional `decompose` node lets a cheap
-model generate a *sub-DAG*, which is validated (acyclicity + node-count cap + token-budget
-proxy) **before** any child step runs; generation never escapes the validated slot.
-
-**Cost.** Each node is a fresh `claude -p` session (heterogeneous nodes defeat `--resume`), so
-it pays the fresh-session floor (~$0.06). At the default daily cap ($0.50) only small workflows
-run — size larger runs with `max_total` / `max_budget_usd` and a raised cap. Full reference:
-[`references/workflow-engine.md`](references/workflow-engine.md) and
+Each node is a fresh cost-gated `claude -p` dispatch, so size runs against your daily cap.
+Full reference: [`references/workflow-engine.md`](references/workflow-engine.md) ·
 [`references/orchestration-config.md`](references/orchestration-config.md).
+
+### 📋 Project rules
+
+Author scoped constraints that steer Forge's agents (a Forge-native take on `.cursor/rules`).
+Rules live in `.forge/rules/*.md` and are **advisory** by default — they surface as context,
+never block — unless a glob rule sets `enforce: true` (then it hard-blocks writes to matching
+paths, the guardrail that makes hands-off runs safe).
+
+```
+/forge:rules init     # scaffold .forge/rules/
+/forge:rules add …    # add a rule from a template
+/forge:rules list     # show active rules
+```
+
+Scopes: `always`, `stage`, `glob` (on matching writes), `manual`. Full schema:
+[`references/rules-format.md`](references/rules-format.md).
+
+### 🧩 Adaptive profiles
+
+Forge detects your project type at init and tailors stages and gates:
+
+`api` · `fullstack` · `ml-pipeline` · `cli` · `library` · `monorepo` · `mobile` ·
+`data-contract`
+
+Each adds type-specific steps and a real gate (e.g. monorepo → acyclic dependency-graph
+gate; data-contract → schema-compatibility gate). Override with `/forge:set-profile <type>`.
+
+### 🌙 Background daemons
+
+Optional, cost-capped, capability-gated background agents (a clean no-op when unavailable):
+
+| Command | Daemon |
+|---------|--------|
+| `/forge:watch` · `/forge:watch-stop` | **Observer** — records risky changes / missing tests / drift, surfaced at session start |
+| `/forge:dreamer-run` | **Dreamer** — consolidates lessons (decay, dup & contradiction flagging, daily digest) |
+| `/forge:health-check` | **Health** — hook + lesson-store integrity → `healthy / degraded / failing` |
+
+See [`references/daemon-bus.md`](references/daemon-bus.md).
 
 ---
 
-## How Hooks Work
+## Command reference
 
-Forge installs 7 lifecycle hooks that run silently alongside your Claude Code session:
+**Pipeline:** `/forge:srs` `/forge:product` `/forge:arch` `/forge:spec` `/forge:plan`
+`/forge:build` `/forge:eval` `/forge:deploy` `/forge:monitor` `/forge:feedback`
+`/forge:resolve` `/forge:release`
 
-| Hook | Fires | What it does |
-|------|-------|-------------|
-| `session-start.py` | Every session open | Injects current stage, task, blockers, top lessons, and active `always`/`stage` rules (≤ 2 000 tokens) |
-| `prompt-submit.py` | Every user message | Detects stage intent; flags corrections for lesson extraction |
-| `pre-tool-write.py` | Before Write/Edit | Checks design token compliance; surfaces matching `glob` project rules (advisory) |
-| `post-tool-use.py` | After Write/Edit/Bash | Logs each tool call to `session-log.jsonl` (the semantic skill miner's source trace) |
-| `stop-reflect.py` | End of Claude turn | Evaluates output against gate criteria; surfaces skill proposals |
-| `subagent-stop.py` | End of subagent turn | Captures subagent reflections |
-| `session-end.py` | Session close | Writes session summary to `.forge/sessions/`; syncs lessons |
+| Utility | What it does |
+|---------|-------------|
+| `/forge:status` | Current stage, task, blockers, daemon status, recent history |
+| `/forge:resume` | Restore context after a session restart |
+| `/forge:doctor` | Diagnose environment / plugin / gate health and name the fix |
+| `/forge:why` | Explain a gate criterion, lesson tag, stage, or current blocker |
+| `/forge:retro` | Cycle-completion retrospective after Stage 12 |
+| `/forge:set-profile` | Set the project-type profile |
+| `/forge:review` | Fan 4 reviewers (correctness/security/performance/conventions) over a diff → one report |
+| `/forge:adopt` | Brownfield onboarding — infer SRS + architecture drafts, seed pipeline state |
+| `/forge:sprint` | Slice the task DAG into bounded, reviewable sprints (`plan`/`review`/`list`) |
+| `/forge:flow` | Run a user-defined workflow DAG from `.forge/workflows/*.yaml` |
+| `/forge:autopilot` · `/forge:autopilot-stop` | Run / halt hands-off pipeline execution |
 
-Hooks never block your work unless a blocker gate fires (exit code 2).
+---
+
+## Configuration
+
+No config file is needed for basic use. Common environment overrides:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FORGE_PROJECT_TYPE` | auto-detected | Override project-type detection |
+| `FORGE_MAX_LESSON_TOKENS` | `500` | Token budget for lesson injection |
+| `FORGE_LESSON_CAP` | `5` | Max lessons shown at session start |
+| `FORGE_NO_BACKGROUND` | unset | Kill switch — disables all background dispatch |
+
+Advanced behavior (autopilot, orchestration) lives under `.forge/config.yaml`.
+
+---
+
+## Project structure (after init)
+
+```
+your-project/
+├── pipeline/
+│   ├── state.md          ← single source of truth (stage · task · blockers)
+│   ├── 01-srs/ … 12-release/   ← one directory per stage, gated in order
+└── .forge/
+    ├── config.yaml       ← autopilot + orchestration settings (optional)
+    ├── rules/            ← project rules (optional)
+    └── lessons.yaml      ← project-local lessons
+```
+
+---
+
+## Testing Forge
+
+```bash
+python3 -m pytest tests/ -q          # 1616 passed
+bash tests/integration/full-pipeline.sh
+# PASS — 28 artifacts present · 12/12 stage gate checks · traceability chain intact
+```
 
 ---
 
 ## If something looks wrong
 
-1. Run **`/forge:doctor`** — it reports environment, plugin, and current-stage
-   gate health (`healthy` / `wedged` / `broken`) and usually names the exact fix.
-2. Seeing a cryptic `PreToolUse` / `Stop` hook error that doesn't mention a Forge
-   path? It's probably from **another plugin's hook**, not Forge — see
+1. Run **`/forge:doctor`** — it reports environment, plugin, and current-stage gate health
+   (`healthy` / `wedged` / `broken`) and usually names the exact fix.
+2. A cryptic `PreToolUse` / `Stop` hook error that doesn't mention a Forge path is probably
+   from **another plugin's hook**, not Forge — see
    [Troubleshooting third-party plugin hooks](docs/getting-feedback.md#troubleshooting-third-party-plugin-hooks).
    (Forge's only `PreToolUse` hook is `hooks/pre-tool-write.py`.)
 3. Found a real Forge bug? File it with the
@@ -413,78 +313,12 @@ Hooks never block your work unless a blocker gate fires (exit code 2).
 
 ---
 
-## Project Structure (After Init)
-
-```
-your-project/
-├── pipeline/
-│   ├── state.md              ← single source of truth (stage, task, blockers)
-│   ├── 01-srs/               ← requirements
-│   ├── 02-product-ux/        ← PRD, design system
-│   ├── 03-architecture/      ← architecture docs, ADRs
-│   ├── 04-spec/              ← technical and interface specs
-│   ├── 05-plan/              ← task DAG, milestones
-│   ├── 06-implementation/    ← progress tracker, decisions log
-│   ├── 07-evaluation/        ← test results, eval report
-│   ├── 08-deploy/            ← deploy plan and log
-│   ├── 09-monitor/           ← observability config, incident log
-│   ├── 10-feedback/          ← feedback log, triage
-│   ├── 11-resolve/           ← hotfixes, backlog updates
-│   └── 12-release/           ← release notes, checklist, retrospective
-└── .forge/
-    └── lessons.yaml          ← project-local lessons
-```
-
----
-
-## Configuration
-
-No config file needed for basic use. Advanced options via environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `FORGE_PROJECT_TYPE` | auto-detected | Override project type detection |
-| `FORGE_MAX_LESSON_TOKENS` | `500` | Max tokens for lesson injection |
-| `FORGE_LESSON_CAP` | `5` | Max lessons shown at session start |
-
----
-
-## Testing Forge
-
-The integration test runs the full pipeline against a sample Todo API project:
-
-```bash
-bash tests/integration/full-pipeline.sh
-# PASS: full-pipeline integration test
-#   29 artifacts present
-#   12/12 stage gate checks passed
-#   traceability chain intact (REQ → spec, FEAT → arch, T-IDs in plan)
-```
-
-Unit tests:
-
-```bash
-python3 -m pytest tests/ -q
-# 1237 passed
-```
-
----
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and
-[docs/agent-authoring.md](docs/agent-authoring.md) for step-by-step guides on:
-
-- Adding a new agent persona
-- Adding a pipeline stage
-- Adding a project-type profile override
-
----
+[docs/agent-authoring.md](docs/agent-authoring.md) for guides on adding agents, stages, and
+project-type profiles.
 
 ## License
 
-MIT
-
-## Author
-
-Saddam · built with [Claude Code](https://claude.ai/code)
+MIT · built by Saddam with [Claude Code](https://claude.ai/code)
