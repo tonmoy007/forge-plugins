@@ -65,9 +65,17 @@
   (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
   polygon; GitHub releases published. SRS `build/01-srs/srs-v0.3.md`, DAG
   `build/04-plan/task-dag-v0.3.md`.
-- **NEXT**: v0.4.0 is shipped (both remotes, tag + releases). No active build. Future:
-  v0.4.1+ (session reuse across heterogeneous DAG nodes; top-level generated workflows;
-  pipeline-as-WorkflowSpec — all v0.4.0 "Out of scope").
+- **NEXT**: **v0.4.1 PLANNED — "operable engine" hardening.** SRS
+  `build/01-srs/srs-v0.4.1.md` + DAG `build/04-plan/task-dag-v0.4.1.md` (**T-202..T-206**)
+  authored on branch `feat/v0.4.1-operable-engine` (commit `bb88525`). Scope = zero-semantic-change
+  observability over the shipped v0.4.0 engine: live stderr narration (stdout contract preserved,
+  T-202), one-line `events.jsonl` audit per run (T-203), pure cost pre-flight estimator + loud
+  drops over the existing deterministic admission set (T-204), dogfood `.forge/workflows/doc-review.yaml`
+  + parallel-build integration test + docs (T-205), release (T-206). **Next task: T-202.** SRS §5
+  consolidates the program-wide roadmap (v0.5.0 "engine made real" trio = session reuse across
+  heterogeneous nodes · top-level generated workflows · pipeline-as-WorkflowSpec; unified `~/.forge`
+  graduation layer; Managed-Agents track ≥v0.6; blocked-upstream in-session context trigger) +
+  one standing-non-goals list. No code written yet.
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
   you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
   (sprint M4, T-153–156, deferred).
