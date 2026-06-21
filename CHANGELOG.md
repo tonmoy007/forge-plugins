@@ -14,6 +14,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] — 2026-06-21
+
+Dynamic workflow engine. Forge's orchestration generalizes from two hardcoded layers
+(a flat homogeneous fan-out + a linear stage sequencer) into a general **topological
+DAG executor** — arbitrary graphs of heterogeneous agent steps with per-node
+prompt/schema/model, `depends_on` edges, dependency-wave scheduling, bounded parallel
+fan-out, inter-step data passing, and per-node verification. Built **on** the mature
+single-step `claude -p` dispatch adapter (cost-gated, deterministic, never-raises).
+Every capability on top is an **independent opt-in toggle, all default off**, so a
+project that enables none sees zero behavior change from v0.3.6. Grounded in a research
+review of Claude Code's own Dynamic Workflows + Agent SDK, durable/graph orchestration
+(LangGraph, Temporal), and the automatic-workflow-generation literature (AFlow, ADAS,
+DSPy) — field consensus is **hybrid**: a curated backbone with generation confined to
+validated slots.
+
+### Added
+- **Workflow DAG engine** (`scripts/_workflow.py`) — `WorkflowNode`
+  (id / `build_prompt(upstream)` / `depends_on` / `output_schema` / `model` / `validate`
+  / `verify` / per-node `cwd`), `WorkflowSpec`, `validate_spec` (dup-id / unknown-dep /
+  cycle), `plan_waves` (Kahn), and `run_workflow` (validate-first; topological waves;
+  bounded parallel per wave; data passing; retry-once-then-drop; id-ordered,
+  byte-identical parallel/sequential; never-raises). Threads `max_budget_usd` + `resume`
+  into every dispatch with **deterministic budget-aware admission** (topological
+  pre-allocation, so cap pressure drops a fixed set). (REQ-WF-001, NF-026, NF-029)
+- **Shared per-node verify/heal** (`scripts/_verify.py`) — extracted from autopilot and
+  imported by both; a node with a `VerifySpec` gets a fresh-session, schema-constrained
+  pass/fail verdict gating its result (drop-with-reason or one heal). (REQ-WF-002)
+- **`orchestration:` config block** — independent toggles `flows_enabled`,
+  `parallel_build`, `worktree_isolation`, `allow_generated_subdags` (all default false)
+  + tunables `max_parallel` (4), `max_total` (64), `max_budget_usd`; fail-soft. (REQ-WF-003)
+- **User-defined flows** (`flows_enabled`) — `.forge/workflows/*.yaml` loader
+  (`scripts/workflow_loader.py`, with `{{upstream_id}}` `prompt_template` interpolation)
+  + the `/forge:flow` skill (list / run / `--plan`), human-in-the-loop via
+  Proposal→Validator→Executor. (REQ-WF-005, 006)
+- **Per-stage parallel build** (`parallel_build`) — fans independent, ready task-DAG
+  nodes out in parallel via the engine, each with its own `cwd`. (REQ-WF-007)
+- **Git-worktree isolation** (`worktree_isolation`, `scripts/_worktree.py`) — each
+  parallel mutating node runs on its own `forge/wt/<node>` branch (never `main`/`develop`)
+  from a clean base; conflicts surface at the merge (never silent clobber); worktrees torn
+  down on success **and** on failure; degrades to sequential when unavailable. (REQ-WF-008)
+- **Adversarial-verify join** — before merging parallel build outputs, N skeptics (each
+  prompted to refute) gate admission by **majority of *dispatched* skeptics** (a cost-cap
+  drop can't silently lower the bar). (REQ-WF-009)
+- **Hybrid sub-DAG generation** (`allow_generated_subdags`) — an optional `decompose`
+  node generates a sub-DAG validated by `validate_spec` + a node-count cap + a
+  deterministic token-budget proxy **before any child dispatches**. (REQ-WF-010)
+- `references/workflow-engine.md` + `references/orchestration-config.md`.
+
+### Changed
+- **Forge's own fan-outs run on the engine** — `_orchestrate.fan_out` is now the
+  single-wave special case of `run_workflow`; `/forge:review`, `/forge:adopt`, and
+  `/forge:why` route through it with **behavior preserved** (their tests pass unchanged).
+  (REQ-WF-004)
+- **README** rewritten — leaner and scannable, with mermaid flow diagrams (gated
+  pipeline, the learning loop, a workflow DAG); deep detail deferred to `references/`.
+
+### Fixed
+- Decompose generation now routes a **malformed-parser exception** to the deterministic
+  fallback (sub-DAG admission moved inside the generation guard) instead of dropping the
+  node with no fallback — closing a REQ-WF-010 edge case found in adversarial verification.
+
+---
+
 ## [0.3.6] — 2026-06-16
 
 Context-aware autopilot. A long hands-off run now survives a context boundary —
