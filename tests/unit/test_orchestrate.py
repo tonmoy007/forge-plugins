@@ -162,3 +162,49 @@ def test_no_output_schema_not_passed() -> None:
 
     _orch.fan_out(["a"], lambda p: p, forge_dir=FORGE, feature="t", dispatch_fn=disp)
     assert "output_schema" not in captured  # absent unless requested
+
+
+# --- engine equivalence (T-194, REQ-WF-004, AC-WF-005) ---------------------
+# `fan_out` is the single-wave special case of `run_workflow`: a flat list of
+# independent nodes (no `depends_on`), one shared prompt + schema mapped over the
+# items. The contract: `fan_out`'s ordered results equal a direct single-wave
+# `run_workflow` run over the same inputs (REQ-NF-026 determinism lineage).
+
+_wf_spec = importlib.util.spec_from_file_location("_workflow", _root / "scripts" / "_workflow.py")
+_wf = importlib.util.module_from_spec(_wf_spec)
+sys.modules["_workflow"] = _wf
+_wf_spec.loader.exec_module(_wf)
+
+
+def test_fan_out_single_wave_equals_run_workflow() -> None:
+    """fan_out's output EQUALS a direct single-wave run_workflow run (the equivalence
+    contract). Same inputs, same shared prompt + validate → same ordered values, same
+    completed/cost — proving fan_out is run_workflow's flat-list special case."""
+    items = ["a", "bb", "ccc", "dddd"]
+
+    def disp(prompt, **kw):
+        return _ok({"item": prompt, "n": len(prompt)}, cost=0.02)
+
+    fan = _orch.fan_out(items, lambda x: x, forge_dir=FORGE, feature="t",
+                        validate=_validate_keep_all, dispatch_fn=disp)
+
+    # The mirror: a flat WorkflowSpec with index-ordered (zero-padded) ids, one node
+    # per item, no edges — exactly what fan_out builds internally.
+    nodes = [
+        _wf.WorkflowNode(id=f"{i:04d}", build_prompt=(lambda _u, x=x: x),
+                         validate=_validate_keep_all)
+        for i, x in enumerate(items)
+    ]
+    wf = _wf.run_workflow(_wf.WorkflowSpec(nodes=nodes), forge_dir=FORGE, feature="t",
+                          dispatch_fn=disp)
+
+    assert fan.results == list(wf.results.values())          # same ordered values
+    assert fan.completed == wf.completed
+    assert fan.dropped == wf.dropped
+    assert abs(fan.total_cost_usd - wf.total_cost_usd) < 1e-9
+
+
+def _validate_keep_all(d: dict) -> dict:
+    if not isinstance(d, dict):
+        raise ValueError("not an object")
+    return d
