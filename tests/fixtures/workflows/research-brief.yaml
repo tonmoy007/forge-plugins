@@ -1,0 +1,15 @@
+name: research-brief
+description: Gather sources on a topic, then draft a short brief from the findings.
+nodes:
+  - id: gather
+    prompt: >-
+      Research the given topic and return JSON
+      {"sources": [{"title": str, "url": str, "summary": str}]}.
+  - id: draft
+    depends_on: [gather]
+    prompt_template: >-
+      Write a one-paragraph brief from these gathered sources: {{gather}}.
+      Return JSON {"brief": str}.
+    schema:
+      type: object
+    model: claude-haiku-4-5

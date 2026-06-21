@@ -34,25 +34,17 @@ import _stage_table  # noqa: E402
 import _state_lib  # noqa: E402
 import _error_log  # noqa: E402  (shared rotation for the run-log)
 import _background_agent  # noqa: E402  (the sole `claude -p` wrapper — background mode)
+import _verify  # noqa: E402  (shared verify/heal primitives — REQ-WF-002)
+
+# Re-exported so autopilot's public API is unchanged after the T-192 extraction: the verdict
+# schema and interpreter now live in `_verify` and are shared with the workflow engine.
+VERIFY_SCHEMA = _verify.VERIFY_SCHEMA
+verdict_failed = _verify.verdict_failed
 
 VALID_MODES = ("in-session", "background")
 _RUNLOG_NAME = "autopilot-runs.jsonl"
 _SESSION_NAME = "autopilot-session.json"
 _DONE_STATUSES = {"done", "passed", "advanced", "ok"}
-
-# Structured verdict an independent verifier returns (REQ-AUTO-003); constrained via the
-# CLI structured-outputs flag (T-167). A CLI/model without structured outputs degrades to
-# free-form text, which `verdict_failed` parses leniently (and treats as pass on failure).
-VERIFY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "verdict": {"type": "string", "enum": ["pass", "fail"]},
-        "reasons": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["verdict"],
-    "additionalProperties": False,
-}
-
 
 # --------------------------------------------------------------------------- #
 # Config
@@ -149,28 +141,10 @@ def load_config(forge_dir) -> AutopilotConfig:
 def should_heal(attempts_used: int, config: AutopilotConfig) -> bool:
     """True when autopilot may attempt another bounded self-heal for the current stage
     (REQ-AUTO-001/002). Capped by `max_heal_attempts` (default 1; 0 = v0.3.1 stop-on-gate).
-    `attempts_used` is the number of heals already tried for this stage. Never raises.
+    `attempts_used` is the number of heals already tried for this stage. Delegates to the
+    shared `_verify.should_heal` primitive (REQ-WF-002). Never raises.
     """
-    cap = config.max_heal_attempts
-    return isinstance(cap, int) and attempts_used < cap
-
-
-def verdict_failed(result: dict) -> bool:
-    """Interpret a verifier dispatch result (REQ-AUTO-003): True only when the verifier
-    returned a clean `fail` verdict. A missing/unparseable/unavailable verdict is treated
-    as NOT-failed — the verifier is an extra check on an already-passing gate, so a broken
-    or unavailable verifier degrades gracefully rather than blocking (REQ-NF-013). Never raises.
-    """
-    if not isinstance(result, dict):
-        return False
-    payload = result.get("result")
-    if not isinstance(payload, str) or not payload.strip():
-        return False
-    try:
-        data = json.loads(payload)
-    except (ValueError, TypeError):
-        return False
-    return isinstance(data, dict) and str(data.get("verdict", "")).lower() == "fail"
+    return _verify.should_heal(attempts_used, config.max_heal_attempts)
 
 
 def should_rotate_session(dispatch_count: int, config: AutopilotConfig) -> bool:
