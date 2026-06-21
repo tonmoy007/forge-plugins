@@ -283,6 +283,7 @@ def _run_isolated(
     # dropped (degrade) and never dispatched.
     handles: dict = {}          # id -> WorktreeHandle (only successfully-added)
     setup_drops: list = []
+    drop_recs: list = []        # structured {id, reason} drops for the audit record (T-203)
     _narr = narrator if narrator is not None else _wf._Narrator(feature, False)
     for tid in ids:
         h = _wt.add(repo, tid)
@@ -291,6 +292,7 @@ def _run_isolated(
         else:
             reason = f"worktree add failed: {h.reason}"
             setup_drops.append(f"node {tid!r}: {reason}")
+            drop_recs.append({"id": tid, "reason": reason})
             _narr.drop(tid, reason)
 
     try:
@@ -305,6 +307,9 @@ def _run_isolated(
             max_budget_usd=getattr(config, "max_budget_usd", None),
             resume=resume, dispatch_fn=dispatch_fn, claude_bin=claude_bin,
             narrator=narrator,
+            # The inner fan-out is part of THIS build run — it must not write its own audit
+            # line; the single post-merge record is written below (exactly one per run).
+            audit=False,
         )
 
         # Phase 3: join — sequential, deterministic id order. Optionally gate each completed node
@@ -312,8 +317,11 @@ def _run_isolated(
         # commit and merge; a conflict (or commit/merge failure) excludes the node with a reason.
         merged: dict = {}
         join_drops: list = []
+        verdicts: dict = {}     # per-node adversarial outcomes for the audit record (T-203)
         skeptic_cost = 0.0
         skeptics = max(0, int(adversarial_skeptics or 0))
+        # Inner engine drops are already structured ({id, reason}); carry them into the record.
+        drop_recs.extend(run.drops or [])
         for tid in sorted(run.results):
             h = handles[tid]
             if skeptics > 0:
@@ -322,14 +330,17 @@ def _run_isolated(
                     forge_dir=forge_dir, feature=feature, claude_bin=claude_bin,
                 )
                 skeptic_cost += verdict.cost_usd
+                verdicts[tid] = {"admitted": verdict.admitted, "reason": verdict.reason}
                 if not verdict.admitted:
                     join_drops.append(f"node {tid!r}: {verdict.reason}")
+                    drop_recs.append({"id": tid, "reason": verdict.reason})
                     _narr.drop(tid, verdict.reason)
                     continue
             c = _wt.commit(h, message=f"feat({tid}): parallel build")
             if not c.ok:
                 reason = f"commit failed: {c.reason}"
                 join_drops.append(f"node {tid!r}: {reason}")
+                drop_recs.append({"id": tid, "reason": reason})
                 _narr.drop(tid, reason)
                 continue
             m = _wt.merge(repo, h)
@@ -337,6 +348,7 @@ def _run_isolated(
                 kind = "merge conflict" if m.conflict else "merge failed"
                 reason = f"{kind}: {m.reason}"
                 join_drops.append(f"node {tid!r}: {reason}")
+                drop_recs.append({"id": tid, "reason": reason})
                 _narr.drop(tid, reason)
                 continue
             merged[tid] = run.results[tid]
@@ -346,12 +358,20 @@ def _run_isolated(
         # `dropped` is everything that did not merge: setup drops + engine drops + join drops
         # (incl. adversarial refutations).
         dropped = len(ids) - len(ordered)
+        total_cost = run.total_cost_usd + skeptic_cost
+        _wf.write_audit_record(
+            forge_dir, name=feature, nodes=len(ids), waves=1 if ids else 0,
+            completed=list(ordered.keys()), dropped=drop_recs, total_cost_usd=total_cost,
+            admitted=list(run.admitted or []), verdicts=verdicts,
+        )
         return _wf.WorkflowResult(
             results=ordered,
             completed=len(ordered),
             dropped=dropped,
-            total_cost_usd=run.total_cost_usd + skeptic_cost,
+            total_cost_usd=total_cost,
             dropped_reasons=reasons,
+            admitted=list(run.admitted or []),
+            drops=drop_recs,
         )
     finally:
         # Lifecycle: tear down EVERY worktree — on success and on any drop/crash (no orphans).

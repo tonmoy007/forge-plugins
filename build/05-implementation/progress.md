@@ -75,7 +75,7 @@
   consolidates the program-wide roadmap (v0.5.0 "engine made real" trio = session reuse across
   heterogeneous nodes · top-level generated workflows · pipeline-as-WorkflowSpec; unified `~/.forge`
   graduation layer; Managed-Agents track ≥v0.6; blocked-upstream in-session context trigger) +
-  one standing-non-goals list. **T-202 done** (see v0.4.1 Task Status below); next task T-203.
+  one standing-non-goals list. **T-202 + T-203 done** (see v0.4.1 Task Status below); next task T-204.
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
   you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
   (sprint M4, T-153–156, deferred).
@@ -130,7 +130,7 @@
 | Task | Status | Notes |
 |------|--------|-------|
 | T-202 | 🟢 done | Live stderr narration (REQ-WF-011). `_workflow.narration_enabled` + `_Narrator` (stderr-only, never-raises) in `run_workflow`: per-wave header, per-node `start`/`done`/`dropped:<reason>` + cost, deterministic id-ordered summary block. `parallel_build` threads one shared narrator (fan-out via inner `run_workflow` + join-phase drop lines). New `orchestration.narrate` config key (default ON; only explicit `false` silences) + `FORGE_WF_QUIET=1` env. **stdout byte-identical on vs off** (AC-WF-012). +13 tests (config narrate ×4, narration ×7, parallel ×2). Full suite 1641 pass; validate 0; full-pipeline 12/12. |
-| T-203 | 🔲 todo | `events.jsonl` audit record (one line per run) |
+| T-203 | 🟢 done | `events.jsonl` audit record (REQ-WF-012). `_workflow.write_audit_record` appends **exactly one** schema-versioned, PII-free `workflow_run` line per run via `_error_log.append_jsonl` (rotation + atomic): `ts` (injectable), `name`, `nodes`, `waves`, id-ordered `completed`/`dropped:[{id,reason}]`/`admitted`, `total_cost_usd`, `verdicts`. Nested decompose children + `parallel_build`'s inner fan-out pass `audit=False` (one line per top-level run); `parallel_build` writes its own post-merge record (setup+engine+join drops, adversarial verdicts). WorkflowResult gained additive `admitted`/`drops`. Over-cap **and** invalid-spec runs still write; unwritable `.forge` degrades silently; never raises. +8 tests. Suite 1648 pass; validate 0; full-pipeline 12/12. |
 | T-204 | 🔲 todo | Cost pre-flight estimator + loud drops |
 | T-205 | 🔲 todo | Dogfood example flow + parallel-build integration test + docs |
 | T-206 | 🔲 todo | Release v0.4.1 |

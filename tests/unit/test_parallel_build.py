@@ -524,3 +524,31 @@ def test_parallel_build_narration_silenced_by_quiet_env(monkeypatch):
             dispatch_fn=_echo_dispatch,
         )
     assert err.getvalue() == ""
+
+
+# --------------------------------------------------------------------------- #
+# T-203 (REQ-WF-012, AC-WF-013) — parallel build writes exactly one audit record
+# --------------------------------------------------------------------------- #
+
+
+def _read_events(forge_dir):
+    p = Path(forge_dir) / "events.jsonl"
+    if not p.exists():
+        return []
+    return [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
+
+
+def test_parallel_build_writes_one_audit_record(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    forge = tmp_path / ".forge"
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, max_parallel=4)
+    res = _pb.run_parallel_build(
+        [_task("T1"), _task("T2")], done=set(), config=cfg, forge_dir=forge, feature="build",
+        dispatch_fn=_echo_dispatch,
+    )
+    recs = _read_events(forge)
+    assert len(recs) == 1  # exactly one — the inner run_workflow audit is suppressed
+    r = recs[0]
+    assert r["event"] == "workflow_run"
+    assert r["completed"] == ["T1", "T2"]
+    assert "admitted" in r and "verdicts" in r

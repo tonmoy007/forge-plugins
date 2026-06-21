@@ -22,6 +22,7 @@ the single-wave special case.
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import logging
 import os
@@ -35,6 +36,7 @@ _PLUGIN_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _background_agent  # noqa: E402  (the sole `claude -p` wrapper)
+import _error_log  # noqa: E402  (rotation-aware atomic JSONL append — T-146, the audit writer)
 import _verify  # noqa: E402  (shared verify/heal primitives — REQ-WF-002)
 
 _LOG = logging.getLogger(__name__)
@@ -111,6 +113,67 @@ class _Narrator:
             f"{{{d['id']}: {d['reason']}}}" for d in sorted(dropped, key=lambda d: d["id"])
         )
         self._line(f"summary: completed:[{comp}] dropped:[{drops}] total ${total:.4f}")
+
+
+# --------------------------------------------------------------------------- #
+# `events.jsonl` audit record (REQ-WF-012 / T-203) — one structured line per run.
+# --------------------------------------------------------------------------- #
+# Every other Forge subsystem (cost-cap, observer, health, skill-miner) leaves a structured
+# record; a workflow run left none. On every top-level `run_workflow` / `parallel_build`
+# completion we append exactly one schema-versioned, PII-free JSON line to `.forge/events.jsonl`
+# via the rotation-aware atomic writer (T-146). Deterministic, id-ordered fields — independent
+# of thread scheduling (REQ-NF-032). Fail-soft: an unwritable `.forge` degrades silently; an
+# over-cap or invalid-spec run still writes a record carrying its drops. Never raises.
+
+AUDIT_SCHEMA_VERSION = 1
+_EVENTS_NAME = "events.jsonl"
+
+
+def _audit_ts(ts: Optional[str]) -> str:
+    """The record timestamp: the injected `ts` when given, else the wall clock (UTC, Z-suffix)."""
+    if ts is not None:
+        return ts
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def write_audit_record(
+    forge_dir,
+    *,
+    name: str,
+    nodes: int,
+    waves: int,
+    completed: list,
+    dropped: list,
+    total_cost_usd: float,
+    admitted: list,
+    verdicts: Optional[dict] = None,
+    ts: Optional[str] = None,
+) -> None:
+    """Append one `workflow_run` audit line to `<forge_dir>/events.jsonl` (REQ-WF-012).
+
+    All list fields are id-sorted so the record is deterministic regardless of thread
+    scheduling. Delegates the write to `_error_log.append_jsonl` (rotation + atomic single line),
+    which is itself fail-soft — and the whole call is additionally guarded, so it never raises."""
+    try:
+        record = {
+            "schema_version": AUDIT_SCHEMA_VERSION,
+            "ts": _audit_ts(ts),
+            "event": "workflow_run",
+            "name": name,
+            "nodes": int(nodes),
+            "waves": int(waves),
+            "completed": sorted(completed),
+            "dropped": sorted(
+                ({"id": d.get("id", ""), "reason": d.get("reason", "")} for d in (dropped or [])),
+                key=lambda d: (d["id"], d["reason"]),
+            ),
+            "total_cost_usd": round(float(total_cost_usd or 0.0), 6),
+            "verdicts": verdicts or {},
+            "admitted": sorted(admitted),
+        }
+        _error_log.append_jsonl(Path(forge_dir) / _EVENTS_NAME, record)
+    except Exception:  # noqa: BLE001 — the audit write must never raise into the engine
+        pass
 
 
 @dataclass
@@ -200,6 +263,12 @@ class WorkflowResult:
     dropped: int
     total_cost_usd: float
     dropped_reasons: list = field(default_factory=list)
+    # Additive structured views (v0.4.1) for the audit record (T-203) and the cost pre-flight
+    # estimator's run-equality check (T-204). `admitted` is the deterministic topological
+    # admission set; `drops` is the id/reason structured form of `dropped_reasons`. Both default
+    # empty so every existing caller — which serializes only the original fields — is unaffected.
+    admitted: list = field(default_factory=list)
+    drops: list = field(default_factory=list)  # list[{"id", "reason"}]
 
 
 def plan_waves(spec: WorkflowSpec) -> list:
@@ -475,6 +544,8 @@ def run_workflow(
     allow_generated_subdags: bool = False,
     name: Optional[str] = None,
     narrator: Optional["_Narrator"] = None,
+    audit: bool = True,
+    audit_ts: Optional[str] = None,
 ) -> WorkflowResult:
     """Execute a workflow DAG wave-by-wave with bounded parallel fan-out per wave.
 
@@ -515,8 +586,14 @@ def run_workflow(
             narrator.drop("", f"invalid spec: {e}")
             _LOG.warning("run_workflow: %s", e)
         narrator.summary([], drops, 0.0)
+        if audit:
+            write_audit_record(
+                forge_dir, name=run_name, nodes=len(nodes), waves=0, completed=[],
+                dropped=drops, total_cost_usd=0.0, admitted=[], ts=audit_ts,
+            )
         return WorkflowResult(results={}, completed=0, dropped=len(nodes),
-                              total_cost_usd=0.0, dropped_reasons=dropped_reasons)
+                              total_cost_usd=0.0, dropped_reasons=dropped_reasons,
+                              admitted=[], drops=drops)
 
     by_id = {n.id: n for n in nodes}
     waves = plan_waves(spec)
@@ -620,6 +697,9 @@ def run_workflow(
                     "max_budget_usd": max_budget_usd, "claude_bin": claude_bin,
                     "cwd": node.cwd if node.cwd is not None else cwd,
                     "allow_generated_subdags": allow_generated_subdags,
+                    # Nested child run is part of THIS run — it must not write its own audit
+                    # line (exactly one record per top-level run, REQ-WF-012).
+                    "audit": False,
                 }
                 return pool.submit(_run_decompose, node, prompt, dispatch_fn,
                                    node_kwargs, run_kwargs)
@@ -657,8 +737,17 @@ def run_workflow(
     ordered = {nid: results[nid] for nid in sorted(results)}
     completed = len(ordered)
     narrator.summary(list(ordered.keys()), drops, total_cost)
+    admitted_ids = sorted(allowed)
+    if audit:
+        write_audit_record(
+            forge_dir, name=run_name, nodes=len(nodes), waves=len(waves),
+            completed=list(ordered.keys()), dropped=drops, total_cost_usd=total_cost,
+            admitted=admitted_ids, ts=audit_ts,
+        )
     return WorkflowResult(
         results=ordered,
+        admitted=admitted_ids,
+        drops=drops,
         completed=completed,
         dropped=len(nodes) - completed,
         total_cost_usd=total_cost,

@@ -751,3 +751,103 @@ def test_narration_failure_degrades_to_silence(monkeypatch):
                                dispatch_fn=_echo_dispatch)
     # The run still completed and returned a structured result.
     assert res.completed == 4
+
+
+# --------------------------------------------------------------------------- #
+# T-203 (REQ-WF-012, AC-WF-013) — one events.jsonl audit record per run
+# --------------------------------------------------------------------------- #
+
+
+def _read_events(forge_dir):
+    p = Path(forge_dir) / "events.jsonl"
+    if not p.exists():
+        return []
+    return [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
+
+
+def test_audit_writes_exactly_one_record_per_run(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    forge = tmp_path / ".forge"
+    res = _wf.run_workflow(_diamond(), forge_dir=forge, feature="myflow",
+                           dispatch_fn=_echo_dispatch, name="myflow")
+    recs = _read_events(forge)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r["event"] == "workflow_run"
+    assert r["name"] == "myflow"
+    assert r["nodes"] == 4
+    assert r["waves"] == 3
+    assert r["completed"] == ["A", "B", "C", "D"]
+    assert r["dropped"] == []
+    assert r["admitted"] == ["A", "B", "C", "D"]
+    assert "total_cost_usd" in r and "verdicts" in r
+    assert "schema_version" in r
+
+
+def test_audit_ts_is_injectable(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    forge = tmp_path / ".forge"
+    _wf.run_workflow(_diamond(), forge_dir=forge, feature="t",
+                     dispatch_fn=_echo_dispatch, audit_ts="2026-01-01T00:00:00Z")
+    recs = _read_events(forge)
+    assert recs[0]["ts"] == "2026-01-01T00:00:00Z"
+
+
+def test_audit_invalid_spec_still_writes(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    forge = tmp_path / ".forge"
+    bad = _wf.WorkflowSpec(nodes=[
+        _node("A", lambda up: "A", ["missing"]),
+    ])
+    res = _wf.run_workflow(bad, forge_dir=forge, feature="t", dispatch_fn=_echo_dispatch)
+    recs = _read_events(forge)
+    assert len(recs) == 1
+    assert recs[0]["completed"] == []
+    assert recs[0]["dropped"]  # carries the invalid-spec reason(s)
+
+
+def test_audit_over_cap_run_still_writes_with_drops(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    forge = tmp_path / ".forge"
+    # max_total=2 over a 4-node diamond ⇒ 2 nodes pre-dropped by the cap.
+    res = _wf.run_workflow(_diamond(), forge_dir=forge, feature="t",
+                           dispatch_fn=_echo_dispatch, max_total=2)
+    recs = _read_events(forge)
+    assert len(recs) == 1
+    assert len(recs[0]["admitted"]) == 2
+    assert recs[0]["dropped"]  # the capped nodes are recorded
+
+
+def test_audit_unwritable_forge_degrades_silently(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    # forge_dir is a *file*, so events.jsonl's parent cannot be created → write fails fail-soft.
+    forge_file = tmp_path / "not-a-dir"
+    forge_file.write_text("x")
+    res = _wf.run_workflow(_diamond(), forge_dir=forge_file, feature="t",
+                           dispatch_fn=_echo_dispatch)
+    assert res.completed == 4  # run still completed; no raise
+
+
+def test_audit_nested_decompose_does_not_write_extra_records(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    forge = tmp_path / ".forge"
+    recorded: list = []
+
+    def dispatch(prompt, **kwargs):
+        recorded.append(prompt)
+        if "DECOMPOSE" in prompt or "sub-DAG" in prompt:
+            return _ok({"nodes": [{"id": "c1", "prompt": "child"}]})
+        return _ok({"prompt": prompt})
+
+    def parse_subdag(d):
+        return [_wf.WorkflowNode(id=n["id"], build_prompt=lambda up, p=n["prompt"]: p)
+                for n in d.get("nodes", [])]
+
+    spec = _wf.WorkflowSpec(nodes=[
+        _wf.WorkflowNode(id="root", build_prompt=lambda up: "DECOMPOSE",
+                         decompose=_wf.DecomposeSpec(parse_subdag=parse_subdag)),
+    ])
+    _wf.run_workflow(spec, forge_dir=forge, feature="t", dispatch_fn=dispatch,
+                     allow_generated_subdags=True)
+    recs = _read_events(forge)
+    assert len(recs) == 1  # exactly one — the nested child run does not write its own record
