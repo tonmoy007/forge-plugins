@@ -65,9 +65,17 @@
   (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
   polygon; GitHub releases published. SRS `build/01-srs/srs-v0.3.md`, DAG
   `build/04-plan/task-dag-v0.3.md`.
-- **NEXT**: v0.4.0 is shipped (both remotes, tag + releases). No active build. Future:
-  v0.4.1+ (session reuse across heterogeneous DAG nodes; top-level generated workflows;
-  pipeline-as-WorkflowSpec — all v0.4.0 "Out of scope").
+- **NEXT**: **v0.4.1 PLANNED — "operable engine" hardening.** SRS
+  `build/01-srs/srs-v0.4.1.md` + DAG `build/04-plan/task-dag-v0.4.1.md` (**T-202..T-206**)
+  authored on branch `feat/v0.4.1-operable-engine` (commit `bb88525`). Scope = zero-semantic-change
+  observability over the shipped v0.4.0 engine: live stderr narration (stdout contract preserved,
+  T-202), one-line `events.jsonl` audit per run (T-203), pure cost pre-flight estimator + loud
+  drops over the existing deterministic admission set (T-204), dogfood `.forge/workflows/doc-review.yaml`
+  + parallel-build integration test + docs (T-205), release (T-206). **Next task: T-202.** SRS §5
+  consolidates the program-wide roadmap (v0.5.0 "engine made real" trio = session reuse across
+  heterogeneous nodes · top-level generated workflows · pipeline-as-WorkflowSpec; unified `~/.forge`
+  graduation layer; Managed-Agents track ≥v0.6; blocked-upstream in-session context trigger) +
+  one standing-non-goals list. **T-202..T-205 done** (see v0.4.1 Task Status below); next task T-206 (release).
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
   you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
   (sprint M4, T-153–156, deferred).
@@ -111,6 +119,21 @@
 - **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.4.1 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.4.1.md` (T-202..T-206). SRS `build/01-srs/srs-v0.4.1.md`.
+> "Operable engine" hardening — observability + cost pre-flight + dogfood over the shipped
+> v0.4.0 engine, **zero semantic change** (narration is stderr-only; stdout byte-identical).
+> Branch `feat/v0.4.1-operable-engine`.
+
+| Task | Status | Notes |
+|------|--------|-------|
+| T-202 | 🟢 done | Live stderr narration (REQ-WF-011). `_workflow.narration_enabled` + `_Narrator` (stderr-only, never-raises) in `run_workflow`: per-wave header, per-node `start`/`done`/`dropped:<reason>` + cost, deterministic id-ordered summary block. `parallel_build` threads one shared narrator (fan-out via inner `run_workflow` + join-phase drop lines). New `orchestration.narrate` config key (default ON; only explicit `false` silences) + `FORGE_WF_QUIET=1` env. **stdout byte-identical on vs off** (AC-WF-012). +13 tests (config narrate ×4, narration ×7, parallel ×2). Full suite 1641 pass; validate 0; full-pipeline 12/12. |
+| T-203 | 🟢 done | `events.jsonl` audit record (REQ-WF-012). `_workflow.write_audit_record` appends **exactly one** schema-versioned, PII-free `workflow_run` line per run via `_error_log.append_jsonl` (rotation + atomic): `ts` (injectable), `name`, `nodes`, `waves`, id-ordered `completed`/`dropped:[{id,reason}]`/`admitted`, `total_cost_usd`, `verdicts`. Nested decompose children + `parallel_build`'s inner fan-out pass `audit=False` (one line per top-level run); `parallel_build` writes its own post-merge record (setup+engine+join drops, adversarial verdicts). WorkflowResult gained additive `admitted`/`drops`. Over-cap **and** invalid-spec runs still write; unwritable `.forge` degrades silently; never raises. +8 tests. Suite 1648 pass; validate 0; full-pipeline 12/12. |
+| T-204 | 🟢 done | Cost pre-flight estimator + loud drops (REQ-WF-013, NF-033). Extracted the topological admission loop into a shared pure `_workflow._preallocate`, called by **both** `run_workflow` and the new pure `estimate_admission(spec, *, max_total, max_budget_usd, daily/monthly_headroom_usd)` → `AdmissionEstimate` (id-ordered admitted/dropped split, `estimate_usd = len(admitted) × FRESH_FLOOR_USD`, headroom + `within_headroom`). Shared `_CAP_DROP_REASON` ⇒ estimator split is byte-identical to what the run drops (AC-WF-014). `workflow_loader.flow_estimate` reads the single `_cost_cap` source (caps + ledger headroom) + config tunables; `/forge:flow` surfaces estimate + cap headroom + would-drop nodes **before** running. Runtime admission drops fire loud T-202 narration. Zero dispatch; never raises. +10 tests. Suite 1658 pass; validate 0; full-pipeline 12/12. |
+| T-205 | 🟢 done | Dogfood + integration test + docs (REQ-WF-014). Ships `.forge/workflows/doc-review.yaml` (split → {reviewer-a, reviewer-b} → synthesize diamond; loads + validates clean; `.gitignore` `.forge/*` + `!.forge/workflows/` re-include). New `tests/integration/test_parallel_build_e2e.py`: drives `run_parallel_build` against `examples/sample-todo-api/` with `parallel_build` + `worktree_isolation` ON + 2 adversarial skeptics via an **injected fake `dispatch_fn`** (no spend) — asserts fan-out → adversarial join → merge → worktree teardown + one audit record. Docs: README + `references/workflow-engine.md` document the YAML schema, the four toggles + `narrate`, the cost-sizing rule, and an Observability section; `ROADMAP.md` gains the SRS §5 consolidated roadmap + standing-non-goals. +2 integration tests. Suite 1660 pass; validate 0; full-pipeline 12/12. |
+| T-206 | 🟡 staged | Release v0.4.1 — `bump-version.py 0.4.1` (manifests 0.4.1), CHANGELOG `[0.4.1]`, ROADMAP/progress rows. Banner/social-preview are evergreen (no version stats since `d0e04e6`) → no refresh needed. Pre-release green (suite, validate 0, full-pipeline 12/12 toggles off+on). PR→develop→main→tag `v0.4.1`→GitHub release on origin (polygon not configured in this env). |
 
 ## v0.3.3 Task Status
 

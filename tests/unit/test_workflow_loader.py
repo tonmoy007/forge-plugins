@@ -298,3 +298,46 @@ def test_list_workflows_finds_yaml_files(tmp_path):
 
 def test_list_workflows_missing_dir_returns_empty(tmp_path):
     assert _loader.list_workflows(tmp_path / "absent") == []
+
+
+# --------------------------------------------------------------------------- #
+# T-204 (REQ-WF-013, AC-WF-014) — /forge:flow pre-flight estimate reads cap-state
+# --------------------------------------------------------------------------- #
+import importlib.util as _ilu  # noqa: E402
+
+_cfgspec = _ilu.spec_from_file_location(
+    "_workflow_config", _root / "scripts" / "_workflow_config.py")
+_wcfg = _ilu.module_from_spec(_cfgspec)
+sys.modules["_workflow_config"] = _wcfg
+_cfgspec.loader.exec_module(_wcfg)
+
+
+def _flow_spec(n):
+    return _wf.WorkflowSpec(nodes=[
+        _wf.WorkflowNode(id=f"n{i}", build_prompt=lambda up: "x",
+                         depends_on=([f"n{i-1}"] if i else []))
+        for i in range(n)
+    ])
+
+
+def test_flow_estimate_within_generous_cap(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("cost_cap:\n  daily_usd: 100\n")
+    cfg = _wcfg.OrchestrationConfig()
+    est = _loader.flow_estimate(_flow_spec(3), forge, cfg)
+    assert est.admitted == ["n0", "n1", "n2"]
+    assert est.within_headroom is True
+    assert est.daily_headroom_usd == 100.0
+
+
+def test_flow_estimate_flags_tight_daily_cap(tmp_path):
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    # A daily cap that leaves headroom for only one node.
+    daily = 1.5 * _wf.FRESH_FLOOR_USD
+    (forge / "config.yaml").write_text(f"cost_cap:\n  daily_usd: {daily}\n")
+    cfg = _wcfg.OrchestrationConfig()
+    est = _loader.flow_estimate(_flow_spec(5), forge, cfg)
+    # All 5 admitted by max_total, but 5×floor exceeds the ~1.5×floor daily headroom.
+    assert est.within_headroom is False

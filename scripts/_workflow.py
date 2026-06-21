@@ -22,8 +22,10 @@ the single-wave special case.
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import logging
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -34,6 +36,7 @@ _PLUGIN_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _background_agent  # noqa: E402  (the sole `claude -p` wrapper)
+import _error_log  # noqa: E402  (rotation-aware atomic JSONL append — T-146, the audit writer)
 import _verify  # noqa: E402  (shared verify/heal primitives — REQ-WF-002)
 
 _LOG = logging.getLogger(__name__)
@@ -46,6 +49,131 @@ DEFAULT_MAX_TOTAL = 64
 # node. Sourced from the single dispatch adapter so the estimate can never drift from the real
 # cost gate (`_background_agent.dispatch` charges the same floor in `_cost_cap.precheck`).
 FRESH_FLOOR_USD = _background_agent.FRESH_FLOOR_USD
+
+
+# --------------------------------------------------------------------------- #
+# Live run narration (REQ-WF-011 / T-202) — stderr-only, never touches stdout.
+# --------------------------------------------------------------------------- #
+# The v0.1.6 NARRATE precedent (REQ-INTERACTIVE-NARRATE-001): `[Forge]` progress on stderr,
+# stdout reserved for the structured contract. Turning narration on/off must not change a
+# single stdout byte (AC-WF-012). All narration routes through `_Narrator._line`, which writes
+# to stderr and swallows any error — narration is best-effort and never raises into the engine.
+
+
+def narration_enabled(forge_dir, *, env=None) -> bool:
+    """Whether stderr narration is on for this run. OFF when `FORGE_WF_QUIET` is set to a
+    non-empty value or `orchestration.narrate` is `false`; ON by default. Never raises — any
+    failure degrades to silence (off), so a broken config can never make the engine throw."""
+    try:
+        environ = os.environ if env is None else env
+        if (environ.get("FORGE_WF_QUIET") or "").strip():
+            return False
+        import _workflow_config  # local import: keeps the engine importable without it
+        cfg = _workflow_config.load_orchestration_config(forge_dir)
+        return getattr(cfg, "narrate", True) is not False
+    except Exception:  # noqa: BLE001 — narration gating must never raise
+        return False
+
+
+class _Narrator:
+    """Stderr-only run narration (REQ-WF-011). Every line is `[Forge] <text>`; when `enabled`
+    is False every method is a no-op. `_line` swallows any write error so narration can never
+    raise into `run_workflow` / `parallel_build` nor leak a byte onto stdout."""
+
+    def __init__(self, name: str, enabled: bool) -> None:
+        self.name = name
+        self.enabled = bool(enabled)
+
+    def _line(self, text: str) -> None:
+        if not self.enabled:
+            return
+        try:
+            sys.stderr.write(f"[Forge] {text}\n")
+            sys.stderr.flush()
+        except Exception:  # noqa: BLE001 — a broken stderr degrades to silence, never raises
+            pass
+
+    def wave(self, k: int, n: int, count: int) -> None:
+        self._line(f"workflow {self.name!r}: wave {k}/{n} — {count} node(s)")
+
+    def start(self, nid: str) -> None:
+        self._line(f"  node {nid!r}: start")
+
+    def done(self, nid: str, cost: float) -> None:
+        self._line(f"  node {nid!r}: done (${cost:.4f})")
+
+    def drop(self, nid: str, reason: str, cost: float = 0.0) -> None:
+        self._line(f"  node {nid!r}: dropped: {reason} (${cost:.4f})")
+
+    def summary(self, completed: list, dropped: list, total: float) -> None:
+        """Final, deterministic, id-ordered summary block (the *testable* artifact — live
+        per-node lines may interleave under parallelism, this does not)."""
+        comp = ", ".join(sorted(completed))
+        drops = ", ".join(
+            f"{{{d['id']}: {d['reason']}}}" for d in sorted(dropped, key=lambda d: d["id"])
+        )
+        self._line(f"summary: completed:[{comp}] dropped:[{drops}] total ${total:.4f}")
+
+
+# --------------------------------------------------------------------------- #
+# `events.jsonl` audit record (REQ-WF-012 / T-203) — one structured line per run.
+# --------------------------------------------------------------------------- #
+# Every other Forge subsystem (cost-cap, observer, health, skill-miner) leaves a structured
+# record; a workflow run left none. On every top-level `run_workflow` / `parallel_build`
+# completion we append exactly one schema-versioned, PII-free JSON line to `.forge/events.jsonl`
+# via the rotation-aware atomic writer (T-146). Deterministic, id-ordered fields — independent
+# of thread scheduling (REQ-NF-032). Fail-soft: an unwritable `.forge` degrades silently; an
+# over-cap or invalid-spec run still writes a record carrying its drops. Never raises.
+
+AUDIT_SCHEMA_VERSION = 1
+_EVENTS_NAME = "events.jsonl"
+
+
+def _audit_ts(ts: Optional[str]) -> str:
+    """The record timestamp: the injected `ts` when given, else the wall clock (UTC, Z-suffix)."""
+    if ts is not None:
+        return ts
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def write_audit_record(
+    forge_dir,
+    *,
+    name: str,
+    nodes: int,
+    waves: int,
+    completed: list,
+    dropped: list,
+    total_cost_usd: float,
+    admitted: list,
+    verdicts: Optional[dict] = None,
+    ts: Optional[str] = None,
+) -> None:
+    """Append one `workflow_run` audit line to `<forge_dir>/events.jsonl` (REQ-WF-012).
+
+    All list fields are id-sorted so the record is deterministic regardless of thread
+    scheduling. Delegates the write to `_error_log.append_jsonl` (rotation + atomic single line),
+    which is itself fail-soft — and the whole call is additionally guarded, so it never raises."""
+    try:
+        record = {
+            "schema_version": AUDIT_SCHEMA_VERSION,
+            "ts": _audit_ts(ts),
+            "event": "workflow_run",
+            "name": name,
+            "nodes": int(nodes),
+            "waves": int(waves),
+            "completed": sorted(completed),
+            "dropped": sorted(
+                ({"id": d.get("id", ""), "reason": d.get("reason", "")} for d in (dropped or [])),
+                key=lambda d: (d["id"], d["reason"]),
+            ),
+            "total_cost_usd": round(float(total_cost_usd or 0.0), 6),
+            "verdicts": verdicts or {},
+            "admitted": sorted(admitted),
+        }
+        _error_log.append_jsonl(Path(forge_dir) / _EVENTS_NAME, record)
+    except Exception:  # noqa: BLE001 — the audit write must never raise into the engine
+        pass
 
 
 @dataclass
@@ -135,6 +263,12 @@ class WorkflowResult:
     dropped: int
     total_cost_usd: float
     dropped_reasons: list = field(default_factory=list)
+    # Additive structured views (v0.4.1) for the audit record (T-203) and the cost pre-flight
+    # estimator's run-equality check (T-204). `admitted` is the deterministic topological
+    # admission set; `drops` is the id/reason structured form of `dropped_reasons`. Both default
+    # empty so every existing caller — which serializes only the original fields — is unaffected.
+    admitted: list = field(default_factory=list)
+    drops: list = field(default_factory=list)  # list[{"id", "reason"}]
 
 
 def plan_waves(spec: WorkflowSpec) -> list:
@@ -395,6 +529,115 @@ def _run_decompose(
     return {"children": child_results, "generated": True}, None, cost + child_cost
 
 
+# --------------------------------------------------------------------------- #
+# Deterministic admission + cost pre-flight estimator (REQ-WF-013 / NF-033 / T-204).
+# --------------------------------------------------------------------------- #
+# The estimator is a *pure* function of `(spec, cap-state)` that replays the EXACT topological
+# pre-allocation `run_workflow` performs (REQ-NF-029) — they share `_preallocate`, so the
+# estimate can never become a second cost model that drifts from the run (REQ-NF-033). Zero
+# dispatch. Same inputs ⇒ same result.
+
+# The per-node reason used for a pre-allocated cap drop — shared by `run_workflow`'s loud
+# narration line and the estimator's split, so the two are byte-identical (AC-WF-014).
+_CAP_DROP_REASON = "exceeds cost/total cap (pre-allocated drop)"
+
+
+def _preallocate(waves: list, max_total: int, max_budget_usd: Optional[float]) -> tuple:
+    """Walk nodes in topological order (wave, then sorted id) and admit each while it fits *both*
+    the count cap (`max_total`) and the spend cap (`max_budget_usd`, one fresh-session floor per
+    node). A single-threaded pass — never a thread race — so cap pressure drops a *fixed* set,
+    identical across parallel and sequential runs (REQ-NF-026b). Pure; returns
+    `(allowed: set, capped_by_total: bool, capped_by_budget: bool)`."""
+    allowed: set = set()
+    count_budget = max_total
+    spend_budget = max_budget_usd  # None ⇒ no spend cap
+    capped_by_total = False
+    capped_by_budget = False
+    for wave in waves:
+        for nid in wave:  # sorted within wave
+            if count_budget <= 0:
+                capped_by_total = True
+                continue
+            if spend_budget is not None and spend_budget < FRESH_FLOOR_USD:
+                capped_by_budget = True
+                continue
+            allowed.add(nid)
+            count_budget -= 1
+            if spend_budget is not None:
+                spend_budget -= FRESH_FLOOR_USD
+    return allowed, capped_by_total, capped_by_budget
+
+
+@dataclass
+class AdmissionEstimate:
+    """A pre-flight cost estimate over a `WorkflowSpec` against current cap-state (REQ-WF-013).
+
+    `admitted` / `dropped` are the deterministic id-ordered pre-allocation split (identical, by
+    construction, to what `run_workflow` admits/drops for the same inputs). `estimate_usd` is the
+    floor-based spend estimate (`len(admitted) × FRESH_FLOOR_USD`). The `*_headroom_usd` fields and
+    `within_headroom` report whether the estimate fits the remaining daily/monthly cap headroom."""
+
+    admitted: list                              # sorted node ids that will run
+    dropped: list                               # [{id, reason}], id-ordered
+    estimate_usd: float
+    floor_usd: float
+    node_count: int
+    max_total: int
+    max_budget_usd: Optional[float] = None
+    daily_headroom_usd: Optional[float] = None
+    monthly_headroom_usd: Optional[float] = None
+    within_headroom: bool = True
+
+
+def estimate_admission(
+    spec: WorkflowSpec,
+    *,
+    max_total: int = DEFAULT_MAX_TOTAL,
+    max_budget_usd: Optional[float] = None,
+    daily_headroom_usd: Optional[float] = None,
+    monthly_headroom_usd: Optional[float] = None,
+) -> AdmissionEstimate:
+    """Pure pre-flight estimator (REQ-WF-013, AC-WF-014). Replays `run_workflow`'s `_preallocate`
+    pass to return the deterministic admitted/pre-dropped split and a floor-based spend estimate —
+    **zero dispatch**. An invalid spec admits nothing (it would dispatch nothing). The estimate is
+    compared to the supplied daily/monthly headroom; `within_headroom` is False when it exceeds
+    either. Never raises."""
+    nodes = list(getattr(spec, "nodes", []) or [])
+    floor = FRESH_FLOOR_USD
+
+    errors = validate_spec(spec)
+    if errors:
+        dropped = [{"id": "", "reason": f"invalid spec: {'; '.join(errors)}"}]
+        return AdmissionEstimate(
+            admitted=[], dropped=dropped, estimate_usd=0.0, floor_usd=floor,
+            node_count=len(nodes), max_total=max_total, max_budget_usd=max_budget_usd,
+            daily_headroom_usd=daily_headroom_usd, monthly_headroom_usd=monthly_headroom_usd,
+            within_headroom=True,
+        )
+
+    waves = plan_waves(spec)
+    allowed, _capped_total, _capped_budget = _preallocate(waves, max_total, max_budget_usd)
+    admitted = sorted(allowed)
+    dropped = sorted(
+        ({"id": n.id, "reason": _CAP_DROP_REASON} for n in nodes if n.id not in allowed),
+        key=lambda d: d["id"],
+    )
+    estimate_usd = round(len(admitted) * floor, 6)
+
+    within = True
+    if daily_headroom_usd is not None and estimate_usd > daily_headroom_usd:
+        within = False
+    if monthly_headroom_usd is not None and estimate_usd > monthly_headroom_usd:
+        within = False
+
+    return AdmissionEstimate(
+        admitted=admitted, dropped=dropped, estimate_usd=estimate_usd, floor_usd=floor,
+        node_count=len(nodes), max_total=max_total, max_budget_usd=max_budget_usd,
+        daily_headroom_usd=daily_headroom_usd, monthly_headroom_usd=monthly_headroom_usd,
+        within_headroom=within,
+    )
+
+
 def run_workflow(
     spec: WorkflowSpec,
     *,
@@ -408,6 +651,10 @@ def run_workflow(
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
     allow_generated_subdags: bool = False,
+    name: Optional[str] = None,
+    narrator: Optional["_Narrator"] = None,
+    audit: bool = True,
+    audit_ts: Optional[str] = None,
 ) -> WorkflowResult:
     """Execute a workflow DAG wave-by-wave with bounded parallel fan-out per wave.
 
@@ -431,40 +678,39 @@ def run_workflow(
     dispatch_fn = dispatch_fn or _background_agent.dispatch
     nodes = list(getattr(spec, "nodes", []) or [])
     dropped_reasons: list[str] = []
+    # Structured (id, reason) drops for the deterministic id-ordered narration summary (T-202)
+    # and, later, the events.jsonl audit record (T-203). Parallel to `dropped_reasons` (which is
+    # kept byte-identical to v0.4.0 on the result), never replacing it.
+    drops: list[dict] = []
+
+    run_name = name if name is not None else feature
+    if narrator is None:
+        narrator = _Narrator(run_name, narration_enabled(forge_dir))
 
     errors = validate_spec(spec)
     if errors:
         for e in errors:
             dropped_reasons.append(f"invalid spec: {e}")
+            drops.append({"id": "", "reason": f"invalid spec: {e}"})
+            narrator.drop("", f"invalid spec: {e}")
             _LOG.warning("run_workflow: %s", e)
+        narrator.summary([], drops, 0.0)
+        if audit:
+            write_audit_record(
+                forge_dir, name=run_name, nodes=len(nodes), waves=0, completed=[],
+                dropped=drops, total_cost_usd=0.0, admitted=[], ts=audit_ts,
+            )
         return WorkflowResult(results={}, completed=0, dropped=len(nodes),
-                              total_cost_usd=0.0, dropped_reasons=dropped_reasons)
+                              total_cost_usd=0.0, dropped_reasons=dropped_reasons,
+                              admitted=[], drops=drops)
 
     by_id = {n.id: n for n in nodes}
     waves = plan_waves(spec)
 
-    # Deterministic budget-aware admission (REQ-NF-029): walk nodes in topological order
-    # (wave, then sorted id) and admit each while it fits *both* the count cap (`max_total`)
-    # and the spend cap (`max_budget_usd`, charged one fresh-session floor per node). Because
-    # admission is a single-threaded topological pass — never a thread race — cap pressure
-    # drops a *fixed* set, identical across parallel and sequential runs (REQ-NF-026b).
-    allowed: set = set()
-    count_budget = max_total
-    spend_budget = max_budget_usd  # None ⇒ no spend cap
-    capped_by_total = False
-    capped_by_budget = False
-    for wave in waves:
-        for nid in wave:  # sorted within wave
-            if count_budget <= 0:
-                capped_by_total = True
-                continue
-            if spend_budget is not None and spend_budget < FRESH_FLOOR_USD:
-                capped_by_budget = True
-                continue
-            allowed.add(nid)
-            count_budget -= 1
-            if spend_budget is not None:
-                spend_budget -= FRESH_FLOOR_USD
+    # Deterministic budget-aware admission (REQ-NF-029) via the shared `_preallocate` pass —
+    # the *same* pure function the pre-flight estimator (`estimate_admission`, T-204) replays,
+    # so the estimate can never drift from what the run admits (REQ-NF-033).
+    allowed, capped_by_total, capped_by_budget = _preallocate(waves, max_total, max_budget_usd)
     overflow = len(nodes) - len(allowed)
     if overflow > 0:
         caps = []
@@ -479,16 +725,25 @@ def run_workflow(
     results: dict = {}
     total_cost = 0.0
 
-    for wave in waves:
+    n_waves = len(waves)
+    for wi, wave in enumerate(waves, 1):
+        narrator.wave(wi, n_waves, len(wave))
         prepared: list[tuple[WorkflowNode, str]] = []  # (node, prompt) ready to dispatch
         for nid in wave:
             if nid not in allowed:
-                continue  # capped — reason already logged once above
+                # Pre-allocated cap drop (REQ-NF-029): the aggregate reason was logged once
+                # above; here it becomes a loud, per-node line + structured drop (T-202/204).
+                # Same reason string the estimator emits ⇒ estimator split == run drops.
+                drops.append({"id": nid, "reason": _CAP_DROP_REASON})
+                narrator.drop(nid, _CAP_DROP_REASON)
+                continue
             node = by_id[nid]
             missing = [d for d in (node.depends_on or []) if d not in results]
             if missing:
                 reason = f"node {nid!r} skipped: dependency dropped/missing {missing}"
                 dropped_reasons.append(reason)
+                drops.append({"id": nid, "reason": reason})
+                narrator.drop(nid, reason)
                 _LOG.warning("run_workflow: %s", reason)
                 continue
             upstream = {d: results[d] for d in (node.depends_on or [])}
@@ -497,9 +752,16 @@ def run_workflow(
             except Exception as exc:  # noqa: BLE001 — build failure → drop, not crash
                 reason = f"node {nid!r} build_prompt failed: {exc}"
                 dropped_reasons.append(reason)
+                drops.append({"id": nid, "reason": reason})
+                narrator.drop(nid, reason)
                 _LOG.warning("run_workflow: %s", reason)
                 continue
             prepared.append((node, prompt))
+
+        # Live per-node `start` lines (id-ordered here; may interleave with `done` lines under
+        # parallelism — accepted, the deterministic artifact is the summary block).
+        for node, _prompt in prepared:
+            narrator.start(node.id)
 
         if not prepared:
             continue
@@ -526,6 +788,9 @@ def run_workflow(
                     "max_budget_usd": max_budget_usd, "claude_bin": claude_bin,
                     "cwd": node.cwd if node.cwd is not None else cwd,
                     "allow_generated_subdags": allow_generated_subdags,
+                    # Nested child run is part of THIS run — it must not write its own audit
+                    # line (exactly one record per top-level run, REQ-WF-012).
+                    "audit": False,
                 }
                 return pool.submit(_run_decompose, node, prompt, dispatch_fn,
                                    node_kwargs, run_kwargs)
@@ -546,6 +811,8 @@ def run_workflow(
             total_cost += cost
             if obj is None:
                 dropped_reasons.append(f"node {nid!r}: {reason}")
+                drops.append({"id": nid, "reason": reason})
+                narrator.drop(nid, reason, cost)
                 _LOG.warning("run_workflow: dropped %s — %s", nid, reason)
                 continue
             # A `decompose` node can complete *with* a reason: the generated sub-DAG was rejected
@@ -553,13 +820,25 @@ def run_workflow(
             # (fallback) result, but the rejection is surfaced — drop-with-reason, never silent.
             if reason is not None:
                 dropped_reasons.append(f"node {nid!r}: {reason}")
+                drops.append({"id": nid, "reason": reason})
                 _LOG.warning("run_workflow: %s — %s", nid, reason)
+            narrator.done(nid, cost)
             results[nid] = obj
 
     ordered = {nid: results[nid] for nid in sorted(results)}
     completed = len(ordered)
+    narrator.summary(list(ordered.keys()), drops, total_cost)
+    admitted_ids = sorted(allowed)
+    if audit:
+        write_audit_record(
+            forge_dir, name=run_name, nodes=len(nodes), waves=len(waves),
+            completed=list(ordered.keys()), dropped=drops, total_cost_usd=total_cost,
+            admitted=admitted_ids, ts=audit_ts,
+        )
     return WorkflowResult(
         results=ordered,
+        admitted=admitted_ids,
+        drops=drops,
         completed=completed,
         dropped=len(nodes) - completed,
         total_cost_usd=total_cost,
