@@ -534,6 +534,32 @@ def test_decompose_cyclic_subdag_rejected_before_any_child_dispatch() -> None:
     assert any("root" in r and "cycle" in r.lower() for r in res.dropped_reasons)
 
 
+def test_decompose_malformed_parser_output_runs_fallback_never_raises() -> None:
+    """REQ-WF-010 robustness: if the author's `parse_subdag` returns malformed nodes (objects
+    lacking `.id`), admission (`validate_spec`) raises while dereferencing `n.id`. That must be
+    caught inside the generation slot and routed to the deterministic fallback — NOT escape to
+    the worker guard with no fallback (which would drop the node to `{}`). Zero generated
+    children dispatch; the fallback runs; nothing raises."""
+    recorded: list = []
+
+    def bad_parse(subdag: dict) -> list:
+        # Returns objects WITHOUT an `.id` attribute → validate_spec dereferences n.id and raises.
+        return [SimpleNamespace(build_prompt=lambda up: "x", depends_on=[])]
+
+    fallback = [_wf.WorkflowNode(id="fallback", build_prompt=lambda up: "fallback")]
+    dspec = _wf.DecomposeSpec(parse_subdag=bad_parse, fallback=fallback,
+                              max_nodes=8, max_chars=4096)
+    spec = _decompose_spec(dspec)
+    res = _wf.run_workflow(
+        spec, forge_dir=FORGE, feature="t", allow_generated_subdags=True,
+        dispatch_fn=_decompose_dispatch(recorded, subdag=_subdag_json(["a", "b"])),
+    )
+    # The malformed generated set never dispatched; the deterministic fallback ran instead.
+    assert "do-a" not in _child_prompts(recorded)
+    assert "fallback" in _child_prompts(recorded)
+    assert any("root" in r and "parse failed" in r.lower() for r in res.dropped_reasons)
+
+
 def test_decompose_over_node_count_rejected_before_any_child_dispatch() -> None:
     """AC-WF-010: a generated sub-DAG exceeding the node-count cap is rejected before any child
     dispatch; the fallback runs."""

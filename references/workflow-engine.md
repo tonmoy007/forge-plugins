@@ -90,6 +90,9 @@ resume=None, dispatch_fn=None, claude_bin=None, cwd=None, allow_generated_subdag
    each while it fits *both* the count cap (`max_total`) and the spend cap (`max_budget_usd`,
    charged one fresh-session floor per node). This pass is single-threaded, so cap pressure
    drops a **fixed** set, identical across parallel and sequential runs (REQ-NF-029).
+   `max_budget_usd` bounds the **admission set** (one floor per admitted node), *not* realized
+   spend: a node's retry, per-node verify, or heal dispatches are not pre-charged, so actual cost
+   can exceed it. Size with headroom and keep the `_cost_cap` daily cap as the hard spend gate.
 3. **Run wave by wave** — each wave's ready nodes fan out across at most `max_parallel` threads;
    results pass to downstream nodes via `build_prompt`.
 4. **Retry-once-then-drop** — a failed dispatch is retried once, then dropped with a reason; a
@@ -121,7 +124,7 @@ fail-soft table live in [`orchestration-config.md`](orchestration-config.md); th
 | `allow_generated_subdags` | bool | `false` | the validated `decompose` sub-DAG node |
 | `max_parallel` | int ≥1 | `4` | max concurrent dispatches per wave |
 | `max_total` | int ≥1 | `64` | hard cap on total nodes admitted per run |
-| `max_budget_usd` | float | `null` (no cap) | optional per-run spend ceiling |
+| `max_budget_usd` | float | `null` (no cap) | per-run **admission** ceiling (one floor/node; not realized spend — see above) |
 
 Toggles use strict `is True` semantics: a stray `1` / `"yes"` does **not** enable a capability.
 With every toggle off (the default), behavior matches v0.3.6.

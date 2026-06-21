@@ -379,12 +379,15 @@ def _run_decompose(
         return _fallback("decompose generation was not a JSON object")
 
     # Build the candidate sub-DAG via the author's parser, then admit it deterministically.
+    # Parse + admission run under one guard: a parser that returns malformed nodes (e.g. objects
+    # without `.id`) makes `_admit_subdag`/`validate_spec` raise, which must route to the
+    # deterministic fallback (REQ-WF-010) — not escape to the worker guard with no fallback.
     try:
         children = dspec.parse_subdag(parsed)
-    except Exception as exc:  # noqa: BLE001 — a raising parser ⇒ generation failure, not a crash
+        sub = WorkflowSpec(nodes=list(children or []))
+        admitted, reason = _admit_subdag(sub, res.result or "", dspec)
+    except Exception as exc:  # noqa: BLE001 — a raising parser/validator ⇒ generation failure, not a crash
         return _fallback(f"decompose parse failed: {exc}")
-    sub = WorkflowSpec(nodes=list(children or []))
-    admitted, reason = _admit_subdag(sub, res.result or "", dspec)
     if not admitted:
         return _fallback(f"generated sub-DAG rejected: {reason}")
 
