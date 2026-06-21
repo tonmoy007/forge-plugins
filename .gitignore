@@ -62,5 +62,7 @@ feedback/
 .claude-plugin/cache/
 .omc/
 .venv/
-.forge
+.forge/*
+# …but the dogfood example workflows are shipped in-repo (T-205): re-include them.
+!.forge/workflows/
 docs/superpowers/

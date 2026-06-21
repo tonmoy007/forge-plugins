@@ -14,6 +14,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.1] — 2026-06-21
+
+**Operable engine.** A hardening release that makes the v0.4.0 dynamic-workflow engine
+observable, auditable, and cost-predictable — with **zero change to what it computes**. The
+byte-identical-result invariant is untouched: all new output is a side channel (stderr or a
+`.forge/` append), the stdout result is byte-for-byte the same with observability on or off, and
+every new path is stdlib + fail-soft and **never raises** into the engine. No new engine
+capability, no new node type, no change to scheduling/admission/verify/merge.
+
+### Added
+
+- **Live run narration** (REQ-WF-011, T-202) — `run_workflow` / `parallel_build` emit `[Forge]`
+  progress to **stderr**: a per-wave header, per-node `start` / `done` / `dropped: <reason>` with
+  cost, and a deterministic id-ordered end-of-run summary block. Default on; silenced by the new
+  `orchestration.narrate: false` config key or `FORGE_WF_QUIET=1`. Stdout is byte-identical with
+  narration on vs off; a narration failure degrades to silence.
+- **`events.jsonl` audit record** (REQ-WF-012, T-203) — every run appends **exactly one**
+  schema-versioned, PII-free `workflow_run` line to `.forge/events.jsonl` via the rotation-aware
+  atomic writer: `ts`, `name`, `nodes`, `waves`, id-ordered `completed` / `dropped:[{id,reason}]`
+  / `admitted`, `total_cost_usd`, and `verdicts`. Over-cap and invalid-spec runs still write;
+  an unwritable `.forge` degrades silently.
+- **Cost pre-flight estimator** (REQ-WF-013, T-204) — a **pure** `estimate_admission(spec,
+  cap-state)` replays the *same* topological pre-allocation `run_workflow` uses (shared
+  `_preallocate`) against the single `_cost_cap` source — zero dispatch — returning
+  `estimate ≈ admitted × FRESH_FLOOR_USD` and the deterministic admitted-vs-dropped split plus
+  cap headroom. `/forge:flow` surfaces it **before** running; a runtime admission drop fires a
+  loud narration line. The split is identical, node-for-node, to what the run drops.
+- **Dogfood example + integration test** (REQ-WF-014, T-205) — ships a validated in-repo
+  `.forge/workflows/doc-review.yaml` (a `split → {reviewer-a, reviewer-b} → synthesize` diamond)
+  and a `tests/integration/` test that drives the parallel-build path against
+  `examples/sample-todo-api/` end-to-end with an **injected fake dispatcher** (no spend): fan-out
+  → adversarial-verify join → merge → worktree teardown.
+
+### Changed
+
+- `WorkflowResult` gained additive `admitted` / `drops` views (defaults keep every existing
+  serializer byte-identical) feeding the audit record and the estimator's run-equality check.
+- README + `references/workflow-engine.md` document the `.forge/workflows/*.yaml` schema, the four
+  `orchestration:` toggles + `narrate`, the per-node fresh-session cost-sizing rule, and a new
+  Observability section. `ROADMAP.md` consolidates the program-wide future roadmap + standing
+  non-goals (SRS-v0.4.1 §5), replacing the deferred-work sections scattered across prior docs.
+
+---
+
 ## [0.4.0] — 2026-06-21
 
 Dynamic workflow engine. Forge's orchestration generalizes from two hardcoded layers

@@ -182,11 +182,20 @@ orchestration:
   max_parallel: 4                # max concurrent dispatches per wave
   max_total: 64                  # hard cap on total nodes per run
   max_budget_usd:                # optional admission ceiling (omit = no cap)
+  narrate: true                  # live [Forge] stderr narration (off: FORGE_WF_QUIET=1)
 ```
 
+The four capability toggles are **independent and default `false`** — with no `orchestration:`
+block Forge behaves exactly as before. `narrate` is **not** a capability toggle: it only controls
+the side-channel stderr narration and changes no engine behavior (the stdout result is
+byte-identical with it on or off).
+
 - **User-defined flows** (`flows_enabled`) — author `.forge/workflows/<name>.yaml`, then
-  `/forge:flow <name>` (or `--plan` to preview the dependency waves). Output flows through
-  the Proposal→Validator→Executor rails — nothing is written to your project unapproved.
+  `/forge:flow <name>` (or `--plan` to preview the dependency waves + a **cost pre-flight
+  estimate**). Output flows through the Proposal→Validator→Executor rails — nothing is written to
+  your project unapproved. A worked example ships in-repo:
+  [`.forge/workflows/doc-review.yaml`](.forge/workflows/doc-review.yaml) — a `split →
+  {reviewer-a, reviewer-b} → synthesize` diamond.
 - **Parallel build + worktree isolation** — the build stage fans independent task-DAG nodes
   out in parallel; each mutating node runs on its own `forge/wt/<node>` branch so conflicts
   surface loudly at the merge instead of clobbering.
@@ -194,7 +203,35 @@ orchestration:
   generate a *sub-DAG*, validated (acyclicity + node-count + token budget) **before** any
   child runs.
 
-Each node is a fresh cost-gated `claude -p` dispatch, so size runs against your daily cap.
+**Observable + predictable.** Every run narrates its waves, per-node start/done/dropped, and a
+final id-ordered summary on **stderr** (`narrate`), appends exactly one structured
+`workflow_run` line to `.forge/events.jsonl` (audit trail), and a pre-flight estimator surfaces
+the spend estimate + which nodes drop under the cap **before** dispatch — all with zero change to
+what the engine computes.
+
+**Cost-sizing rule.** Each DAG node is a *fresh-session* `claude -p` dispatch and pays the
+fresh-session floor (~`$0.06`/node); admission charges one floor per node against `max_total`,
+`max_budget_usd`, and your daily/monthly cost cap. Size a run by `node_count × floor`: a 20-node
+flow needs ~`$1.20` of headroom or the deterministic admission set drops the overflow (loudly).
+
+Example `.forge/workflows/<name>.yaml` schema — a mapping with `name`, optional `description`, and
+a `nodes` list; each node has an `id`, a `prompt` *or* a `{{upstream_id}}`-interpolating
+`prompt_template`, optional `depends_on` / `schema` / `model`:
+
+```yaml
+name: doc-review
+nodes:
+  - id: split
+    prompt: "Return JSON {\"sections\": [...]} for the target doc."
+  - id: reviewer-a
+    depends_on: [split]
+    model: claude-haiku-4-5
+    prompt_template: "Review these sections: {{split}} → JSON {findings:[...]}."
+  - id: synthesize
+    depends_on: [reviewer-a]
+    prompt_template: "Merge {{reviewer-a}} into one deduped review."
+```
+
 Full reference: [`references/workflow-engine.md`](references/workflow-engine.md) ·
 [`references/orchestration-config.md`](references/orchestration-config.md).
 

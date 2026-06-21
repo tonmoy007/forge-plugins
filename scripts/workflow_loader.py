@@ -213,6 +213,38 @@ def load_workflow_file(path) -> LoadResult:
     return load_spec(data)
 
 
+def flow_estimate(spec, forge_dir, config, *, now=None):
+    """Cost pre-flight estimate for `/forge:flow` (REQ-WF-013 / T-204): read the *single*
+    cost-cap source (`_cost_cap` daily/monthly caps + ledger spend) for the remaining headroom,
+    take the engine tunables from the `orchestration:` config, and delegate to the pure
+    `_workflow.estimate_admission`. Returns an `AdmissionEstimate` (admitted/dropped split +
+    spend estimate + headroom). No dispatch; fail-soft — an unreadable cap-state degrades to
+    unbounded headroom. Never raises."""
+    daily_headroom = None
+    monthly_headroom = None
+    try:
+        import _cost_cap  # hooks/ — on sys.path via _workflow's import above
+        import datetime as _dt
+        when = now if now is not None else _dt.datetime.now(_dt.timezone.utc)
+        caps = _cost_cap.load_caps(Path(forge_dir))
+        rows = _cost_cap._read_ledger(Path(forge_dir))
+        spent_today, spent_month = _cost_cap._spend(rows, when)
+        daily_headroom = caps.daily_usd - spent_today
+        if caps.monthly_usd is not None:
+            monthly_headroom = caps.monthly_usd - spent_month
+    except Exception:  # noqa: BLE001 — cap-state is advisory; degrade to unbounded headroom
+        daily_headroom = None
+        monthly_headroom = None
+
+    return _workflow.estimate_admission(
+        spec,
+        max_total=getattr(config, "max_total", _workflow.DEFAULT_MAX_TOTAL),
+        max_budget_usd=getattr(config, "max_budget_usd", None),
+        daily_headroom_usd=daily_headroom,
+        monthly_headroom_usd=monthly_headroom,
+    )
+
+
 def list_workflows(workflows_dir) -> list:
     """Return sorted `.yaml`/`.yml` workflow file paths under `workflows_dir`.
 

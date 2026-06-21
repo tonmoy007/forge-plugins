@@ -125,9 +125,12 @@ fail-soft table live in [`orchestration-config.md`](orchestration-config.md); th
 | `max_parallel` | int ≥1 | `4` | max concurrent dispatches per wave |
 | `max_total` | int ≥1 | `64` | hard cap on total nodes admitted per run |
 | `max_budget_usd` | float | `null` (no cap) | per-run **admission** ceiling (one floor/node; not realized spend — see above) |
+| `narrate` | bool | `true` | live `[Forge]` stderr narration (v0.4.1); **not** a capability toggle — gates no engine behavior |
 
-Toggles use strict `is True` semantics: a stray `1` / `"yes"` does **not** enable a capability.
-With every toggle off (the default), behavior matches v0.3.6.
+The four capability toggles use strict `is True` semantics: a stray `1` / `"yes"` does **not**
+enable a capability. With every toggle off (the default), behavior matches v0.3.6. `narrate` is
+the one observability control (default **on**); only an explicit `false` silences it, and it
+changes no engine output on stdout (see *Observability* below).
 
 ## User-defined flows (`flows_enabled`)
 
@@ -159,11 +162,17 @@ absent PyYAML, malformed YAML, or a structurally invalid spec all yield
 
 - `/forge:flow` — list available workflows.
 - `/forge:flow <name>` — run a workflow through `run_workflow`.
-- `/forge:flow <name> --plan` — show the `plan_waves` dependency plan without dispatching.
+- `/forge:flow <name> --plan` — show the `plan_waves` dependency plan + the **cost pre-flight
+  estimate** without dispatching.
 
 Persisted output flows through the Proposal→Validator→Executor rails (ADR-006): nothing is
 written to the project unapproved. When background is unavailable (`claude` not on PATH or
 `FORGE_NO_BACKGROUND=1`), it degrades to the deterministic dry-run plan.
+
+**Dogfood example.** Forge ships a real, validated workflow in-repo:
+[`.forge/workflows/doc-review.yaml`](../.forge/workflows/doc-review.yaml) — a `split →
+{reviewer-a, reviewer-b} → synthesize` diamond that fans a document out to two independent
+reviewers and merges their notes. Run it with `/forge:flow doc-review` (with `flows_enabled`).
 
 ## Per-stage parallel build (`parallel_build`)
 
@@ -237,6 +246,31 @@ pre-allocation), so cap pressure always drops the *same* fixed set, never a thre
 
 `max_budget_usd` and `resume` are threaded from `run_workflow` into every node's `dispatch`
 call: the CLI enforces the per-dispatch ceiling and reuses the given session when one is passed.
+
+## Observability (v0.4.1)
+
+The engine is correct *and* operable: every run is visible while it runs, auditable after, and
+cost-predictable before — all as a **side channel** that never changes what the engine computes
+(stdout is byte-identical with observability on or off; REQ-NF-030).
+
+- **Live narration (`narrate`, REQ-WF-011).** `run_workflow` / `parallel_build` emit `[Forge]`
+  progress to **stderr only**: a per-wave header (`workflow '<name>': wave k/N — M node(s)`),
+  per-node `start` → `done`/`dropped: <reason>` with the node's cost, and a final **id-ordered
+  summary block** (`completed:[…] dropped:[{id: reason}…] total $X.XXXX`). Live per-node lines may
+  interleave under parallelism (accepted, informational); the *summary block is deterministic*.
+  Default on; silenced by `orchestration.narrate: false` or `FORGE_WF_QUIET=1`. A narration
+  failure degrades to silence — never raises, never touches stdout.
+- **Audit record (`.forge/events.jsonl`, REQ-WF-012).** On every run, **exactly one**
+  schema-versioned, PII-free `workflow_run` JSON line is appended via the rotation-aware atomic
+  writer (`hooks/_error_log.append_jsonl`): `ts`, `name`, `nodes`, `waves`, id-ordered
+  `completed` / `dropped:[{id,reason}]` / `admitted`, `total_cost_usd`, and `verdicts`. Over-cap
+  **and** invalid-spec runs still write their record; an unwritable `.forge` degrades silently.
+- **Cost pre-flight (`estimate_admission`, REQ-WF-013).** A **pure** estimator replays the *same*
+  topological pre-allocation (`_preallocate`, shared with `run_workflow`) against the single
+  `_cost_cap` source — zero dispatch — returning `estimate ≈ admitted × FRESH_FLOOR_USD` and the
+  deterministic admitted-vs-dropped split, plus remaining daily/monthly headroom. `/forge:flow`
+  surfaces it **before** running; the split is identical, node-for-node, to what the run drops
+  (no second cost model). A runtime admission drop fires a loud narration line.
 
 ## Failure & safety summary
 

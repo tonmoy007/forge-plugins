@@ -97,12 +97,30 @@ anything. Tell the user it is disabled and how to turn it on, then stop:
        print(res.description.splitlines()[0])
    for i, wave in enumerate(wf.plan_waves(res.spec), 1):
        print(f"  wave {i}: {', '.join(wave)}")
+   # Cost pre-flight (REQ-WF-013): a PURE estimate over the same deterministic admission set
+   # the run will use — zero dispatch — surfaced BEFORE running. Shows the floor-based spend
+   # estimate, the remaining daily cap headroom, and which nodes run vs drop under the cap.
+   import _workflow_config as c
+   cfg = c.load_orchestration_config(Path(".forge"))
+   est = wl.flow_estimate(res.spec, Path(".forge"), cfg)
+   print(f"  pre-flight estimate: ${est.estimate_usd:.4f} "
+         f"({len(est.admitted)} node(s) × ${est.floor_usd:.4f} fresh floor)")
+   if est.daily_headroom_usd is not None:
+       fit = "fits" if est.within_headroom else "EXCEEDS"
+       print(f"  daily cap headroom: ${est.daily_headroom_usd:.4f} — estimate {fit}")
+   if est.dropped:
+       print(f"  would DROP under the cap: {', '.join(d['id'] for d in est.dropped)}")
    PY
    ```
 
-   With no name, this lists flows and stops. With a name, it prints the wave plan. If the user
-   passed `--plan` (or background is unavailable — see below), **stop here**: this is the
-   deterministic dry-run plan; relay it and do not dispatch.
+   With no name, this lists flows and stops. With a name, it prints the wave plan **and the
+   cost pre-flight estimate** (spend estimate, cap headroom, and any nodes that would drop under
+   the cap — all computed without dispatching). If the user passed `--plan` (or background is
+   unavailable — see below), **stop here**: this is the deterministic dry-run plan; relay it and
+   do not dispatch.
+
+   Always relay the pre-flight estimate before running, so the user sees the cost and which
+   nodes will drop *before* any spend — never run a multi-node flow blind into the cap.
 
 3. **Run.** When the user picked a flow and wants it executed, run it through the engine. The
    engine reads `orchestration.max_parallel` / `max_total` / `max_budget_usd` and is cost-gated
