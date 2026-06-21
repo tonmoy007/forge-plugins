@@ -529,6 +529,115 @@ def _run_decompose(
     return {"children": child_results, "generated": True}, None, cost + child_cost
 
 
+# --------------------------------------------------------------------------- #
+# Deterministic admission + cost pre-flight estimator (REQ-WF-013 / NF-033 / T-204).
+# --------------------------------------------------------------------------- #
+# The estimator is a *pure* function of `(spec, cap-state)` that replays the EXACT topological
+# pre-allocation `run_workflow` performs (REQ-NF-029) — they share `_preallocate`, so the
+# estimate can never become a second cost model that drifts from the run (REQ-NF-033). Zero
+# dispatch. Same inputs ⇒ same result.
+
+# The per-node reason used for a pre-allocated cap drop — shared by `run_workflow`'s loud
+# narration line and the estimator's split, so the two are byte-identical (AC-WF-014).
+_CAP_DROP_REASON = "exceeds cost/total cap (pre-allocated drop)"
+
+
+def _preallocate(waves: list, max_total: int, max_budget_usd: Optional[float]) -> tuple:
+    """Walk nodes in topological order (wave, then sorted id) and admit each while it fits *both*
+    the count cap (`max_total`) and the spend cap (`max_budget_usd`, one fresh-session floor per
+    node). A single-threaded pass — never a thread race — so cap pressure drops a *fixed* set,
+    identical across parallel and sequential runs (REQ-NF-026b). Pure; returns
+    `(allowed: set, capped_by_total: bool, capped_by_budget: bool)`."""
+    allowed: set = set()
+    count_budget = max_total
+    spend_budget = max_budget_usd  # None ⇒ no spend cap
+    capped_by_total = False
+    capped_by_budget = False
+    for wave in waves:
+        for nid in wave:  # sorted within wave
+            if count_budget <= 0:
+                capped_by_total = True
+                continue
+            if spend_budget is not None and spend_budget < FRESH_FLOOR_USD:
+                capped_by_budget = True
+                continue
+            allowed.add(nid)
+            count_budget -= 1
+            if spend_budget is not None:
+                spend_budget -= FRESH_FLOOR_USD
+    return allowed, capped_by_total, capped_by_budget
+
+
+@dataclass
+class AdmissionEstimate:
+    """A pre-flight cost estimate over a `WorkflowSpec` against current cap-state (REQ-WF-013).
+
+    `admitted` / `dropped` are the deterministic id-ordered pre-allocation split (identical, by
+    construction, to what `run_workflow` admits/drops for the same inputs). `estimate_usd` is the
+    floor-based spend estimate (`len(admitted) × FRESH_FLOOR_USD`). The `*_headroom_usd` fields and
+    `within_headroom` report whether the estimate fits the remaining daily/monthly cap headroom."""
+
+    admitted: list                              # sorted node ids that will run
+    dropped: list                               # [{id, reason}], id-ordered
+    estimate_usd: float
+    floor_usd: float
+    node_count: int
+    max_total: int
+    max_budget_usd: Optional[float] = None
+    daily_headroom_usd: Optional[float] = None
+    monthly_headroom_usd: Optional[float] = None
+    within_headroom: bool = True
+
+
+def estimate_admission(
+    spec: WorkflowSpec,
+    *,
+    max_total: int = DEFAULT_MAX_TOTAL,
+    max_budget_usd: Optional[float] = None,
+    daily_headroom_usd: Optional[float] = None,
+    monthly_headroom_usd: Optional[float] = None,
+) -> AdmissionEstimate:
+    """Pure pre-flight estimator (REQ-WF-013, AC-WF-014). Replays `run_workflow`'s `_preallocate`
+    pass to return the deterministic admitted/pre-dropped split and a floor-based spend estimate —
+    **zero dispatch**. An invalid spec admits nothing (it would dispatch nothing). The estimate is
+    compared to the supplied daily/monthly headroom; `within_headroom` is False when it exceeds
+    either. Never raises."""
+    nodes = list(getattr(spec, "nodes", []) or [])
+    floor = FRESH_FLOOR_USD
+
+    errors = validate_spec(spec)
+    if errors:
+        dropped = [{"id": "", "reason": f"invalid spec: {'; '.join(errors)}"}]
+        return AdmissionEstimate(
+            admitted=[], dropped=dropped, estimate_usd=0.0, floor_usd=floor,
+            node_count=len(nodes), max_total=max_total, max_budget_usd=max_budget_usd,
+            daily_headroom_usd=daily_headroom_usd, monthly_headroom_usd=monthly_headroom_usd,
+            within_headroom=True,
+        )
+
+    waves = plan_waves(spec)
+    allowed, _capped_total, _capped_budget = _preallocate(waves, max_total, max_budget_usd)
+    admitted = sorted(allowed)
+    dropped = sorted(
+        ({"id": n.id, "reason": _CAP_DROP_REASON} for n in nodes if n.id not in allowed),
+        key=lambda d: d["id"],
+    )
+    estimate_usd = round(len(admitted) * floor, 6)
+
+    within = True
+    if daily_headroom_usd is not None and estimate_usd > daily_headroom_usd:
+        within = False
+    if monthly_headroom_usd is not None and estimate_usd > monthly_headroom_usd:
+        within = False
+
+    return AdmissionEstimate(
+        admitted=admitted, dropped=dropped, estimate_usd=estimate_usd, floor_usd=floor,
+        node_count=len(nodes), max_total=max_total, max_budget_usd=max_budget_usd,
+        daily_headroom_usd=daily_headroom_usd, monthly_headroom_usd=monthly_headroom_usd,
+        within_headroom=within,
+    )
+
+
 def run_workflow(
     spec: WorkflowSpec,
     *,
@@ -598,28 +707,10 @@ def run_workflow(
     by_id = {n.id: n for n in nodes}
     waves = plan_waves(spec)
 
-    # Deterministic budget-aware admission (REQ-NF-029): walk nodes in topological order
-    # (wave, then sorted id) and admit each while it fits *both* the count cap (`max_total`)
-    # and the spend cap (`max_budget_usd`, charged one fresh-session floor per node). Because
-    # admission is a single-threaded topological pass — never a thread race — cap pressure
-    # drops a *fixed* set, identical across parallel and sequential runs (REQ-NF-026b).
-    allowed: set = set()
-    count_budget = max_total
-    spend_budget = max_budget_usd  # None ⇒ no spend cap
-    capped_by_total = False
-    capped_by_budget = False
-    for wave in waves:
-        for nid in wave:  # sorted within wave
-            if count_budget <= 0:
-                capped_by_total = True
-                continue
-            if spend_budget is not None and spend_budget < FRESH_FLOOR_USD:
-                capped_by_budget = True
-                continue
-            allowed.add(nid)
-            count_budget -= 1
-            if spend_budget is not None:
-                spend_budget -= FRESH_FLOOR_USD
+    # Deterministic budget-aware admission (REQ-NF-029) via the shared `_preallocate` pass —
+    # the *same* pure function the pre-flight estimator (`estimate_admission`, T-204) replays,
+    # so the estimate can never drift from what the run admits (REQ-NF-033).
+    allowed, capped_by_total, capped_by_budget = _preallocate(waves, max_total, max_budget_usd)
     overflow = len(nodes) - len(allowed)
     if overflow > 0:
         caps = []
@@ -642,9 +733,9 @@ def run_workflow(
             if nid not in allowed:
                 # Pre-allocated cap drop (REQ-NF-029): the aggregate reason was logged once
                 # above; here it becomes a loud, per-node line + structured drop (T-202/204).
-                reason = "exceeds cost/total cap (pre-allocated drop)"
-                drops.append({"id": nid, "reason": reason})
-                narrator.drop(nid, reason)
+                # Same reason string the estimator emits ⇒ estimator split == run drops.
+                drops.append({"id": nid, "reason": _CAP_DROP_REASON})
+                narrator.drop(nid, _CAP_DROP_REASON)
                 continue
             node = by_id[nid]
             missing = [d for d in (node.depends_on or []) if d not in results]

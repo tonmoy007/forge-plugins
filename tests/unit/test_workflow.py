@@ -851,3 +851,87 @@ def test_audit_nested_decompose_does_not_write_extra_records(tmp_path, monkeypat
                      allow_generated_subdags=True)
     recs = _read_events(forge)
     assert len(recs) == 1  # exactly one — the nested child run does not write its own record
+
+
+# --------------------------------------------------------------------------- #
+# T-204 (REQ-WF-013, NF-033, AC-WF-014) — pure cost pre-flight estimator
+# --------------------------------------------------------------------------- #
+
+
+def _line_spec(n):
+    """A linear chain n0->n1->...->n{n-1} (one node per wave) for predictable admission order."""
+    nodes = []
+    for i in range(n):
+        deps = [f"n{i-1}"] if i else []
+        nodes.append(_wf.WorkflowNode(id=f"n{i}", build_prompt=lambda up: "x", depends_on=deps))
+    return _wf.WorkflowSpec(nodes=nodes)
+
+
+def test_estimator_is_pure_same_inputs_same_result():
+    spec = _diamond()
+    e1 = _wf.estimate_admission(spec, max_total=2)
+    e2 = _wf.estimate_admission(spec, max_total=2)
+    assert e1.admitted == e2.admitted
+    assert e1.dropped == e2.dropped
+    assert e1.estimate_usd == e2.estimate_usd
+
+
+def test_estimator_estimate_equals_admitted_times_floor():
+    spec = _line_spec(5)
+    est = _wf.estimate_admission(spec, max_total=3)
+    assert est.admitted == ["n0", "n1", "n2"]
+    assert est.estimate_usd == 3 * _wf.FRESH_FLOOR_USD
+
+
+def test_estimator_split_equals_run_drops_max_total(monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    spec = _line_spec(5)
+    est = _wf.estimate_admission(spec, max_total=3)
+    res = _wf.run_workflow(spec, forge_dir=FORGE, feature="t",
+                           dispatch_fn=_echo_dispatch, max_total=3)
+    assert est.admitted == res.admitted
+    assert {d["id"] for d in est.dropped} == {d["id"] for d in res.drops}
+
+
+def test_estimator_split_equals_run_drops_budget(monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    budget = 2.5 * _wf.FRESH_FLOOR_USD  # exactly two fresh-floor nodes fit
+    spec = _diamond()
+    est = _wf.estimate_admission(spec, max_budget_usd=budget)
+    res = _wf.run_workflow(spec, forge_dir=FORGE, feature="t",
+                           dispatch_fn=_echo_dispatch, max_budget_usd=budget)
+    assert est.admitted == res.admitted == ["A", "B"]
+    assert {d["id"] for d in est.dropped} == {d["id"] for d in res.drops} == {"C", "D"}
+
+
+def test_estimator_invalid_spec_admits_nothing():
+    bad = _wf.WorkflowSpec(nodes=[_wf.WorkflowNode(id="A", build_prompt=lambda up: "A",
+                                                   depends_on=["missing"])])
+    est = _wf.estimate_admission(bad)
+    assert est.admitted == []
+    assert est.dropped
+
+
+def test_estimator_zero_dispatch_no_floor_exceeds_cap():
+    # A pure function: it performs no dispatch — proven by needing no dispatch_fn at all and
+    # returning a deterministic split for an over-cap spec.
+    spec = _line_spec(10)
+    est = _wf.estimate_admission(spec, max_total=4)
+    assert len(est.admitted) == 4
+    assert len(est.dropped) == 6
+    assert est.within_headroom is True  # no headroom constraints supplied ⇒ unbounded
+
+
+def test_estimator_headroom_flags_over_budget():
+    spec = _line_spec(10)  # 10 × floor estimate
+    est = _wf.estimate_admission(spec, daily_headroom_usd=2 * _wf.FRESH_FLOOR_USD)
+    # All 10 admitted by max_total, but estimate (10×floor) exceeds the 2×floor daily headroom.
+    assert est.within_headroom is False
+
+
+def test_runtime_admission_drop_emits_loud_narration(monkeypatch):
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+    spec = _line_spec(4)
+    _, out, err = _capture_run(spec, dispatch_fn=_echo_dispatch, max_total=2)
+    assert "dropped:" in err  # the capped nodes are surfaced loudly on stderr
+    assert out == ""
