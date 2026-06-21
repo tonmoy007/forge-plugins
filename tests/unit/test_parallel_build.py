@@ -486,3 +486,41 @@ def test_adversarial_join_excludes_refuted_node_from_merge(tmp_path) -> None:
     assert not (repo / "T2.txt").exists()                 # refuted node's work never landed
     assert any("T2" in r and ("refut" in r.lower() or "adversar" in r.lower())
                for r in res.dropped_reasons)
+
+
+# --------------------------------------------------------------------------- #
+# T-202 (REQ-WF-011, AC-WF-012) — parallel build narrates on stderr, stdout clean
+# --------------------------------------------------------------------------- #
+import io  # noqa: E402
+import contextlib  # noqa: E402
+
+
+def test_parallel_build_narrates_on_stderr(monkeypatch):
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, max_parallel=4)
+    tasks = [_task("T1"), _task("T2")]
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        res = _pb.run_parallel_build(
+            tasks, done=set(), config=cfg, forge_dir=FORGE, feature="t",
+            dispatch_fn=_echo_dispatch,
+        )
+    assert res.completed == 2
+    err_text = err.getvalue()
+    for tid in ("T1", "T2"):
+        assert f"node '{tid}': start" in err_text
+        assert f"node '{tid}': done" in err_text
+    assert "completed:[T1, T2]" in err_text
+    assert out.getvalue() == ""
+
+
+def test_parallel_build_narration_silenced_by_quiet_env(monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, max_parallel=4)
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        _pb.run_parallel_build(
+            [_task("T1")], done=set(), config=cfg, forge_dir=FORGE, feature="t",
+            dispatch_fn=_echo_dispatch,
+        )
+    assert err.getvalue() == ""

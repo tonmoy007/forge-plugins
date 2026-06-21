@@ -201,24 +201,30 @@ def run_parallel_build(
     if not ids:
         return _wf.WorkflowResult(results={}, completed=0, dropped=0, total_cost_usd=0.0)
 
+    # One shared stderr narrator (REQ-WF-011 / T-202), config-gated once; threaded into the inner
+    # run_workflow (fan-out waves/nodes/summary) and reused for the join-phase lines below. The
+    # engine's stdout result is byte-identical with narration on or off.
+    narrator = _wf._Narrator(feature, _wf.narration_enabled(forge_dir))
+
     if getattr(config, "worktree_isolation", False):
         if repo is not None and _wt.worktrees_available(repo):
             return _run_isolated(
                 ids, config=config, forge_dir=forge_dir, feature=feature,
                 dispatch_fn=dispatch_fn, build_prompt=build_prompt,
                 claude_bin=claude_bin, resume=resume, repo=Path(repo),
-                adversarial_skeptics=adversarial_skeptics,
+                adversarial_skeptics=adversarial_skeptics, narrator=narrator,
             )
         # Worktrees unavailable ⇒ degrade to a sequential single-worktree run (REQ-WF-008).
         return _run_plain(
             ids, config=config, forge_dir=forge_dir, feature=feature, dispatch_fn=dispatch_fn,
             build_prompt=build_prompt, cwd_for=cwd_for, cwd=cwd, claude_bin=claude_bin,
-            resume=resume, force_sequential=True,
+            resume=resume, force_sequential=True, narrator=narrator,
         )
 
     return _run_plain(
         ids, config=config, forge_dir=forge_dir, feature=feature, dispatch_fn=dispatch_fn,
         build_prompt=build_prompt, cwd_for=cwd_for, cwd=cwd, claude_bin=claude_bin, resume=resume,
+        narrator=narrator,
     )
 
 
@@ -237,7 +243,7 @@ def _build_nodes(ids, builder, cwd_for):
 
 def _run_plain(
     ids, *, config, forge_dir, feature, dispatch_fn, build_prompt, cwd_for, cwd,
-    claude_bin, resume, force_sequential: bool = False,
+    claude_bin, resume, force_sequential: bool = False, narrator=None,
 ) -> "object":
     """Run ready nodes through the engine in one wave (no worktree isolation). `force_sequential`
     pins `max_parallel=1` for the degraded single-worktree path."""
@@ -256,12 +262,13 @@ def _run_plain(
         dispatch_fn=dispatch_fn,
         claude_bin=claude_bin,
         cwd=cwd,
+        narrator=narrator,
     )
 
 
 def _run_isolated(
     ids, *, config, forge_dir, feature, dispatch_fn, build_prompt, claude_bin, resume, repo,
-    adversarial_skeptics: int = 0,
+    adversarial_skeptics: int = 0, narrator=None,
 ) -> "object":
     """Worktree-isolated parallel build (REQ-WF-008/009). Create one worktree+branch per ready
     node, fan the nodes out through the engine (each dispatching in its own worktree), then **at
@@ -276,12 +283,15 @@ def _run_isolated(
     # dropped (degrade) and never dispatched.
     handles: dict = {}          # id -> WorktreeHandle (only successfully-added)
     setup_drops: list = []
+    _narr = narrator if narrator is not None else _wf._Narrator(feature, False)
     for tid in ids:
         h = _wt.add(repo, tid)
         if h.ok:
             handles[tid] = h
         else:
-            setup_drops.append(f"node {tid!r}: worktree add failed: {h.reason}")
+            reason = f"worktree add failed: {h.reason}"
+            setup_drops.append(f"node {tid!r}: {reason}")
+            _narr.drop(tid, reason)
 
     try:
         # Phase 2: fan out — each node dispatches IN ITS OWN worktree (per-node cwd).
@@ -294,6 +304,7 @@ def _run_isolated(
             max_total=getattr(config, "max_total", _wf.DEFAULT_MAX_TOTAL),
             max_budget_usd=getattr(config, "max_budget_usd", None),
             resume=resume, dispatch_fn=dispatch_fn, claude_bin=claude_bin,
+            narrator=narrator,
         )
 
         # Phase 3: join — sequential, deterministic id order. Optionally gate each completed node
@@ -313,15 +324,20 @@ def _run_isolated(
                 skeptic_cost += verdict.cost_usd
                 if not verdict.admitted:
                     join_drops.append(f"node {tid!r}: {verdict.reason}")
+                    _narr.drop(tid, verdict.reason)
                     continue
             c = _wt.commit(h, message=f"feat({tid}): parallel build")
             if not c.ok:
-                join_drops.append(f"node {tid!r}: commit failed: {c.reason}")
+                reason = f"commit failed: {c.reason}"
+                join_drops.append(f"node {tid!r}: {reason}")
+                _narr.drop(tid, reason)
                 continue
             m = _wt.merge(repo, h)
             if not m.ok:
                 kind = "merge conflict" if m.conflict else "merge failed"
-                join_drops.append(f"node {tid!r}: {kind}: {m.reason}")
+                reason = f"{kind}: {m.reason}"
+                join_drops.append(f"node {tid!r}: {reason}")
+                _narr.drop(tid, reason)
                 continue
             merged[tid] = run.results[tid]
 

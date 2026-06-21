@@ -75,7 +75,7 @@
   consolidates the program-wide roadmap (v0.5.0 "engine made real" trio = session reuse across
   heterogeneous nodes · top-level generated workflows · pipeline-as-WorkflowSpec; unified `~/.forge`
   graduation layer; Managed-Agents track ≥v0.6; blocked-upstream in-session context trigger) +
-  one standing-non-goals list. No code written yet.
+  one standing-non-goals list. **T-202 done** (see v0.4.1 Task Status below); next task T-203.
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
   you": daemons, orchestration, brownfield, sprint. COMPLETE + RELEASED through v0.2.3
   (sprint M4, T-153–156, deferred).
@@ -119,6 +119,21 @@
 - **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.4.1 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.4.1.md` (T-202..T-206). SRS `build/01-srs/srs-v0.4.1.md`.
+> "Operable engine" hardening — observability + cost pre-flight + dogfood over the shipped
+> v0.4.0 engine, **zero semantic change** (narration is stderr-only; stdout byte-identical).
+> Branch `feat/v0.4.1-operable-engine`.
+
+| Task | Status | Notes |
+|------|--------|-------|
+| T-202 | 🟢 done | Live stderr narration (REQ-WF-011). `_workflow.narration_enabled` + `_Narrator` (stderr-only, never-raises) in `run_workflow`: per-wave header, per-node `start`/`done`/`dropped:<reason>` + cost, deterministic id-ordered summary block. `parallel_build` threads one shared narrator (fan-out via inner `run_workflow` + join-phase drop lines). New `orchestration.narrate` config key (default ON; only explicit `false` silences) + `FORGE_WF_QUIET=1` env. **stdout byte-identical on vs off** (AC-WF-012). +13 tests (config narrate ×4, narration ×7, parallel ×2). Full suite 1641 pass; validate 0; full-pipeline 12/12. |
+| T-203 | 🔲 todo | `events.jsonl` audit record (one line per run) |
+| T-204 | 🔲 todo | Cost pre-flight estimator + loud drops |
+| T-205 | 🔲 todo | Dogfood example flow + parallel-build integration test + docs |
+| T-206 | 🔲 todo | Release v0.4.1 |
 
 ## v0.3.3 Task Status
 

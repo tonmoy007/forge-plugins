@@ -42,6 +42,11 @@ class OrchestrationConfig:
     max_parallel: int = DEFAULT_MAX_PARALLEL
     max_total: int = DEFAULT_MAX_TOTAL
     max_budget_usd: Optional[float] = None  # None ⇒ no per-run spend cap
+    # Observability control (REQ-WF-011, v0.4.1): live stderr narration, default ON. This is
+    # *not* a capability toggle — it gates no engine behavior, only side-channel stderr output
+    # (the engine's stdout result is byte-identical with it on or off). Only an explicit bool
+    # `false` silences; a stray truthy/falsy scalar never flips the product default off.
+    narrate: bool = True
 
 
 _TOGGLES = ("flows_enabled", "parallel_build", "worktree_isolation", "allow_generated_subdags")
@@ -95,6 +100,10 @@ def load_orchestration_config(forge_dir) -> OrchestrationConfig:
     for name in _TOGGLES:
         if section.get(name) is True:
             setattr(cfg, name, True)
+
+    # Narration defaults ON; only an explicit bool `false` silences it (REQ-WF-011).
+    if section.get("narrate") is False:
+        cfg.narrate = False
 
     parallel = _coerce_positive_int(section.get("max_parallel"))
     if parallel is not None:

@@ -147,3 +147,32 @@ def test_zero_and_negative_tunables_ignored(tmp_path):
     cfg = _wfc.load_orchestration_config(forge)
     assert cfg.max_parallel == 4
     assert cfg.max_total == 64
+
+
+# --------------------------------------------------------------------------- #
+# T-202 (REQ-WF-011) — narration knob: default ON, only an explicit bool False disables
+# --------------------------------------------------------------------------- #
+
+
+def test_narrate_defaults_on(tmp_path):
+    forge = _write_config(tmp_path, "orchestration:\n  parallel_build: true\n")
+    cfg = _wfc.load_orchestration_config(forge)
+    assert cfg.narrate is True
+
+
+def test_narrate_defaults_on_when_no_config(tmp_path):
+    cfg = _wfc.load_orchestration_config(tmp_path / ".forge")
+    assert cfg.narrate is True
+
+
+def test_narrate_false_disables(tmp_path):
+    forge = _write_config(tmp_path, "orchestration:\n  narrate: false\n")
+    cfg = _wfc.load_orchestration_config(forge)
+    assert cfg.narrate is False
+
+
+def test_narrate_truthy_nonbool_does_not_disable(tmp_path):
+    # Only an explicit bool False silences; a stray 0/"" never flips the product default off.
+    forge = _write_config(tmp_path, "orchestration:\n  narrate: 0\n")
+    cfg = _wfc.load_orchestration_config(forge)
+    assert cfg.narrate is True

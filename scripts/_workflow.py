@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -46,6 +47,70 @@ DEFAULT_MAX_TOTAL = 64
 # node. Sourced from the single dispatch adapter so the estimate can never drift from the real
 # cost gate (`_background_agent.dispatch` charges the same floor in `_cost_cap.precheck`).
 FRESH_FLOOR_USD = _background_agent.FRESH_FLOOR_USD
+
+
+# --------------------------------------------------------------------------- #
+# Live run narration (REQ-WF-011 / T-202) — stderr-only, never touches stdout.
+# --------------------------------------------------------------------------- #
+# The v0.1.6 NARRATE precedent (REQ-INTERACTIVE-NARRATE-001): `[Forge]` progress on stderr,
+# stdout reserved for the structured contract. Turning narration on/off must not change a
+# single stdout byte (AC-WF-012). All narration routes through `_Narrator._line`, which writes
+# to stderr and swallows any error — narration is best-effort and never raises into the engine.
+
+
+def narration_enabled(forge_dir, *, env=None) -> bool:
+    """Whether stderr narration is on for this run. OFF when `FORGE_WF_QUIET` is set to a
+    non-empty value or `orchestration.narrate` is `false`; ON by default. Never raises — any
+    failure degrades to silence (off), so a broken config can never make the engine throw."""
+    try:
+        environ = os.environ if env is None else env
+        if (environ.get("FORGE_WF_QUIET") or "").strip():
+            return False
+        import _workflow_config  # local import: keeps the engine importable without it
+        cfg = _workflow_config.load_orchestration_config(forge_dir)
+        return getattr(cfg, "narrate", True) is not False
+    except Exception:  # noqa: BLE001 — narration gating must never raise
+        return False
+
+
+class _Narrator:
+    """Stderr-only run narration (REQ-WF-011). Every line is `[Forge] <text>`; when `enabled`
+    is False every method is a no-op. `_line` swallows any write error so narration can never
+    raise into `run_workflow` / `parallel_build` nor leak a byte onto stdout."""
+
+    def __init__(self, name: str, enabled: bool) -> None:
+        self.name = name
+        self.enabled = bool(enabled)
+
+    def _line(self, text: str) -> None:
+        if not self.enabled:
+            return
+        try:
+            sys.stderr.write(f"[Forge] {text}\n")
+            sys.stderr.flush()
+        except Exception:  # noqa: BLE001 — a broken stderr degrades to silence, never raises
+            pass
+
+    def wave(self, k: int, n: int, count: int) -> None:
+        self._line(f"workflow {self.name!r}: wave {k}/{n} — {count} node(s)")
+
+    def start(self, nid: str) -> None:
+        self._line(f"  node {nid!r}: start")
+
+    def done(self, nid: str, cost: float) -> None:
+        self._line(f"  node {nid!r}: done (${cost:.4f})")
+
+    def drop(self, nid: str, reason: str, cost: float = 0.0) -> None:
+        self._line(f"  node {nid!r}: dropped: {reason} (${cost:.4f})")
+
+    def summary(self, completed: list, dropped: list, total: float) -> None:
+        """Final, deterministic, id-ordered summary block (the *testable* artifact — live
+        per-node lines may interleave under parallelism, this does not)."""
+        comp = ", ".join(sorted(completed))
+        drops = ", ".join(
+            f"{{{d['id']}: {d['reason']}}}" for d in sorted(dropped, key=lambda d: d["id"])
+        )
+        self._line(f"summary: completed:[{comp}] dropped:[{drops}] total ${total:.4f}")
 
 
 @dataclass
@@ -408,6 +473,8 @@ def run_workflow(
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
     allow_generated_subdags: bool = False,
+    name: Optional[str] = None,
+    narrator: Optional["_Narrator"] = None,
 ) -> WorkflowResult:
     """Execute a workflow DAG wave-by-wave with bounded parallel fan-out per wave.
 
@@ -431,12 +498,23 @@ def run_workflow(
     dispatch_fn = dispatch_fn or _background_agent.dispatch
     nodes = list(getattr(spec, "nodes", []) or [])
     dropped_reasons: list[str] = []
+    # Structured (id, reason) drops for the deterministic id-ordered narration summary (T-202)
+    # and, later, the events.jsonl audit record (T-203). Parallel to `dropped_reasons` (which is
+    # kept byte-identical to v0.4.0 on the result), never replacing it.
+    drops: list[dict] = []
+
+    run_name = name if name is not None else feature
+    if narrator is None:
+        narrator = _Narrator(run_name, narration_enabled(forge_dir))
 
     errors = validate_spec(spec)
     if errors:
         for e in errors:
             dropped_reasons.append(f"invalid spec: {e}")
+            drops.append({"id": "", "reason": f"invalid spec: {e}"})
+            narrator.drop("", f"invalid spec: {e}")
             _LOG.warning("run_workflow: %s", e)
+        narrator.summary([], drops, 0.0)
         return WorkflowResult(results={}, completed=0, dropped=len(nodes),
                               total_cost_usd=0.0, dropped_reasons=dropped_reasons)
 
@@ -479,16 +557,25 @@ def run_workflow(
     results: dict = {}
     total_cost = 0.0
 
-    for wave in waves:
+    n_waves = len(waves)
+    for wi, wave in enumerate(waves, 1):
+        narrator.wave(wi, n_waves, len(wave))
         prepared: list[tuple[WorkflowNode, str]] = []  # (node, prompt) ready to dispatch
         for nid in wave:
             if nid not in allowed:
-                continue  # capped — reason already logged once above
+                # Pre-allocated cap drop (REQ-NF-029): the aggregate reason was logged once
+                # above; here it becomes a loud, per-node line + structured drop (T-202/204).
+                reason = "exceeds cost/total cap (pre-allocated drop)"
+                drops.append({"id": nid, "reason": reason})
+                narrator.drop(nid, reason)
+                continue
             node = by_id[nid]
             missing = [d for d in (node.depends_on or []) if d not in results]
             if missing:
                 reason = f"node {nid!r} skipped: dependency dropped/missing {missing}"
                 dropped_reasons.append(reason)
+                drops.append({"id": nid, "reason": reason})
+                narrator.drop(nid, reason)
                 _LOG.warning("run_workflow: %s", reason)
                 continue
             upstream = {d: results[d] for d in (node.depends_on or [])}
@@ -497,9 +584,16 @@ def run_workflow(
             except Exception as exc:  # noqa: BLE001 — build failure → drop, not crash
                 reason = f"node {nid!r} build_prompt failed: {exc}"
                 dropped_reasons.append(reason)
+                drops.append({"id": nid, "reason": reason})
+                narrator.drop(nid, reason)
                 _LOG.warning("run_workflow: %s", reason)
                 continue
             prepared.append((node, prompt))
+
+        # Live per-node `start` lines (id-ordered here; may interleave with `done` lines under
+        # parallelism — accepted, the deterministic artifact is the summary block).
+        for node, _prompt in prepared:
+            narrator.start(node.id)
 
         if not prepared:
             continue
@@ -546,6 +640,8 @@ def run_workflow(
             total_cost += cost
             if obj is None:
                 dropped_reasons.append(f"node {nid!r}: {reason}")
+                drops.append({"id": nid, "reason": reason})
+                narrator.drop(nid, reason, cost)
                 _LOG.warning("run_workflow: dropped %s — %s", nid, reason)
                 continue
             # A `decompose` node can complete *with* a reason: the generated sub-DAG was rejected
@@ -553,11 +649,14 @@ def run_workflow(
             # (fallback) result, but the rejection is surfaced — drop-with-reason, never silent.
             if reason is not None:
                 dropped_reasons.append(f"node {nid!r}: {reason}")
+                drops.append({"id": nid, "reason": reason})
                 _LOG.warning("run_workflow: %s — %s", nid, reason)
+            narrator.done(nid, cost)
             results[nid] = obj
 
     ordered = {nid: results[nid] for nid in sorted(results)}
     completed = len(ordered)
+    narrator.summary(list(ordered.keys()), drops, total_cost)
     return WorkflowResult(
         results=ordered,
         completed=completed,

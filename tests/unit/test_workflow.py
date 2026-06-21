@@ -653,3 +653,101 @@ def test_decompose_generation_dispatch_failure_falls_back() -> None:
     )
     assert "fallback" in _child_prompts(recorded)
     assert isinstance(res, _wf.WorkflowResult)
+
+
+# --------------------------------------------------------------------------- #
+# T-202 (REQ-WF-011, AC-WF-012) — live stderr narration; stdout byte-identical
+# --------------------------------------------------------------------------- #
+import io  # noqa: E402
+import contextlib  # noqa: E402
+
+
+def _capture_run(spec, *, dispatch_fn, forge_dir=FORGE, **kw):
+    """Run a workflow capturing (stdout, stderr) text. Narration must be stderr-only."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        res = _wf.run_workflow(spec, forge_dir=forge_dir, feature="t",
+                               dispatch_fn=dispatch_fn, **kw)
+    return res, out.getvalue(), err.getvalue()
+
+
+def test_narration_emits_waves_nodes_and_summary_on_stderr(monkeypatch):
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+    res, out, err = _capture_run(_diamond(), dispatch_fn=_echo_dispatch)
+    assert res.completed == 4
+    # Per-node start + done lines for each node on stderr.
+    for nid in ("A", "B", "C", "D"):
+        assert f"node '{nid}': start" in err
+        assert f"node '{nid}': done" in err
+    # Wave header present.
+    assert "wave 1/" in err
+    # Final id-ordered summary block.
+    assert "completed:[A, B, C, D]" in err
+    assert "total $" in err
+    # stdout untouched by narration.
+    assert out == ""
+
+
+def test_narration_summary_is_deterministic(monkeypatch):
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+    _, _, err1 = _capture_run(_diamond(), dispatch_fn=_echo_dispatch)
+    _, _, err2 = _capture_run(_diamond(), dispatch_fn=_echo_dispatch)
+    line1 = [l for l in err1.splitlines() if "completed:[" in l]
+    line2 = [l for l in err2.splitlines() if "completed:[" in l]
+    assert line1 == line2 and line1  # identical summary block across runs
+
+
+def test_stdout_byte_identical_narration_on_vs_off(monkeypatch):
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+    _, out_on, err_on = _capture_run(_diamond(), dispatch_fn=_echo_dispatch)
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    _, out_off, err_off = _capture_run(_diamond(), dispatch_fn=_echo_dispatch)
+    assert out_on == out_off  # stdout byte-identical
+    assert err_on != ""       # narration present when on
+    assert err_off == ""      # silenced when off
+
+
+def test_narration_silenced_by_quiet_env(monkeypatch):
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    _, out, err = _capture_run(_diamond(), dispatch_fn=_echo_dispatch)
+    assert err == ""
+
+
+def test_narration_silenced_by_config_false(tmp_path, monkeypatch):
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+    forge = tmp_path / ".forge"
+    forge.mkdir(parents=True)
+    (forge / "config.yaml").write_text("orchestration:\n  narrate: false\n")
+    _, out, err = _capture_run(_diamond(), dispatch_fn=_echo_dispatch, forge_dir=forge)
+    assert err == ""
+
+
+def test_narration_reports_dropped_node_with_reason(monkeypatch):
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+
+    def dispatch(prompt, **kwargs):
+        if prompt == "A":
+            return SimpleNamespace(status="error", reason="boom", result=None, cost_usd=0.0)
+        return _ok({"prompt": prompt})
+
+    spec = _wf.WorkflowSpec(nodes=[_node("A", lambda up: "A")])
+    _, out, err = _capture_run(spec, dispatch_fn=dispatch)
+    assert "dropped:" in err
+    assert "A" in err
+    assert out == ""
+
+
+def test_narration_failure_degrades_to_silence(monkeypatch):
+    """A forced narration write error degrades to silence — never raises into the engine."""
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+
+    class _Boom(io.StringIO):
+        def write(self, *a, **k):
+            raise RuntimeError("stderr is broken")
+
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(_Boom()):
+        res = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                               dispatch_fn=_echo_dispatch)
+    # The run still completed and returned a structured result.
+    assert res.completed == 4
