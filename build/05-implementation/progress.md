@@ -5,8 +5,7 @@
 
 ## Current State
 
-- **v0.4.0 (dynamic workflow engine) BUILT + adversarially verified — AWAITING RELEASE
-  APPROVAL** — generalizes `_orchestrate.fan_out` from a flat homogeneous map into a
+- **v0.4.0 (dynamic workflow engine) RELEASED** — generalizes `_orchestrate.fan_out` from a flat homogeneous map into a
   topological **DAG executor** (`scripts/_workflow.py`): per-node prompt/schema/model,
   `depends_on` waves (Kahn), bounded parallel fan-out, inter-step data passing, per-node
   verify, deterministic + never-raises. Built via a fan-out workflow — serial spine
@@ -23,10 +22,10 @@
   SHIP-WITH-NOTES** — all 11 ACs met by non-tautological tests, consumer tests provably
   unchanged from `cab5f56`, never-raises survived 5 hostile probes; 2 non-blocking notes
   addressed (decompose-fallback gap fix + budget-doc caveat, `6e8f0f2`). 1616 unit tests
-  pass; validate 0; full-pipeline 12/12. 11 commits on `feat/v0.4.0-workflow-spike`
-  (`c82a205`..`6e8f0f2`). **T-201 release (version bump, CHANGELOG, banner + social-preview,
-  PR→develop→main→tag `v0.4.0`→mirror both remotes) PENDING USER APPROVAL.** SRS
-  `build/01-srs/srs-v0.4.0.md`, DAG `build/04-plan/task-dag-v0.4.0.md`.
+  pass; validate 0; full-pipeline 12/12 (toggles off + on). Shipped via T-201: bump 0.4.0,
+  CHANGELOG `[0.4.0]`, README rewrite + banner/social-preview refresh; tag `v0.4.0` on
+  origin + polygon; GitHub releases published; manifests 0.4.0. SRS
+  `build/01-srs/srs-v0.4.0.md`, DAG `build/04-plan/task-dag-v0.4.0.md` (T-191–T-201).
 
 - **v0.3.6 (context-aware autopilot) RELEASED** — at a configurable context threshold,
   autopilot checkpoints → compacts → continues. Background: `should_rotate_for_context`
@@ -66,9 +65,7 @@
   (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
   polygon; GitHub releases published. SRS `build/01-srs/srs-v0.3.md`, DAG
   `build/04-plan/task-dag-v0.3.md`.
-- **NEXT**: v0.4.0 is BUILT + adversarially verified on `feat/v0.4.0-workflow-spike`,
-  **awaiting user approval to run T-201 release** (version bump → CHANGELOG → banner/social
-  → PR→develop→main→tag `v0.4.0`→mirror both remotes→GitHub releases→delete branch). Then:
+- **NEXT**: v0.4.0 is shipped (both remotes, tag + releases). No active build. Future:
   v0.4.1+ (session reuse across heterogeneous DAG nodes; top-level generated workflows;
   pipeline-as-WorkflowSpec — all v0.4.0 "Out of scope").
 - **Prior program v0.2** (phased v0.2.0→v0.2.3) — "a system that works alongside
