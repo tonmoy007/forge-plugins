@@ -80,6 +80,10 @@ class WorkflowNode:
     model: Optional[str] = None
     validate: Optional[Callable[[dict], Any]] = None
     verify: Optional[VerifySpec] = None  # per-node verification request (wired in T-192)
+    # Per-node working directory (T-196, REQ-WF-007): lets a node run in its own directory or
+    # git worktree (parallel build). `None` ⇒ inherit `run_workflow`'s scalar `cwd`, so every
+    # existing caller — which sets only the scalar — is unaffected.
+    cwd: Optional[str] = None
 
 
 @dataclass
@@ -355,7 +359,9 @@ def run_workflow(
                     _run_node, node, prompt, dispatch_fn,
                     {"forge_dir": forge_dir, "feature": feature, "model": node.model,
                      "output_schema": node.output_schema, "max_budget_usd": max_budget_usd,
-                     "resume": resume, "claude_bin": claude_bin, "cwd": cwd},
+                     "resume": resume, "claude_bin": claude_bin,
+                     # Per-node `cwd` (T-196) overrides the scalar; unset ⇒ scalar fallback.
+                     "cwd": node.cwd if node.cwd is not None else cwd},
                 ): node.id
                 for node, prompt in prepared
             }

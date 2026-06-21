@@ -353,3 +353,48 @@ def test_unverified_node_never_dispatches_verifier() -> None:
     _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
                      dispatch_fn=_routing_dispatch(recorded, verdict="fail"))
     assert not any("INDEPENDENT verifier" in c["prompt"] for c in recorded)
+
+
+# --------------------------------------------------------------------------- #
+# REQ-WF-007 / T-196 — per-node `cwd` (each node may run in its own directory/worktree)
+# --------------------------------------------------------------------------- #
+
+
+def test_per_node_cwd_overrides_scalar_cwd() -> None:
+    """Each node's dispatch receives its OWN `cwd` when `WorkflowNode.cwd` is set; the scalar
+    `run_workflow(cwd=...)` is only the fallback for nodes that don't set one."""
+    recorded: list = []
+    spec = _wf.WorkflowSpec(nodes=[
+        _wf.WorkflowNode(id="A", build_prompt=lambda up: "A", cwd="/wt/A"),
+        _wf.WorkflowNode(id="B", build_prompt=lambda up: "B", cwd="/wt/B"),
+    ])
+    _wf.run_workflow(spec, forge_dir=FORGE, feature="t", cwd="/scalar",
+                     dispatch_fn=_spy_dispatch(recorded))
+    by_prompt = {c["prompt"]: c for c in recorded}
+    assert by_prompt["A"]["cwd"] == "/wt/A"
+    assert by_prompt["B"]["cwd"] == "/wt/B"
+
+
+def test_unset_node_cwd_falls_back_to_scalar() -> None:
+    """A node with no `cwd` inherits the scalar `run_workflow(cwd=...)` — backward compatible
+    with every existing caller (which passes only the scalar)."""
+    recorded: list = []
+    spec = _wf.WorkflowSpec(nodes=[
+        _wf.WorkflowNode(id="A", build_prompt=lambda up: "A"),               # unset
+        _wf.WorkflowNode(id="B", build_prompt=lambda up: "B", cwd="/wt/B"),  # set
+    ])
+    _wf.run_workflow(spec, forge_dir=FORGE, feature="t", cwd="/scalar",
+                     dispatch_fn=_spy_dispatch(recorded))
+    by_prompt = {c["prompt"]: c for c in recorded}
+    assert by_prompt["A"]["cwd"] == "/scalar"   # fell back to the scalar
+    assert by_prompt["B"]["cwd"] == "/wt/B"
+
+
+def test_node_cwd_defaults_none_and_inherits_none_scalar() -> None:
+    """With neither a node cwd nor a scalar cwd, dispatch still gets `cwd=None` (today's default)."""
+    plain = _wf.WorkflowNode(id="A", build_prompt=lambda up: "A")
+    assert plain.cwd is None
+    recorded: list = []
+    _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                     dispatch_fn=_spy_dispatch(recorded))
+    assert all(c["cwd"] is None for c in recorded)
