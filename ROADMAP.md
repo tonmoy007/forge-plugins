@@ -163,6 +163,60 @@ producing all 12 stage artifacts with traceability intact. ✅
 | **v0.3.5** | 🟢 released | **Semantic skill mining + skill-creator** — replaced the tool-name-n-gram miner with a semantic, success-gated, **anti-unification**-based miner that proposes genuine reusable *workflows*, authors them via a new `/forge:skill-creator` (agentskills.io `SKILL.md`), verifies by replay, and curates the library (ExpeL voting + `/dream`-style maintenance). Human-approved throughout. Tag `v0.3.5`, both remotes. SRS `build/01-srs/srs-v0.3.5.md`, DAG `build/04-plan/task-dag-v0.3.5.md` (T-177–T-184). |
 | **v0.3.6** | 🟢 released | **Context-aware autopilot** — when an autopilot run crosses a configurable context threshold, it automatically **checkpoints → compacts → continues**. Background dispatches rotate the session on a real token-pressure signal (`usage.input_tokens`); in-session runs ride native auto-compaction via a new **PreCompact** checkpoint + **SessionStart(`compact`)** resume injection, with a shared schema-versioned checkpoint and run-log idempotency. Opt-in (default 80%). Tag `v0.3.6`, both remotes. SRS `build/01-srs/srs-v0.3.6.md`, DAG `build/04-plan/task-dag-v0.3.6.md` (T-185–T-190). |
 | **v0.4.0** | 🟢 released | **Dynamic workflow engine** — generalizes Forge's orchestration into a topological **DAG executor** (`scripts/_workflow.py`): heterogeneous agent steps, `depends_on` waves, bounded parallel fan-out, inter-step data passing, per-node verify, budget/resume-plumbed, deterministic + never-raises. Capabilities are **independent opt-in toggles** (`orchestration:` block, all default off): user-defined flows (`.forge/workflows/*.yaml` + `/forge:flow`), per-stage parallel build + git-worktree isolation + adversarial-verify join, and hybrid validated sub-DAG generation (`decompose`). Forge's own `/forge:review`/`/forge:adopt`/`/forge:why` fan-outs now run on the engine (behavior-preserving). Adversarially verified (SHIP-WITH-NOTES, both notes closed). Tag `v0.4.0`, both remotes. SRS `build/01-srs/srs-v0.4.0.md`, DAG `build/04-plan/task-dag-v0.4.0.md` (T-191–T-201). |
+| **v0.4.1** | 🟡 in progress | **Operable engine** (hardening, **zero semantic change**) — make the shipped v0.4.0 engine observable + cost-predictable: live `[Forge]` **stderr narration** (stdout byte-identical), one structured **`.forge/events.jsonl`** audit line per run, a **pure cost pre-flight estimator** over the existing deterministic admission set (surfaced in `/forge:flow` before dispatch, loud at a runtime drop), and a dogfood **`.forge/workflows/doc-review.yaml`** + a parallel-build integration test. SRS `build/01-srs/srs-v0.4.1.md`, DAG `build/04-plan/task-dag-v0.4.1.md` (T-202–T-206). |
+
+---
+
+## Consolidated roadmap & standing non-goals (program-wide)
+
+> Source: `build/01-srs/srs-v0.4.1.md` §5. Supersedes the scattered per-version
+> "future / out-of-scope" sections for engine-adjacent work — deferred items were
+> restated across 12 SRS + 9 DAG docs (e.g. `~/.forge` cross-project sharing was
+> deferred *three* times). Decided once, on the record. **Nothing here is built yet.**
+
+### v0.5.0 — "Engine made real" (next minor)
+
+1. **Session reuse across heterogeneous DAG nodes** — v0.4.0 is fresh-session per node;
+   design a per-branch / within-retry reuse strategy that lowers the floor without
+   breaking deterministic admission. M–L.
+2. **Top-level LLM-generated workflows** — extend the validated-slot model
+   (`allow_generated_subdags`) from a sub-DAG-in-a-node to a whole generated top-level
+   `WorkflowSpec`, behind the same validate-before-dispatch rails. L; higher risk.
+3. **Pipeline-as-WorkflowSpec** — express the 12-stage SDLC as a `WorkflowSpec` on the
+   engine, unifying `autopilot.py`'s sequencer with `run_workflow`. "Stretch, never
+   required" — only if it simplifies. L; architecturally significant.
+
+### Candidate (post-v0.5.0)
+
+- **Unified `~/.forge` graduation layer** — generalize the existing lesson-promotion
+  mechanism (`promote-lessons.py`, T-022) into **one** frequency/quality-gated promoter
+  serving lessons + skills + workflows, instead of three bespoke promoters. Sequenced
+  after flows are dogfooded.
+
+### Separate programs / parked
+
+- **Hosted autonomy — Managed Agents (`--mode managed`)** — Anthropic-run loop + container,
+  gate-derived Outcome rubric, scheduled deployments. The largest unbuilt milestone; its own
+  program (≥ v0.6), independent of the workflow engine. Deferred on a deliberate "local-only
+  autonomy first" decision.
+- **In-session configurable-% context trigger — BLOCKED UPSTREAM.** Needs a Claude Code
+  `ContextThreshold` hook event (issues #46695 / #25689). Parked until upstream ships it;
+  v0.3.6 already delivers the token-pressure-rotation approximation.
+
+### Standing non-goals (decided; do not re-add as backlog)
+
+- **Embedding / vector retrieval of skills or workflows** — Claude's description-matching
+  already covers invocation, and it breaks the stdlib-only / no-`pip install` rule. Non-goal.
+- **A subprocess driving Claude's in-session Agent/Task tool** — impossible by design (ADR-006);
+  the engine delegates to `claude -p`. Non-goal.
+- **A resident orchestrator / supervisor process** — ADR-005 keeps dispatch detached one-shot;
+  reversing it needs a superseding ADR first. Non-goal absent that ADR.
+- **Repackaging Forge as a Python package / standalone CLI / ACP / multi-tenant / channel
+  adapters / third-party integrations** — Forge is a Claude Code plugin. Non-goal.
+- **Full policy DSL / blocking rule engine** — rules are advisory (the `enforce: true` guardrail
+  shipped in v0.3.3 T-175; the full DSL stays out). Non-goal.
+- **RL / weight-level self-improvement; fully unattended skill installation; Web/Streamlit status
+  UI; anonymous telemetry beyond opt-in local-only** — firm, long-standing non-goals.
 
 ---
 
