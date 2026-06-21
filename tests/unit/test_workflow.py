@@ -16,6 +16,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 _root = Path(__file__).resolve().parent.parent.parent
+
+_vspec = importlib.util.spec_from_file_location("_verify", _root / "scripts" / "_verify.py")
+_verify = importlib.util.module_from_spec(_vspec)
+sys.modules["_verify"] = _verify
+_vspec.loader.exec_module(_verify)
+
 _spec = importlib.util.spec_from_file_location("_workflow", _root / "scripts" / "_workflow.py")
 _wf = importlib.util.module_from_spec(_spec)
 sys.modules["_workflow"] = _wf
@@ -226,3 +232,124 @@ def test_verify_spec_defaults() -> None:
     assert vspec.skill == "/forge:review"
     assert vspec.model is None
     assert vspec.schema is None
+
+
+# --------------------------------------------------------------------------- #
+# REQ-WF-002 / AC-WF-003 — per-node verify wiring (fresh-session verdict; fail ⇒ drop/heal)
+# --------------------------------------------------------------------------- #
+
+
+def _verdict(verdict: str) -> SimpleNamespace:
+    """A verifier dispatch envelope carrying a structured verdict JSON in `result`."""
+    return SimpleNamespace(status="ok", reason="dispatched",
+                           result=json.dumps({"verdict": verdict}), cost_usd=0.003)
+
+
+def _routing_dispatch(recorded: list, *, verdict: str, verdicts=None):
+    """Spy dispatch_fn that routes by prompt: a verifier prompt (contains 'INDEPENDENT
+    verifier') returns a verdict envelope; any other prompt is a node dispatch echoing its
+    prompt. `verdicts` (a list) supplies successive verdicts (for heal re-verification);
+    otherwise every verdict is `verdict`."""
+    seq = list(verdicts or [])
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "INDEPENDENT verifier" in prompt:
+            v = seq.pop(0) if seq else verdict
+            return _verdict(v)
+        return _ok({"prompt": prompt})
+
+    return dispatch
+
+
+def _verify_spec(spec_obj=None) -> "object":
+    vspec = spec_obj or _wf.VerifySpec(skill="/forge:review", schema={"type": "object"})
+    return _wf.WorkflowSpec(nodes=[
+        _wf.WorkflowNode(id="A", build_prompt=lambda up: "do-A", verify=vspec),
+    ])
+
+
+def test_verify_node_dispatches_fresh_session_with_schema() -> None:
+    """AC-WF-003: a node with a VerifySpec gets a fresh-session, schema-constrained verdict."""
+    recorded: list = []
+    res = _wf.run_workflow(
+        _verify_spec(), forge_dir=FORGE, feature="t", resume="STAGE-SESSION",
+        dispatch_fn=_routing_dispatch(recorded, verdict="pass"),
+    )
+    assert res.completed == 1
+    assert res.results["A"]["prompt"] == "do-A"
+
+    verifier_calls = [c for c in recorded if "INDEPENDENT verifier" in c["prompt"]]
+    assert len(verifier_calls) == 1
+    vc = verifier_calls[0]
+    assert vc["resume"] is None                       # fresh session — independence
+    assert vc["output_schema"] == {"type": "object"}  # VerifySpec.schema honored
+    # The produced node result is embedded for the verifier to judge.
+    assert "do-A" in vc["prompt"]
+
+
+def test_verify_spec_model_overrides_verifier_model() -> None:
+    recorded: list = []
+    vspec = _wf.VerifySpec(skill="/forge:review", model="claude-haiku-4-5", schema=None)
+    _wf.run_workflow(
+        _verify_spec(vspec), forge_dir=FORGE, feature="t",
+        dispatch_fn=_routing_dispatch(recorded, verdict="pass"),
+    )
+    vc = [c for c in recorded if "INDEPENDENT verifier" in c["prompt"]][0]
+    assert vc["model"] == "claude-haiku-4-5"
+    # VerifySpec.schema is None ⇒ verifier falls back to the shared VERIFY_SCHEMA.
+    assert vc["output_schema"] == _verify.VERIFY_SCHEMA
+
+
+def test_verify_failing_verdict_heals_then_passes() -> None:
+    """A failing verdict triggers ONE heal (node re-dispatch + re-verify); a passing re-verify
+    keeps the result."""
+    recorded: list = []
+    res = _wf.run_workflow(
+        _verify_spec(), forge_dir=FORGE, feature="t",
+        dispatch_fn=_routing_dispatch(recorded, verdict="pass", verdicts=["fail", "pass"]),
+    )
+    assert res.completed == 1
+    assert res.dropped == 0
+    node_dispatches = [c for c in recorded if "INDEPENDENT verifier" not in c["prompt"]]
+    verifier_calls = [c for c in recorded if "INDEPENDENT verifier" in c["prompt"]]
+    assert len(node_dispatches) == 2   # initial + one heal re-dispatch
+    assert len(verifier_calls) == 2    # initial verdict + re-verify after heal
+
+
+def test_verify_persistent_failure_drops_with_reason() -> None:
+    """A verdict that fails even after the bounded heal ⇒ node dropped with a reason, never raised."""
+    recorded: list = []
+    res = _wf.run_workflow(
+        _verify_spec(), forge_dir=FORGE, feature="t",
+        dispatch_fn=_routing_dispatch(recorded, verdict="fail"),  # always fails
+    )
+    assert res.completed == 0
+    assert res.dropped == 1
+    assert "A" not in res.results
+    assert any("A" in r and "verify" in r.lower() for r in res.dropped_reasons)
+
+
+def test_verify_garbage_verdict_degrades_to_pass_never_raises() -> None:
+    """A garbage (non-JSON) verdict body must NOT block the node (verifier degrades) — and never
+    raises."""
+    recorded: list = []
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "INDEPENDENT verifier" in prompt:
+            return SimpleNamespace(status="ok", reason="", result="not json at all",
+                                   cost_usd=0.001)
+        return _ok({"prompt": prompt})
+
+    res = _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t", dispatch_fn=dispatch)
+    assert res.completed == 1            # garbage verdict ⇒ not-failed ⇒ node kept
+    assert res.results["A"]["prompt"] == "do-A"
+
+
+def test_unverified_node_never_dispatches_verifier() -> None:
+    """No VerifySpec ⇒ no verifier dispatch (opt-in, zero-change default)."""
+    recorded: list = []
+    _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                     dispatch_fn=_routing_dispatch(recorded, verdict="fail"))
+    assert not any("INDEPENDENT verifier" in c["prompt"] for c in recorded)

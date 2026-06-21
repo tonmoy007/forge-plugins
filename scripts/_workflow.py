@@ -31,8 +31,10 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 _PLUGIN_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 sys.path.insert(0, str(_PLUGIN_DIR / "hooks"))
 import _background_agent  # noqa: E402  (the sole `claude -p` wrapper)
+import _verify  # noqa: E402  (shared verify/heal primitives — REQ-WF-002)
 
 _LOG = logging.getLogger(__name__)
 
@@ -164,15 +166,83 @@ def _attempt(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
     return parsed, None, cost
 
 
+# One bounded heal attempt per verified node (REQ-WF-002), mirroring autopilot's default
+# `max_heal_attempts = 1`: a failing verdict triggers a single node re-dispatch, then a
+# re-verify; still-failing ⇒ drop-with-reason. 0 would make verify drop-only (no heal).
+_NODE_HEAL_ATTEMPTS = 1
+
+
+def _verify_prompt(node: WorkflowNode, obj) -> str:
+    """Prompt for an INDEPENDENT verifier judging a produced node result (REQ-WF-002).
+
+    Fresh context, read-only critique: assess whether the result genuinely satisfies the node's
+    intent. The verdict is schema-constrained (`VerifySpec.schema` / `VERIFY_SCHEMA`) so the
+    reply parses to pass/fail. The produced result is embedded for the verifier to judge.
+    """
+    spec = node.verify
+    try:
+        rendered = json.dumps(obj, sort_keys=True)
+    except (TypeError, ValueError):
+        rendered = repr(obj)
+    return (
+        f"You are an INDEPENDENT verifier for workflow node {node.id!r}, running in fresh "
+        f"context via {spec.skill}. Critically assess whether the produced result genuinely "
+        f"satisfies the node's intent — beyond surface checks. Do NOT modify anything. Return a "
+        f"verdict of \"pass\" or \"fail\" with concise reasons.\n\nProduced result:\n{rendered}"
+    )
+
+
+def _run_verify(node: WorkflowNode, obj, dispatch_fn, kwargs) -> tuple:
+    """Run the node's `VerifySpec` over a produced result `obj` (REQ-WF-002). Returns
+    (passed: bool, cost: float). A fresh-session, schema-constrained pass/fail verdict gates
+    the result; an unavailable/garbage verdict degrades to *passed* (the verifier is an extra
+    check — REQ-NF-013). Never raises (delegates to `_verify.run_verify`, which never raises).
+    """
+    spec = node.verify
+    vkwargs = dict(kwargs)
+    if spec.model is not None:
+        vkwargs["model"] = spec.model  # verifier model override (else inherits node's)
+    res = _verify.run_verify(
+        _verify_prompt(node, obj), dispatch_fn, vkwargs, schema=spec.schema,
+    )
+    cost = float((res.get("cost_usd") if isinstance(res, dict) else None) or 0.0)
+    return (not _verify.verdict_failed(res)), cost
+
+
 def _run_node(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
-    """Dispatch a node with one retry on failure. Returns (obj_or_None, reason, total_cost)."""
+    """Dispatch a node with one retry on failure, then (if `node.verify` is set) gate the result
+    with a fresh-session verdict and one bounded heal attempt. Returns (obj_or_None, reason,
+    total_cost). Never raises."""
     obj, reason, cost = _attempt(node, prompt, dispatch_fn, kwargs)
-    if obj is not None:
+    if obj is None:
+        obj, reason, cost2 = _attempt(node, prompt, dispatch_fn, kwargs)  # retry once
+        cost += cost2
+        if obj is None:
+            return None, reason, cost
+
+    if node.verify is None:
         return obj, None, cost
-    obj2, reason2, cost2 = _attempt(node, prompt, dispatch_fn, kwargs)  # retry once
-    if obj2 is not None:
-        return obj2, None, cost + cost2
-    return None, reason2 or reason, cost + cost2
+
+    # Per-node verification (REQ-WF-002): fresh-session verdict; on a clean `fail`, make one
+    # bounded heal (re-dispatch + re-verify) before dropping. Heal economics are per-node fresh.
+    passed, vcost = _run_verify(node, obj, dispatch_fn, kwargs)
+    cost += vcost
+    if passed:
+        return obj, None, cost
+
+    attempts = 0
+    while _verify.should_heal(attempts, _NODE_HEAL_ATTEMPTS):
+        attempts += 1
+        healed, hreason, hcost = _attempt(node, prompt, dispatch_fn, kwargs)
+        cost += hcost
+        if healed is None:
+            return None, f"verify failed; heal dispatch failed: {hreason}", cost
+        passed, vcost = _run_verify(node, healed, dispatch_fn, kwargs)
+        cost += vcost
+        if passed:
+            return healed, None, cost
+        obj = healed  # carry the latest result for the drop reason / next attempt
+    return None, "verify verdict failed after heal", cost
 
 
 def run_workflow(
