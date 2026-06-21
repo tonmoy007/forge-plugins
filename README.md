@@ -138,6 +138,7 @@ Forge tells you at every session start.
 | `/forge:autopilot` | Run pipeline stages hands-off (self-heal, optional verify, `--unattended`); `--resume`, `--mode` |
 | `/forge:autopilot-stop` | Halt a running autopilot cleanly at the next stage boundary |
 | `/forge:sprint` | Group the task DAG into bounded sprints and review them (`plan`/`review`/`list`) — opt-in |
+| `/forge:flow` | Run a user-defined workflow DAG from `.forge/workflows/*.yaml` (`list`/`<name>`/`--plan`) — opt-in |
 
 ### Background Daemons
 
@@ -318,6 +319,66 @@ work across sprints.
 Cross-machine note: see [`docs/forge-sync.md`](docs/forge-sync.md) for syncing `~/.forge`
 global lessons between machines (no server) and the opt-in, local-only skill-mining
 telemetry (off by default; data never leaves your machine without an explicit export).
+
+---
+
+## Dynamic Workflows
+
+Beyond the fixed 12-stage pipeline, Forge has a general **dynamic-workflow engine**: an
+arbitrary DAG of heterogeneous agent steps with per-node prompts, `depends_on` edges,
+inter-step data passing, and bounded parallel fan-out. The engine is **always available** —
+Forge's own fan-outs (`/forge:review`, `/forge:adopt`, `/forge:why`) run on it — and every
+capability built on top of it is an **independent opt-in toggle, all default off**, so a
+project that never enables one sees **zero** behavior change from v0.3.6.
+
+A Python script cannot drive Claude's in-session Agent tool, so each node dispatches through
+the single cost-gated `claude -p` wrapper. Runs are deterministic (id-ordered results;
+parallel and sequential runs are byte-identical given the same dispatch outcomes) and
+never-raises (a dropped node is reported, never silently hidden).
+
+Enable capabilities in `.forge/config.yaml`:
+
+```yaml
+orchestration:
+  flows_enabled: false           # /forge:flow + .forge/workflows/*.yaml
+  parallel_build: false          # fan independent build tasks out in parallel
+  worktree_isolation: false      # each parallel mutating node in its own git worktree
+  allow_generated_subdags: false # the validated `decompose` sub-DAG node
+
+  max_parallel: 4                # max concurrent dispatches per wave
+  max_total: 64                  # hard cap on total nodes per run
+  max_budget_usd:                # optional per-run spend ceiling (omit = no cap)
+```
+
+**User-defined flows** (`flows_enabled`) — author a `.forge/workflows/<name>.yaml` declaring a
+DAG, then run it with `/forge:flow`:
+
+```bash
+/forge:flow                      # list available workflows
+/forge:flow research-brief       # run a workflow through the engine
+/forge:flow research-brief --plan  # show the dependency-wave plan without dispatching
+```
+
+Each node carries a `prompt` (or a `{{upstream_id}}`-interpolating `prompt_template`),
+`depends_on`, and an optional `schema`/`model`. Output flows through the
+Proposal→Validator→Executor rails — nothing is written to your project unapproved — and
+degrades to a deterministic dry-run plan when background dispatch is unavailable.
+
+**Parallel build + worktree isolation** (`parallel_build`, `worktree_isolation`) — the build
+stage fans independent, ready task-DAG nodes out in parallel; with worktree isolation each
+mutating node runs in its own git worktree on a `forge/wt/<node>` branch (never `main`/
+`develop`), so conflicts surface loudly at the merge instead of clobbering. Worktrees are torn
+down on success and on failure; with worktrees unavailable it degrades to sequential.
+
+**Hybrid generation** (`allow_generated_subdags`) — an optional `decompose` node lets a cheap
+model generate a *sub-DAG*, which is validated (acyclicity + node-count cap + token-budget
+proxy) **before** any child step runs; generation never escapes the validated slot.
+
+**Cost.** Each node is a fresh `claude -p` session (heterogeneous nodes defeat `--resume`), so
+it pays the fresh-session floor (~$0.06). At the default daily cap ($0.50) only small workflows
+run — size larger runs with `max_total` / `max_budget_usd` and a raised cap. Full reference:
+[`references/workflow-engine.md`](references/workflow-engine.md) and
+[`references/orchestration-config.md`](references/orchestration-config.md).
 
 ---
 
