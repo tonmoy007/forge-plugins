@@ -5,6 +5,25 @@
 
 ## Current State
 
+- **v0.5.0 (unified `~/.forge` graduation layer) LANDING — T-207..T-212 done, T-213 (release) NEXT.** Generalizes the
+  T-022 lesson promoter into one tier-agnostic core `scripts/_graduation.py` (registry `~/.forge/projects.yaml` ·
+  `write_atomic` · 30-day `is_stale` TTL · idempotent `merge_by_key` · `Tier` protocol collect/gate/key/promote/recall ·
+  fail-soft-**per-tier** `graduate()` driver that never raises) + three thin **separate-module** tier adapters behind
+  **per-tier gates**: lessons = `promote-lessons.py` re-expressed as `LessonTier` (breadth≥3 + freq≥2, behavior-preserving,
+  byte-identical `global-lessons.yaml`; T-207); skills = `_graduation_skills.SkillTier` (gate approved AND ExpeL `weight>0`
+  AND `use≥2`; promote → `~/.forge/skills/<slug>/` + `global-skills.yaml`; recall = **symlink** into the plugin `skills/`
+  path, project/plugin-wins, no-clobber, copy fallback; T-208); workflows = `_graduation_workflows.WorkflowTier` (gate
+  validates-clean AND ≥2 successful `workflow_run` records in `.forge/events.jsonl`; promote → `~/.forge/workflows/<name>.yaml`
+  + `global-workflows.yaml`; recall = `workflow_loader.resolve_workflows` global search path, project-wins on name; T-209).
+  **Project-wins** recall in every tier (global = fallback library, never override); the single shared 30-day TTL decays
+  unused globals out of recall. Wired **silent + fail-soft** at session-start (`hooks/session-start.py _register_and_promote`:
+  `register_project` + `graduate(...)` over the three tiers; `FORGE_NO_GRADUATE=1` escape; never blocks startup; T-210).
+  `/forge:graduate` skill + thin CLI (`--dry-run` / `list` / force scan) over the core, no second promotion path (T-211).
+  ADR-008 (shared core + per-tier gates + project-wins, fail-soft-per-tier) + ADR-009 (skill recall = symlink, not copy) +
+  `references/graduation-layer.md` + README/ROADMAP/progress/decisions (T-212). The T-207 refactor is committed separately
+  from new-tier behavior (REQ-NF-036). Branch `feat/v0.5.0-graduation-layer`. SRS `build/01-srs/srs-v0.5.0.md`, DAG
+  `build/04-plan/task-dag-v0.5.0.md` (T-207..T-213). **NEXT: T-213** (release v0.5.0).
+
 - **v0.4.0 (dynamic workflow engine) RELEASED** — generalizes `_orchestrate.fan_out` from a flat homogeneous map into a
   topological **DAG executor** (`scripts/_workflow.py`): per-node prompt/schema/model,
   `depends_on` waves (Kahn), bounded parallel fan-out, inter-step data passing, per-node
@@ -65,14 +84,10 @@
   (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
   polygon; GitHub releases published. SRS `build/01-srs/srs-v0.3.md`, DAG
   `build/04-plan/task-dag-v0.3.md`.
-- **NEXT**: **v0.5.0 PLANNED — unified `~/.forge` graduation layer.** SRS
-  `build/01-srs/srs-v0.5.0.md` + DAG `build/04-plan/task-dag-v0.5.0.md` (**T-207..T-213**) authored on
-  branch `feat/v0.5.0-graduation-layer`. Scope = generalize the T-022 lesson promoter into one
-  tier-agnostic `~/.forge` graduation core, then add **skills** + **workflows** tiers behind per-tier
-  gates (breadth for lessons; quality+approval for skills; validates + success-count from `events.jsonl`
-  for workflows), recalled with **project-wins**; skill recall = symlink (ADR-009); new `/forge:graduate`
-  skill; automatic, silent, fail-soft at session-start. **Next task: T-207** (core + behavior-preserving
-  lessons adapter). Re-sequenced ahead of the engine "made real" trio (now ≥ v0.5.1 / v0.6).
+- **v0.5.0 build in progress** (details in the LANDING bullet at the top) — re-sequenced **ahead of** the engine
+  "made real" trio (session reuse · top-level generation · pipeline-as-WorkflowSpec, now ≥ v0.5.1 / v0.6;
+  srs-v0.5.0 §6). SRS `build/01-srs/srs-v0.5.0.md` + DAG `build/04-plan/task-dag-v0.5.0.md` (T-207..T-213) on
+  branch `feat/v0.5.0-graduation-layer`. **T-207..T-212 done; T-213 (release) is the next task.**
 - **v0.4.1 RELEASED — "operable engine" hardening.** SRS
   `build/01-srs/srs-v0.4.1.md` + DAG `build/04-plan/task-dag-v0.4.1.md` (**T-202..T-206**)
   authored on branch `feat/v0.4.1-operable-engine` (commit `bb88525`). Scope = zero-semantic-change
@@ -132,6 +147,16 @@
 - **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.5.0 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.5.0.md` (T-207..T-213). SRS `build/01-srs/srs-v0.5.0.md`.
+> Unified `~/.forge` graduation layer — tier-agnostic core + lessons/skills/workflows tiers,
+> recalled project-wins, fail-soft at session-start. Branch `feat/v0.5.0-graduation-layer`.
+
+| Task | Status | Notes |
+|------|--------|-------|
+| T-211 | 🟢 done | `/forge:graduate` skill + thin CLI (REQ-GR-007, AC-GR-006). New `_graduation.main()` argparse front end **reuses the shared `graduate()` driver** (no second promotion path): default `scan` action promotes; `--dry-run` previews + writes nothing; `list` (subcommand or `--list`) enumerates the global store per tier (entry count + each key's `last_used`, fail-soft on a missing store). Three adapter tiers lazy-imported inside `main()` as `[LessonTier(), SkillTier(<plugin>/skills), WorkflowTier()]` (mirrors session-start assembly; LessonTier via importlib-into-`sys.modules` for dataclass annotation resolution). `--global-dir` default `~/.forge`; `main()` never raises (guarded; nonzero only on argparse usage error). New `skills/forge-graduate/SKILL.md` (`name: graduate`, `allowed-tools: [Read, Bash]`). +7 CLI tests (dry-run/scan parity over two projects sharing a qualifying workflow; `list` over a populated store; never-raises). `test_graduation_cli` 7 pass; `test_graduation`+`test_promote_lessons` 72 pass (regression green); validate-plugin exit 0. |
 
 ## v0.4.1 Task Status
 
