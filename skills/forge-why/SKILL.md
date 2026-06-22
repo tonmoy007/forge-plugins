@@ -6,7 +6,7 @@ description: Explain a Forge gate criterion, lesson tag, pipeline stage, or curr
   Stage 3?", or "show me lessons tagged X". Make sure to use this skill BEFORE
   suggesting `/forge:force-advance` — `/forge:why` often shows the user a fix
   they can apply in seconds, avoiding an unnecessary override and lesson. Also use
-  proactively when a gate fails: a user asking "what does check-gate.py mean by
+  proactively when a gate fails — a user asking "what does check-gate.py mean by
   G3-002?" deserves an explanation, not just the raw JSON.
 allowed-tools: [Bash]
 ---

@@ -5,6 +5,15 @@ Scans all registered Forge projects for lessons that appear (by trigger
 similarity) in at least --threshold distinct projects and writes them to
 the global lessons file read by session-start.py.
 
+This is the **lessons tier** of the unified ``~/.forge`` graduation layer
+(T-207): the cross-tier mechanics — registry, atomic IO, 30-day ``is_stale``
+TTL, the generic keyed merge, the ``Tier`` protocol, and the fail-soft
+``graduate()`` driver — live in ``scripts/_graduation.py``. This file keeps the
+lesson-specific logic (trigger-similarity clustering, breadth+frequency gate,
+similarity merge) and the original CLI, byte-for-byte unchanged (REQ-GR-002,
+REQ-NF-036). ``LessonTier`` re-expresses that logic as a ``Tier`` so the unified
+driver runs lessons through the exact same path as the legacy ``promote()``.
+
 Usage:
   promote-lessons.py --register PATH              # add project to registry
   promote-lessons.py --promote                    # scan and promote
@@ -16,17 +25,25 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import datetime
 import difflib
 import logging
-import os
 import sys
-import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import yaml
+
+# Sibling import idiom (hyphenated CLI files share the core via scripts/ on path).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _graduation import (  # noqa: E402
+    is_stale,
+    load_registry,
+    merge_by_key,
+    register_project,
+)
+from _graduation import Tier  # noqa: E402,F401  (LessonTier implements this protocol)
+from _graduation import write_atomic as _write_atomic  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -37,60 +54,39 @@ _SIMILARITY_RATIO = 0.8
 # (summed across the cluster) before it reaches the global store — a one-shot
 # test artifact (frequency 1) never gets promoted.
 _MIN_FREQUENCY = 2
-# Global lessons older than this (by last_used) decay out of recall.
-_GLOBAL_TTL_DAYS = 30
+
+# Re-exported for callers/tests that referenced these from this module historically.
+__all__ = [
+    "ensure_global_dir",
+    "load_registry",
+    "register_project",
+    "load_project_lessons",
+    "cluster_lessons",
+    "promote",
+    "merge_global",
+    "is_stale",
+    "ProjectLesson",
+    "LessonTier",
+]
 
 
 # ---------------------------------------------------------------------------
-# ~/.forge/ bootstrap
+# ~/.forge/ bootstrap (lessons store scaffold)
 # ---------------------------------------------------------------------------
 
 
 def ensure_global_dir(global_dir: Path) -> None:
-    """Create ~/.forge/ scaffold if it does not exist."""
-    global_dir.mkdir(parents=True, exist_ok=True)
-    registry = global_dir / "projects.yaml"
-    if not registry.exists():
-        _write_atomic(registry, yaml.dump({"schema_version": 1, "projects": []}))
+    """Create ~/.forge/ scaffold (registry + global-lessons.yaml) if absent."""
+    # Registry scaffold is owned by the shared core; the lessons store is ours.
+    from _graduation import ensure_registry  # noqa: E402 — local to avoid cycle noise
+
+    ensure_registry(global_dir)
     global_yaml = global_dir / "global-lessons.yaml"
     if not global_yaml.exists():
         _write_atomic(
             global_yaml,
             yaml.dump({"schema_version": _SCHEMA_VERSION, "lessons": []}),
         )
-
-
-# ---------------------------------------------------------------------------
-# Registry
-# ---------------------------------------------------------------------------
-
-
-def load_registry(global_dir: Path) -> list[str]:
-    """Return list of registered project paths."""
-    path = global_dir / "projects.yaml"
-    if not path.exists():
-        return []
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        return [str(p) for p in (data.get("projects") or [])]
-    except Exception:  # noqa: BLE001
-        return []
-
-
-def register_project(global_dir: Path, project_path: Path) -> bool:
-    """Add project_path to registry. Returns True if it was newly added."""
-    ensure_global_dir(global_dir)
-    canonical = str(project_path.resolve())
-    projects = load_registry(global_dir)
-    if canonical in projects:
-        return False
-    projects.append(canonical)
-    _write_atomic(
-        global_dir / "projects.yaml",
-        yaml.dump({"schema_version": 1, "projects": projects}),
-    )
-    logger.info("registered project: %s", canonical)
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -129,23 +125,6 @@ def _similar(a: str, b: str) -> bool:
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() >= _SIMILARITY_RATIO
 
 
-def is_stale(last_used: Optional[str], *, today: Optional[datetime.date] = None,
-             max_age_days: int = _GLOBAL_TTL_DAYS) -> bool:
-    """EF-026: True if `last_used` (YYYY-MM-DD or ISO) is older than max_age_days.
-
-    A missing/unparseable date is treated as NOT stale (kept) — we only decay
-    entries we can positively date as old.
-    """
-    if not last_used:
-        return False
-    try:
-        date = datetime.date.fromisoformat(str(last_used)[:10])
-    except ValueError:
-        return False
-    today = today or datetime.date.today()
-    return (today - date).days > max_age_days
-
-
 def cluster_lessons(all_lessons: list[ProjectLesson]) -> list[list[ProjectLesson]]:
     """Group lessons by trigger similarity. Each cluster is one concept."""
     clusters: list[list[ProjectLesson]] = []
@@ -165,6 +144,22 @@ def cluster_lessons(all_lessons: list[ProjectLesson]) -> list[list[ProjectLesson
 
 def _distinct_projects(cluster: list[ProjectLesson]) -> set[str]:
     return {item.project for item in cluster}
+
+
+def _cluster_freq(cluster: list[ProjectLesson]) -> int:
+    return sum(x.lesson.get("frequency", 0) or 0 for x in cluster)
+
+
+def _gate_clusters(
+    all_lessons: list[ProjectLesson], threshold: int
+) -> list[list[ProjectLesson]]:
+    """EF-026: require both cross-project breadth AND that the concept fired ≥2×."""
+    clusters = cluster_lessons(all_lessons)
+    return [
+        c
+        for c in clusters
+        if len(_distinct_projects(c)) >= threshold and _cluster_freq(c) >= _MIN_FREQUENCY
+    ]
 
 
 def _make_global_record(cluster: list[ProjectLesson]) -> dict:
@@ -193,7 +188,7 @@ def _make_global_record(cluster: list[ProjectLesson]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Merge with existing global lessons
+# Merge with existing global lessons (trigger-similarity, lesson-specific)
 # ---------------------------------------------------------------------------
 
 
@@ -233,25 +228,33 @@ def merge_global(new_records: list[dict], existing: list[dict]) -> list[dict]:
     return result
 
 
+def _emit_lessons(
+    global_dir: Path, promotable: list[list[ProjectLesson]], *, dry_run: bool
+) -> list[dict]:
+    """Make global records from promotable clusters, merge, write/print.
+
+    The single load→make→merge→write body shared by the legacy ``promote()`` CLI
+    and ``LessonTier.promote`` so the two entry points cannot diverge — same
+    records, same merge, same byte output (AC-GR-001).
+    """
+    new_records = [_make_global_record(c) for c in promotable]
+    existing = _load_global(global_dir)
+    merged = merge_global(new_records, existing)
+    output = yaml.dump(
+        {"schema_version": _SCHEMA_VERSION, "lessons": merged},
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+    )
+    if dry_run:
+        print(output, end="")
+    else:
+        _write_atomic(global_dir / "global-lessons.yaml", output)
+    return new_records
+
+
 # ---------------------------------------------------------------------------
-# Atomic write
-# ---------------------------------------------------------------------------
-
-
-def _write_atomic(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", dir=path.parent, suffix=".tmp", delete=False, encoding="utf-8"
-    ) as fh:
-        fh.write(content)
-        fh.flush()
-        os.fsync(fh.fileno())
-        tmp = fh.name
-    os.replace(tmp, path)
-
-
-# ---------------------------------------------------------------------------
-# Public API
+# Public API — legacy CLI entry (behavior-preserving)
 # ---------------------------------------------------------------------------
 
 
@@ -275,30 +278,10 @@ def promote(
     for proj in projects:
         all_lessons.extend(load_project_lessons(proj))
 
-    clusters = cluster_lessons(all_lessons)
-    def _cluster_freq(cluster: list[ProjectLesson]) -> int:
-        return sum(x.lesson.get("frequency", 0) or 0 for x in cluster)
+    promotable = _gate_clusters(all_lessons, threshold)
+    new_records = _emit_lessons(global_dir, promotable, dry_run=dry_run)
 
-    # EF-026: require both cross-project breadth AND that the concept fired ≥2×.
-    promotable = [
-        c for c in clusters
-        if len(_distinct_projects(c)) >= threshold and _cluster_freq(c) >= _MIN_FREQUENCY
-    ]
-    new_records = [_make_global_record(c) for c in promotable]
-
-    existing = _load_global(global_dir)
-    merged = merge_global(new_records, existing)
-
-    output = yaml.dump(
-        {"schema_version": _SCHEMA_VERSION, "lessons": merged},
-        default_flow_style=False,
-        allow_unicode=True,
-        sort_keys=False,
-    )
-    if dry_run:
-        print(output, end="")
-    else:
-        _write_atomic(global_dir / "global-lessons.yaml", output)
+    if not dry_run:
         logger.info(
             "promoted %d lesson(s) from %d project(s) to global",
             len(new_records),
@@ -306,6 +289,50 @@ def promote(
         )
 
     return new_records
+
+
+# ---------------------------------------------------------------------------
+# Lessons tier adapter (the new graduate() entry point)
+# ---------------------------------------------------------------------------
+
+
+class LessonTier:
+    """The lessons tier over ``_graduation`` — same logic as legacy ``promote()``.
+
+    ``collect`` loads a project's lessons; ``gate`` clusters all collected
+    lessons and applies the breadth≥threshold + freq≥2 rule; ``promote`` writes
+    the merged ``global-lessons.yaml`` via the shared ``_emit_lessons`` body.
+    Recall is handled by session-start injection (project-lessons-win), so the
+    tier's ``recall`` is a no-op here (REQ-GR-005).
+    """
+
+    name = "lessons"
+
+    def __init__(self, threshold: int = _DEFAULT_THRESHOLD) -> None:
+        self.threshold = threshold
+
+    def collect(self, project_path: str) -> list[ProjectLesson]:
+        return load_project_lessons(project_path)
+
+    def gate(self, records: list[ProjectLesson]) -> list[list[ProjectLesson]]:
+        return _gate_clusters(records, self.threshold)
+
+    def key(self, record: dict) -> str:
+        return record.get("trigger", "")
+
+    def promote(
+        self,
+        promotable: list[list[ProjectLesson]],
+        global_dir: Path,
+        *,
+        dry_run: bool = False,
+    ) -> list[dict]:
+        ensure_global_dir(global_dir)
+        return _emit_lessons(global_dir, promotable, dry_run=dry_run)
+
+    def recall(self, global_dir: Path, project_path: str) -> None:
+        # Lesson recall is performed by session-start.py (project-lessons-win).
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +378,10 @@ def main() -> None:
         sys.exit(1)
 
     if args.register:
+        # Eagerly scaffold the lessons store on --register so the CLI is
+        # observably behavior-preserving vs the pre-T-207 path (the shared core's
+        # register_project only scaffolds the registry). Keeps the core clean.
+        ensure_global_dir(args.global_dir)
         register_project(args.global_dir, args.register)
 
     if args.promote:

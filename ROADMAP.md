@@ -163,7 +163,8 @@ producing all 12 stage artifacts with traceability intact. ✅
 | **v0.3.5** | 🟢 released | **Semantic skill mining + skill-creator** — replaced the tool-name-n-gram miner with a semantic, success-gated, **anti-unification**-based miner that proposes genuine reusable *workflows*, authors them via a new `/forge:skill-creator` (agentskills.io `SKILL.md`), verifies by replay, and curates the library (ExpeL voting + `/dream`-style maintenance). Human-approved throughout. Tag `v0.3.5`, both remotes. SRS `build/01-srs/srs-v0.3.5.md`, DAG `build/04-plan/task-dag-v0.3.5.md` (T-177–T-184). |
 | **v0.3.6** | 🟢 released | **Context-aware autopilot** — when an autopilot run crosses a configurable context threshold, it automatically **checkpoints → compacts → continues**. Background dispatches rotate the session on a real token-pressure signal (`usage.input_tokens`); in-session runs ride native auto-compaction via a new **PreCompact** checkpoint + **SessionStart(`compact`)** resume injection, with a shared schema-versioned checkpoint and run-log idempotency. Opt-in (default 80%). Tag `v0.3.6`, both remotes. SRS `build/01-srs/srs-v0.3.6.md`, DAG `build/04-plan/task-dag-v0.3.6.md` (T-185–T-190). |
 | **v0.4.0** | 🟢 released | **Dynamic workflow engine** — generalizes Forge's orchestration into a topological **DAG executor** (`scripts/_workflow.py`): heterogeneous agent steps, `depends_on` waves, bounded parallel fan-out, inter-step data passing, per-node verify, budget/resume-plumbed, deterministic + never-raises. Capabilities are **independent opt-in toggles** (`orchestration:` block, all default off): user-defined flows (`.forge/workflows/*.yaml` + `/forge:flow`), per-stage parallel build + git-worktree isolation + adversarial-verify join, and hybrid validated sub-DAG generation (`decompose`). Forge's own `/forge:review`/`/forge:adopt`/`/forge:why` fan-outs now run on the engine (behavior-preserving). Adversarially verified (SHIP-WITH-NOTES, both notes closed). Tag `v0.4.0`, both remotes. SRS `build/01-srs/srs-v0.4.0.md`, DAG `build/04-plan/task-dag-v0.4.0.md` (T-191–T-201). |
-| **v0.4.1** | 🟡 in progress | **Operable engine** (hardening, **zero semantic change**) — make the shipped v0.4.0 engine observable + cost-predictable: live `[Forge]` **stderr narration** (stdout byte-identical), one structured **`.forge/events.jsonl`** audit line per run, a **pure cost pre-flight estimator** over the existing deterministic admission set (surfaced in `/forge:flow` before dispatch, loud at a runtime drop), and a dogfood **`.forge/workflows/doc-review.yaml`** + a parallel-build integration test. SRS `build/01-srs/srs-v0.4.1.md`, DAG `build/04-plan/task-dag-v0.4.1.md` (T-202–T-206). |
+| **v0.4.1** | 🟢 released | **Operable engine** (hardening, **zero semantic change**) — make the shipped v0.4.0 engine observable + cost-predictable: live `[Forge]` **stderr narration** (stdout byte-identical), one structured **`.forge/events.jsonl`** audit line per run, a **pure cost pre-flight estimator** over the existing deterministic admission set (surfaced in `/forge:flow` before dispatch, loud at a runtime drop), and a dogfood **`.forge/workflows/doc-review.yaml`** + a parallel-build integration test. Tag `v0.4.1`, origin. SRS `build/01-srs/srs-v0.4.1.md`, DAG `build/04-plan/task-dag-v0.4.1.md` (T-202–T-206). |
+| **v0.5.0** | 🟡 landing | **Unified `~/.forge` graduation layer** — generalizes the T-022 lesson promoter into one tier-agnostic core (`scripts/_graduation.py`: registry · atomic IO · 30-day TTL · idempotent keyed merge · `Tier` protocol · fail-soft `graduate()` driver), then adds **skills** and **workflows** tiers behind **per-tier gates** (breadth for lessons; approved + ExpeL `weight>0` + `use≥2` for skills; validates-clean + ≥2 successful `workflow_run` records for workflows). **Project-wins** recall in every tier; skill recall = **symlink** (ADR-009), workflows recall via the loader search path. Automatic, silent, fail-soft at session-start (`FORGE_NO_GRADUATE=1` escape); new `/forge:graduate` (dry-run / list / scan). Behavior-preserving for lessons. ADR-008 + ADR-009. SRS `build/01-srs/srs-v0.5.0.md`, DAG `build/04-plan/task-dag-v0.5.0.md` (T-207–T-213). |
 
 ---
 
@@ -174,7 +175,19 @@ producing all 12 stage artifacts with traceability intact. ✅
 > restated across 12 SRS + 9 DAG docs (e.g. `~/.forge` cross-project sharing was
 > deferred *three* times). Decided once, on the record. **Nothing here is built yet.**
 
-### v0.5.0 — "Engine made real" (next minor)
+> **Re-sequencing note (2026-06-22).** The unified `~/.forge` graduation layer was pulled
+> ahead of the "engine made real" trio and is now **v0.5.0** (landing) — lower-risk,
+> generalizes built machinery, high cross-project leverage. The engine trio below becomes the
+> subsequent engine work (≥ v0.5.1 / v0.6). See srs-v0.5.0 §6.
+
+### v0.5.0 — Unified `~/.forge` graduation layer (landing) 🟡
+
+Generalize the T-022 lesson promoter into one tier-agnostic core + skills and workflows
+tiers behind per-tier gates, recalled with project-wins. See the v0.5.0 row above and
+[`references/graduation-layer.md`](references/graduation-layer.md) ·
+ADR-008 / ADR-009.
+
+### Engine "made real" trio (≥ v0.5.1 / v0.6)
 
 1. **Session reuse across heterogeneous DAG nodes** — v0.4.0 is fresh-session per node;
    design a per-branch / within-retry reuse strategy that lowers the floor without
@@ -185,13 +198,6 @@ producing all 12 stage artifacts with traceability intact. ✅
 3. **Pipeline-as-WorkflowSpec** — express the 12-stage SDLC as a `WorkflowSpec` on the
    engine, unifying `autopilot.py`'s sequencer with `run_workflow`. "Stretch, never
    required" — only if it simplifies. L; architecturally significant.
-
-### Candidate (post-v0.5.0)
-
-- **Unified `~/.forge` graduation layer** — generalize the existing lesson-promotion
-  mechanism (`promote-lessons.py`, T-022) into **one** frequency/quality-gated promoter
-  serving lessons + skills + workflows, instead of three bespoke promoters. Sequenced
-  after flows are dogfooded.
 
 ### Separate programs / parked
 

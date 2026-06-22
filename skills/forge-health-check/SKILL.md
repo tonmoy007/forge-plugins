@@ -5,7 +5,7 @@ description: Run a full self-diagnostic of the Forge plugin — executes hook un
   degraded, or failing. Use when the user types `/forge:health-check`, asks "is
   forge healthy?", "check the plugin health", "run the health check", or "are the
   hooks working?". Never silently disables hooks — any auto-disable action requires
-  explicit opt-in via `health.auto_disable_hooks: true` in .forge/config.yaml and
+  explicit opt-in via the `health.auto_disable_hooks` config flag in .forge/config.yaml and
   is always surfaced to events.jsonl and health-surface.txt.
 allowed-tools: [Bash]
 ---

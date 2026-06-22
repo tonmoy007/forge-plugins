@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import importlib.util
 import json
 import os
 import subprocess
@@ -9,10 +10,24 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 HOOK = str(Path(__file__).parent.parent.parent / "hooks" / "session-start.py")
 PLUGIN_DIR = str(Path(__file__).parent.parent.parent)
 PYTHON = sys.executable
+
+
+def _load_hook_module():
+    """Load hooks/session-start.py in-process (hyphenated filename → importlib).
+
+    The module's top-level inserts ``scripts/`` + ``hooks/`` on ``sys.path`` and
+    imports the real plugin libs, so exec resolves against the live plugin — the
+    same code path the subprocess hook runs. Used to unit-test the in-process
+    graduation wiring (``_register_and_promote``) directly (T-210)."""
+    spec = importlib.util.spec_from_file_location("session_start", HOOK)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def _run(cwd: str, env: dict | None = None) -> subprocess.CompletedProcess:
@@ -475,3 +490,131 @@ class TestRulesInjection:
         assert r.returncode == 0
         assert "[Forge] Rules" in r.stdout
         assert len(r.stdout) < 8000  # ~2000-token budget (len/4)
+
+
+# ---------------------------------------------------------------------------
+# T-210 / REQ-GR-006 (NF-034 / NF-037, AC-GR-005): session-start runs the
+# in-process THREE-TIER graduation (lessons + skills + workflows), fail-soft
+# and silent on the happy path, with a FORGE_NO_GRADUATE escape hatch.
+# These exercise `_register_and_promote` in-process (not via subprocess) so we
+# can assert the global-store side effects and that nothing ever raises.
+# ---------------------------------------------------------------------------
+
+# A workflow that validates clean (mirrors _VALID_WF in test_graduation_workflows).
+_VALID_WORKFLOW = "name: {name}\nnodes:\n  - id: a\n    prompt: \"do a\"\n"
+
+
+def _workflow_run_record(name: str, ts: str) -> dict:
+    """A successful `workflow_run` event: names the flow, completed ≥1 node, no fail."""
+    return {
+        "schema_version": 1, "ts": ts, "event": "workflow_run", "name": name,
+        "nodes": 1, "waves": 1, "completed": ["a"], "dropped": [],
+        "total_cost_usd": 0.01, "verdicts": {}, "admitted": ["a"],
+    }
+
+
+def _seed_qualifying_workflow(project: Path, name: str = "deploy", runs: int = 2) -> None:
+    """Give `project` a clean workflow YAML + `runs` successful runs in events.jsonl."""
+    wf_dir = project / ".forge" / "workflows"
+    wf_dir.mkdir(parents=True, exist_ok=True)
+    (wf_dir / f"{name}.yaml").write_text(_VALID_WORKFLOW.format(name=name), encoding="utf-8")
+    events = project / ".forge" / "events.jsonl"
+    lines = [json.dumps(_workflow_run_record(name, f"2026-06-0{i + 1}T10:00:00Z"))
+             for i in range(runs)]
+    events.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class TestThreeTierGraduationWiring:
+    """AC-GR-005: `_register_and_promote` drives all three graduation tiers in
+    process — lessons, skills, AND workflows — fail-soft and never raising."""
+
+    def test_three_tier_graduation_promotes_workflow(self, tmp_path, monkeypatch):
+        """A qualifying workflow in the registered project graduates — proving the
+        workflows tier (not just lessons) is wired through `_register_and_promote`."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+
+        project = tmp_path / "proj"
+        project.mkdir()
+        _seed_qualifying_workflow(project, "deploy", runs=2)
+
+        mod = _load_hook_module()
+        mod._register_and_promote(project)
+
+        global_dir = home / ".forge"
+        # Registry written (lessons-preserving register step still happens).
+        assert (global_dir / "projects.yaml").exists()
+        # Workflows tier promoted the flow → file copied + indexed.
+        assert (global_dir / "workflows" / "deploy.yaml").exists()
+        index = yaml.safe_load((global_dir / "global-workflows.yaml").read_text())
+        names = [w.get("name") for w in (index.get("workflows") or [])]
+        assert "deploy" in names
+
+    def test_simultaneous_broken_inputs_never_raise(self, tmp_path, monkeypatch):
+        """THE core AC: an unwritable ~/.forge, a MALFORMED events.jsonl, and a
+        MISSING skill-stats.jsonl all at once — `_register_and_promote` returns
+        normally and raises NOTHING (fail-soft per tier + a top-level guard)."""
+        home = tmp_path / "home"
+        home.mkdir(mode=0o500)  # read+exec only → writes under it fail
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+
+        project = tmp_path / "proj"
+        (project / ".forge" / "workflows").mkdir(parents=True)
+        # Malformed events.jsonl (broken JSON lines) — workflows tier must skip it.
+        (project / ".forge" / "events.jsonl").write_text("{not json\n[[[\n", encoding="utf-8")
+        # A clean workflow exists, but its runs can't be counted from broken events.
+        (project / ".forge" / "workflows" / "x.yaml").write_text(
+            _VALID_WORKFLOW.format(name="x"), encoding="utf-8")
+        # .forge/skill-stats.jsonl intentionally MISSING (skills tier degrades).
+
+        mod = _load_hook_module()
+        try:
+            result = mod._register_and_promote(project)
+        except Exception as exc:  # pragma: no cover — the whole point is no raise
+            pytest.fail(f"_register_and_promote raised under broken inputs: {exc!r}")
+        assert result is None  # returns normally (None), never propagates
+
+    def test_unwritable_home_via_register_raise_is_swallowed(self, tmp_path, monkeypatch):
+        """Even if the very first step (register_project) raises, the top-level
+        guard swallows it — no exception escapes the hook."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+
+        project = tmp_path / "proj"
+        project.mkdir()
+
+        mod = _load_hook_module()
+        import _graduation as core
+
+        def _boom(*a, **k):  # noqa: ANN001, ANN002, ANN003
+            raise OSError("read-only file system")
+
+        monkeypatch.setattr(core, "register_project", _boom)
+        try:
+            assert mod._register_and_promote(project) is None
+        except Exception as exc:  # pragma: no cover
+            pytest.fail(f"register_project failure escaped: {exc!r}")
+
+    def test_forge_no_graduate_escape_skips_everything(self, tmp_path, monkeypatch):
+        """FORGE_NO_GRADUATE set → no registry write and graduate() is NOT called."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+        monkeypatch.setenv("FORGE_NO_GRADUATE", "1")
+
+        project = tmp_path / "proj"
+        project.mkdir()
+
+        mod = _load_hook_module()
+        import _graduation as core
+
+        called: list[bool] = []
+        monkeypatch.setattr(core, "graduate", lambda *a, **k: called.append(True))
+        monkeypatch.setattr(core, "register_project",
+                            lambda *a, **k: called.append(True))
+
+        assert mod._register_and_promote(project) is None
+        assert called == []  # neither register_project nor graduate ran
+        assert not (home / ".forge" / "projects.yaml").exists()

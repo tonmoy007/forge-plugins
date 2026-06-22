@@ -202,19 +202,55 @@ def _sync_lessons_if_stale(cwd: Path) -> None:
 
 
 def _register_and_promote(cwd: Path) -> None:
-    """Register current project in ~/.forge and run cross-project promotion."""
-    promote_script = _PLUGIN_DIR / "scripts" / "promote-lessons.py"
-    if not promote_script.exists():
-        return
+    """Register current project in ~/.forge and run three-tier graduation in-process.
+
+    Drives the shared graduation core (REQ-GR-006): register the project, then run
+    every tier — lessons + skills + workflows — collect→gate→promote followed by
+    per-tier recall (skill symlinks land here). Behavior-preserving for lessons: the
+    register + lessons-tier promote together reproduce the old
+    ``promote-lessons --register --promote`` effect.
+
+    Invariants (NF-034 / NF-037):
+      - ``FORGE_NO_GRADUATE`` is an escape hatch — no registry write, no graduate call.
+      - The ENTIRE body (imports + register + graduate) is guarded; an import failure
+        or any tier fault degrades to a silent no-op and NEVER raises into the hook.
+      - Bounded: no new threads/timeouts — each tier is already fail-soft and the
+        ``graduate()`` driver never blocks. Silent on the happy path (only ``_LOG``).
+    """
+    if os.environ.get("FORGE_NO_GRADUATE"):
+        return  # escape hatch — skip all graduation work (no registry, no promote)
     try:
-        subprocess.run(
-            [sys.executable, str(promote_script), "--register", str(cwd), "--promote"],
-            timeout=15,
-            check=False,
-            capture_output=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        _LOG.warning("promote-lessons failed: %s", exc)
+        # Import inside the function so a graduation import failure degrades to a
+        # no-op and never breaks the hook for non-graduation reasons.
+        import importlib.util
+
+        import _graduation as core
+        from _graduation_skills import SkillTier
+        from _graduation_workflows import WorkflowTier
+
+        # LessonTier lives in the hyphenated promote-lessons.py → load via importlib.
+        # Register in sys.modules BEFORE exec so its @dataclass string annotations
+        # resolve (dataclasses look the class's module up in sys.modules).
+        promote_lessons = sys.modules.get("promote_lessons")
+        if promote_lessons is None:
+            spec = importlib.util.spec_from_file_location(
+                "promote_lessons", _PLUGIN_DIR / "scripts" / "promote-lessons.py"
+            )
+            promote_lessons = importlib.util.module_from_spec(spec)
+            sys.modules["promote_lessons"] = promote_lessons
+            spec.loader.exec_module(promote_lessons)
+
+        global_dir = Path.home() / ".forge"
+        core.register_project(global_dir, cwd)
+        tiers = [
+            promote_lessons.LessonTier(),
+            SkillTier(_PLUGIN_DIR / "skills"),
+            WorkflowTier(),
+        ]
+        core.graduate(global_dir, tiers, project_path=cwd)
+    except Exception as exc:  # noqa: BLE001 — graduation must never break startup
+        _LOG.warning("graduation failed: %s", exc)
+        return
 
 
 def _is_stale(last_used: object, max_age_days: int) -> bool:

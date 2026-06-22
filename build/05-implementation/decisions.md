@@ -24,6 +24,46 @@
 
 ## Decisions
 
+## 2026-06-22 T-212 — Graduation layer: one core + per-tier gates (ADR-008), skill recall = symlink (ADR-009)
+
+**Context**: v0.5.0 generalizes the T-022 lesson promoter into a unified `~/.forge` graduation
+layer serving all three memory tiers (lessons, skills, workflows). Two design questions needed
+deciding on the record: should every tier share one cross-project *breadth* gate (as lessons
+use), and should a recalled skill be **copied** into the plugin `skills/` path or **symlinked**?
+
+**Decision**: **ADR-008** — one tier-agnostic core (`scripts/_graduation.py`: registry,
+`write_atomic`, 30-day `is_stale` TTL, idempotent `merge_by_key`, the `Tier` protocol, and the
+fail-soft-per-tier `graduate()` driver that never raises) plus three **separate-module** thin
+adapters, each with a **gate matched to its artifact's nature** — breadth (≥3 projects + freq≥2)
+for emergent **lessons**; quality + an existing human/validation gate for deliberate **skills**
+(approved + ExpeL `weight>0` + `use≥2`) and **workflows** (validates-clean + ≥2 successful
+`workflow_run` records in `events.jsonl`). **Project-wins** recall in every tier; the global
+store is a fallback library, never an override. **ADR-009** — skill recall is a **symlink** from
+the plugin `skills/<slug>` path to the single source of truth under `~/.forge/skills/<slug>/`,
+only when no same-slug project/plugin skill exists (project/plugin-wins, never clobbers), with a
+guarded copy fallback where a platform cannot symlink. Both ADRs **Accepted**.
+
+**Why**: A uniform breadth gate would leave skills and workflows **dormant** — they are single
+deliberate artifacts that rarely recur independently across projects, so they need a quality gate
+to ever promote. A symlink gives one source of truth, cheap+reversible recall, and edit
+propagation; the no-clobber rule makes project/plugin-wins safe (the highest-risk failure, R-2).
+The core owning all cross-tier mechanics means a fourth tier is a new adapter, not a new pipeline.
+
+**Alternatives considered**: a single uniform breadth gate (rejected — leaves skills/workflows
+dormant); three bespoke per-tier promoters (rejected — triplicates registry/TTL/merge and drifts);
+copying skills on recall (rejected as primary — duplicates bytes, copies drift from the global
+source; kept only as the symlink-unavailable fallback); rewriting the lesson promoter (rejected —
+risks silently changing `global-lessons.yaml`; generalized in place so the existing suite is the
+regression oracle, REQ-NF-036 split-determinism).
+
+**Consequences**: `_graduation.py` + `_graduation_skills.py` + `_graduation_workflows.py` land;
+`promote-lessons.py` keeps its CLI as the lessons adapter (byte-identical output). Session-start
+runs three-tier graduation fail-soft (`FORGE_NO_GRADUATE=1` escape). `/forge:graduate` exposes the
+same core (no second promotion path). Cross-machine sync of `~/.forge` stays the user's transport.
+See `references/graduation-layer.md`, ADR-008, ADR-009.
+
+---
+
 ## 2026-05-11 T-009v2 — Proposal/Validator/Executor split for stop-reflect
 
 **Context**: The T-009 prompt was hardened to v4.1 spec after initial implementation.
