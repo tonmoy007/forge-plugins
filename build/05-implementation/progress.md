@@ -5,7 +5,7 @@
 
 ## Current State
 
-- **v0.5.0 (unified `~/.forge` graduation layer) LANDING — T-207..T-212 done, T-213 (release) NEXT.** Generalizes the
+- **v0.5.0 (unified `~/.forge` graduation layer) RELEASED — T-207..T-213.** Generalizes the
   T-022 lesson promoter into one tier-agnostic core `scripts/_graduation.py` (registry `~/.forge/projects.yaml` ·
   `write_atomic` · 30-day `is_stale` TTL · idempotent `merge_by_key` · `Tier` protocol collect/gate/key/promote/recall ·
   fail-soft-**per-tier** `graduate()` driver that never raises) + three thin **separate-module** tier adapters behind
@@ -22,7 +22,10 @@
   ADR-008 (shared core + per-tier gates + project-wins, fail-soft-per-tier) + ADR-009 (skill recall = symlink, not copy) +
   `references/graduation-layer.md` + README/ROADMAP/progress/decisions (T-212). The T-207 refactor is committed separately
   from new-tier behavior (REQ-NF-036). Branch `feat/v0.5.0-graduation-layer`. SRS `build/01-srs/srs-v0.5.0.md`, DAG
-  `build/04-plan/task-dag-v0.5.0.md` (T-207..T-213). **NEXT: T-213** (release v0.5.0).
+  `build/04-plan/task-dag-v0.5.0.md` (T-207..T-213). Released via T-213: bump 0.5.0, CHANGELOG `[0.5.0]`, manifests 0.5.0;
+  pre-release gate green (full unit suite, `validate-plugin.py` 0, `full-pipeline.sh`); banner/social evergreen (no refresh);
+  PR→develop→main→tag `v0.5.0`→mirror origin+polygon→GitHub releases→delete branch. **NEXT: v0.5.1/v0.6 engine "made real"
+  trio** (session reuse · top-level generation · pipeline-as-WorkflowSpec; srs-v0.5.0 §6).
 
 - **v0.4.0 (dynamic workflow engine) RELEASED** — generalizes `_orchestrate.fan_out` from a flat homogeneous map into a
   topological **DAG executor** (`scripts/_workflow.py`): per-node prompt/schema/model,

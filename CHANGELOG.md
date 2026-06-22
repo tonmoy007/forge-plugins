@@ -14,6 +14,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] — 2026-06-22
+
+**Unified `~/.forge` graduation layer.** Forge already promoted the best *lessons* across
+projects; now **skills** and **workflows** graduate too — through one shared, tier-agnostic
+core instead of three bespoke promoters. Each tier has a promotion gate matched to its nature
+(cross-project breadth for emergent lessons; quality + an existing approval/validation gate for
+deliberate skills and workflows), and **a project's own artifact always wins on conflict** — the
+global store is a fallback library, never an override. Promotion runs automatically and silently
+at session-start; a new `/forge:graduate` exposes dry-run / list / force-scan. Zero regression to
+the lesson path: `promote-lessons.py` is *refactored* onto the core, not rewritten — same CLI,
+byte-identical `global-lessons.yaml`, existing tests unchanged. stdlib + PyYAML, atomic,
+fail-soft per tier, never-raising.
+
+### Added
+
+- **Shared graduation core** (REQ-GR-001, T-207) — `scripts/_graduation.py`: the project registry
+  (`~/.forge/projects.yaml`), atomic `write_atomic`, the shared 30-day `is_stale` TTL, an idempotent
+  keyed `merge_by_key`, a `Tier` protocol (collect/gate/key/promote/recall), and a `graduate()`
+  driver that scans `registered-projects × tiers` isolating each tier (one tier's fault degrades only
+  that tier) and **never raises**.
+- **Skills graduation tier** (REQ-GR-003, T-208) — `_graduation_skills.SkillTier`: gate = locally
+  approved **AND** ExpeL `weight > 0` **AND** `use ≥ 2`; promote the skill dir to
+  `~/.forge/skills/<slug>/` + `global-skills.yaml`; recall by **symlink** into the plugin `skills/`
+  path with project/plugin-wins, no-clobber, and a copy fallback (ADR-009).
+- **Workflows graduation tier** (REQ-GR-004, T-209) — `_graduation_workflows.WorkflowTier`: gate =
+  validates clean **AND** ≥ 2 successful `workflow_run` records in `.forge/events.jsonl`; promote the
+  YAML to `~/.forge/workflows/<name>.yaml` + `global-workflows.yaml`; recall via
+  `workflow_loader.resolve_workflows` (project-wins on name, TTL-filtered) so `/forge:flow` lists and
+  runs graduated flows.
+- **Automatic session-start graduation** (REQ-GR-006, T-210) — `hooks/session-start.py` registers the
+  project and runs `graduate()` over all three tiers (skill symlinks land via per-tier recall),
+  silent, bounded, and fail-soft; `FORGE_NO_GRADUATE=1` disables it.
+- **`/forge:graduate` skill + thin CLI** (REQ-GR-007, T-211) — `--dry-run` previews each tier's
+  would-promote set, `list` enumerates the `~/.forge` store per tier, a force scan promotes — all over
+  the same core (no second promotion path).
+- **ADR-008 + ADR-009 + reference docs** (T-212) — the graduation model (shared core + per-tier gates +
+  project-wins) and skill-recall-by-symlink decisions, plus `references/graduation-layer.md`.
+
+### Changed
+
+- **`promote-lessons.py` re-expressed as `LessonTier` over the core** (REQ-GR-002, T-207) —
+  behavior-preserving: same `--register`/`--promote`/`--global-dir`/`--threshold`/`--dry-run` CLI,
+  same breadth ≥ 3 + frequency ≥ 2 gate, byte-identical `global-lessons.yaml`. The refactor is a
+  separate commit from new-tier behavior (REQ-NF-036).
+
+---
+
 ## [0.4.1] — 2026-06-21
 
 **Operable engine.** A hardening release that makes the v0.4.0 dynamic-workflow engine
