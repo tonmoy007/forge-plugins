@@ -260,3 +260,32 @@ def list_workflows(workflows_dir) -> list:
         )
     except OSError:
         return []
+
+
+def resolve_workflows(project_dir, global_dir, *, fresh_names=None) -> dict:
+    """Overlay the global workflow store on the project's, keyed by file stem.
+
+    Enumerates `*.yaml`/`*.yml` in both `project_dir` (a project's
+    `.forge/workflows/`) and `global_dir` (`~/.forge/workflows/`) and maps each
+    workflow `name` (the file stem) to its resolved `Path`. The graduation layer
+    surfaces flows graduated from *other* projects here without copying them in.
+
+    Resolution rules:
+    - **Project-wins on name**: a project file shadows a global file of the same
+      stem (a local edit always overrides the graduated copy).
+    - **TTL filter**: when `fresh_names` is not None, global entries whose stem is
+      not in `fresh_names` are excluded (stale globals decay out of recall);
+      project entries are always kept regardless.
+
+    Fail-soft (REQ-NF-034): a missing/unreadable dir contributes nothing; returns
+    `{}` when both are absent. Never raises."""
+    resolved: dict = {}
+    # Global first, project second → project entries overwrite on stem collision.
+    for path in list_workflows(global_dir):
+        stem = path.stem
+        if fresh_names is not None and stem not in fresh_names:
+            continue  # stale global → not surfaced
+        resolved[stem] = path
+    for path in list_workflows(project_dir):
+        resolved[path.stem] = path  # project-wins on name
+    return resolved
