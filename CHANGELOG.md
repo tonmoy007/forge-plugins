@@ -59,6 +59,13 @@ fail-soft per tier, never-raising.
   same breadth ≥ 3 + frequency ≥ 2 gate, byte-identical `global-lessons.yaml`. The refactor is a
   separate commit from new-tier behavior (REQ-NF-036).
 
+### Fixed
+
+- **Two SKILL.md frontmatter descriptions broke YAML parsing** — `forge-why` and
+  `forge-health-check` each had an unquoted `: ` (colon-space) inside a multi-line
+  `description:`, which YAML reads as a nested mapping. `validate-plugin.py` only checks
+  `plugin.json`, so the breaks shipped green; rewritten so all 34 skill frontmatters parse.
+
 ---
 
 ## [0.4.1] — 2026-06-21
