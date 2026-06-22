@@ -65,7 +65,15 @@
   (v0.3.1), T-157..T-166. Tags `v0.3.0` (`9102b78`) + `v0.3.1` (`7525a7e`) on origin +
   polygon; GitHub releases published. SRS `build/01-srs/srs-v0.3.md`, DAG
   `build/04-plan/task-dag-v0.3.md`.
-- **NEXT**: **v0.4.1 PLANNED — "operable engine" hardening.** SRS
+- **NEXT**: **v0.5.0 PLANNED — unified `~/.forge` graduation layer.** SRS
+  `build/01-srs/srs-v0.5.0.md` + DAG `build/04-plan/task-dag-v0.5.0.md` (**T-207..T-213**) authored on
+  branch `feat/v0.5.0-graduation-layer`. Scope = generalize the T-022 lesson promoter into one
+  tier-agnostic `~/.forge` graduation core, then add **skills** + **workflows** tiers behind per-tier
+  gates (breadth for lessons; quality+approval for skills; validates + success-count from `events.jsonl`
+  for workflows), recalled with **project-wins**; skill recall = symlink (ADR-009); new `/forge:graduate`
+  skill; automatic, silent, fail-soft at session-start. **Next task: T-207** (core + behavior-preserving
+  lessons adapter). Re-sequenced ahead of the engine "made real" trio (now ≥ v0.5.1 / v0.6).
+- **v0.4.1 RELEASED — "operable engine" hardening.** SRS
   `build/01-srs/srs-v0.4.1.md` + DAG `build/04-plan/task-dag-v0.4.1.md` (**T-202..T-206**)
   authored on branch `feat/v0.4.1-operable-engine` (commit `bb88525`). Scope = zero-semantic-change
   observability over the shipped v0.4.0 engine: live stderr narration (stdout contract preserved,
