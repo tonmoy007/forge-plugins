@@ -127,6 +127,18 @@ When a *successful* workflow recurs in your own traces, Forge mines it and **pro
 reusable skill** for you to approve, modify, or reject. See
 [`references/skill-mining.md`](references/skill-mining.md).
 
+### 🎓 The graduation layer — memory that crosses projects
+
+Forge promotes the best of **all three** memory kinds into a shared `~/.forge` store, so
+every project benefits from what your other projects learned — automatically and silently at
+session-start. Each tier promotes on a gate matched to its nature: **lessons** on cross-project
+breadth, **skills** on quality (approved + ExpeL `weight > 0` + reused ≥ 2×), **workflows** on
+proof (validates clean + ≥ 2 successful runs). On recall **your project always wins** — the
+global store is a fallback library, never an override; skills are recalled as symlinks and a
+shared 30-day TTL decays unused entries out of recall. `/forge:graduate --dry-run` previews,
+`list` shows the store, and it's all fail-soft (`FORGE_NO_GRADUATE=1` to disable). Full
+reference: [`references/graduation-layer.md`](references/graduation-layer.md).
+
 ---
 
 ## Beyond the pipeline
