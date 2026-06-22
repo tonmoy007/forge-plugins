@@ -150,6 +150,23 @@
 
 ---
 
+### 2026-06-22 — A `: ` inside an unquoted multi-line SKILL.md `description:` breaks YAML frontmatter
+
+- **Trigger**: Writing a `description:` that wraps across several lines as a YAML folded
+  scalar and contains a colon-space mid-sentence (e.g. `...uses, on demand: a list view...`).
+  YAML reads the `: ` as a nested mapping key separator → `ScannerError: mapping values are
+  not allowed here`. `scripts/validate-plugin.py` does **not** catch this (it validates only
+  `plugin.json`), so it passes CI while the skill loader chokes at runtime.
+- **Rule**: Before finishing a SKILL.md, parse its frontmatter with PyYAML
+  (`yaml.safe_load` of the block between the first two `---` lines). Inside an unquoted
+  multi-line `description:`, never use `: ` — rewrite to ` — ` (em dash) or `, `. If a colon
+  is unavoidable, single-quote the whole scalar. Same rule for `name:` and any wrapped value.
+- **Why**: The failure is invisible to the repo's own validator and only surfaces when Claude
+  Code parses the frontmatter — a latent, hard-to-trace break shipped green.
+- **Tags**: [skills, yaml, frontmatter, validation, T-211]
+
+---
+
 ## Patterns by Category
 
 ### Plugin Development

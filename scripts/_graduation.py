@@ -24,6 +24,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
@@ -242,10 +243,158 @@ def graduate(
 
 
 # ---------------------------------------------------------------------------
-# CLI: the /forge:graduate surface lands in T-211 — import-only for now.
+# CLI: the /forge:graduate surface (T-211, REQ-GR-007 / AC-GR-006).
+#
+# A thin argparse front end over the SAME ``graduate()`` driver the session-start
+# hook uses — there is no second promotion path. The three adapter tiers are
+# lazy-imported INSIDE ``main()`` so this module stays import-clean as a library
+# (a tier import fault degrades the CLI to a clean message, never a hard crash).
 # ---------------------------------------------------------------------------
 
+# The plugin root (…/forge-plugin); ``<root>/skills`` is where approved skills
+# install to and where the SkillTier recalls graduated skills into.
+_PLUGIN_DIR = Path(__file__).resolve().parent.parent
 
-if __name__ == "__main__":  # pragma: no cover - thin CLI arrives in T-211
+# Per-tier global stores enumerated by the ``list`` view (tier label → file/key).
+_STORE_FILES: tuple[tuple[str, str, str], ...] = (
+    ("lessons", "global-lessons.yaml", "lessons"),
+    ("skills", "global-skills.yaml", "skills"),
+    ("workflows", "global-workflows.yaml", "workflows"),
+)
+
+
+def _build_tiers() -> list:
+    """Assemble the three graduation tiers (mirrors session-start's assembly).
+
+    The lessons tier lives in the hyphenated ``promote-lessons.py``; it is loaded
+    via importlib and registered in ``sys.modules`` BEFORE ``exec_module`` so its
+    ``@dataclass`` string annotations resolve. Imports are local to keep the core
+    import-clean. Any import fault propagates to ``main()``'s guard.
+    """
+    import importlib.util
+
+    # Make the sibling adapters importable whether this module was run as a
+    # script or loaded via importlib (tests) — mirrors the sibling-import idiom.
+    scripts_dir = str(_PLUGIN_DIR / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+
+    from _graduation_skills import SkillTier
+    from _graduation_workflows import WorkflowTier
+
+    promote_lessons = sys.modules.get("promote_lessons")
+    if promote_lessons is None:
+        spec = importlib.util.spec_from_file_location(
+            "promote_lessons", _PLUGIN_DIR / "scripts" / "promote-lessons.py"
+        )
+        promote_lessons = importlib.util.module_from_spec(spec)
+        sys.modules["promote_lessons"] = promote_lessons
+        spec.loader.exec_module(promote_lessons)
+
+    return [
+        promote_lessons.LessonTier(),
+        SkillTier(_PLUGIN_DIR / "skills"),
+        WorkflowTier(),
+    ]
+
+
+def _load_store_entries(path: Path, list_key: str) -> list[dict]:
+    """Read a per-tier global store → its list of entries (fail-soft → [])."""
+    if not path.exists():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return [r for r in (data.get(list_key) or []) if isinstance(r, dict)]
+    except Exception:  # noqa: BLE001 — a missing/garbled store reads as empty
+        return []
+
+
+def _entry_key(entry: dict) -> str:
+    """The human-facing identifier of a store entry across tiers."""
+    return str(entry.get("slug") or entry.get("name") or entry.get("trigger") or "?")
+
+
+def _print_promotion_summary(results: dict, *, dry_run: bool) -> None:
+    """Print a per-tier promoted (or would-promote) summary from ``graduate()``."""
+    verb = "Would promote" if dry_run else "Promoted"
+    header = "Dry-run graduation preview (nothing written):" if dry_run else "Graduation scan complete:"
+    print(header)
+    for name, records in sorted(results.items()):
+        records = records or []
+        if not records:
+            print(f"  {name}: nothing to promote")
+            continue
+        keys = ", ".join(_entry_key(r) for r in records)
+        print(f"  {name}: {verb} {len(records)} — {keys}")
+
+
+def _print_store_listing(global_dir: Path) -> None:
+    """Enumerate the global store per tier: entry count + each key's last_used."""
+    print(f"Global store at {global_dir}:")
+    for tier_name, filename, list_key in _STORE_FILES:
+        entries = _load_store_entries(global_dir / filename, list_key)
+        print(f"  {tier_name}: {len(entries)} entr{'y' if len(entries) == 1 else 'ies'}")
+        for entry in entries:
+            print(f"    - {_entry_key(entry)} (last_used: {entry.get('last_used') or 'n/a'})")
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """Thin ``/forge:graduate`` CLI over ``graduate()``. Never raises.
+
+    Default action runs a real scan and promotes; ``--dry-run`` previews without
+    writing; ``list`` (subcommand or ``--list``) enumerates the global store.
+    Returns a process exit code (0 = ok, 2 = argparse usage error).
+    """
+    import argparse
+
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-    logger.info("_graduation is a library module; the /forge:graduate CLI lands in T-211")
+    parser = argparse.ArgumentParser(
+        prog="forge-graduate",
+        description="Promote proven lessons, skills, and workflows to ~/.forge "
+        "(the shared graduation store), or list/preview what is there.",
+    )
+    parser.add_argument(
+        "--global-dir",
+        type=Path,
+        default=Path.home() / ".forge",
+        help="override ~/.forge directory (default: ~/.forge)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="preview what would be promoted; write nothing",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="list the current global store per tier and exit",
+    )
+    parser.add_argument(
+        "action",
+        nargs="?",
+        choices=["scan", "list"],
+        default="scan",
+        help="'scan' (default) to graduate, or 'list' to enumerate the store",
+    )
+    # argparse exits 2 on a usage error before we reach the guard below — that is
+    # the one sanctioned nonzero exit (a true CLI misuse), not a runtime fault.
+    args = parser.parse_args(argv)
+
+    try:
+        global_dir = args.global_dir
+        if args.list or args.action == "list":
+            _print_store_listing(global_dir)
+            return 0
+
+        tiers = _build_tiers()
+        results = graduate(global_dir, tiers, dry_run=args.dry_run)
+        _print_promotion_summary(results, dry_run=args.dry_run)
+        return 0
+    except Exception as exc:  # noqa: BLE001 — the CLI must never raise out
+        logger.warning("graduate CLI degraded: %s", exc)
+        print(f"forge:graduate could not complete cleanly: {exc}")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
