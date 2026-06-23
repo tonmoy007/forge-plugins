@@ -317,28 +317,39 @@ def validate_spec(spec: WorkflowSpec) -> list:
 
 
 def _attempt(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
-    """One dispatch + parse + validate for a node. Returns (obj_or_None, reason, cost)."""
+    """One dispatch + parse + validate for a node. Returns (obj_or_None, reason, cost, session_id).
+
+    The 4th member (REQ-WF-016) surfaces `res.session_id` so a later same-node re-dispatch can
+    `--resume` it. It is the dispatch's session id whenever the dispatch *returned* one
+    (`status="ok"` ⇒ a real resumable session exists, including the non-JSON / validation-failed
+    paths), and `None` on every no-session path (dispatch raised, non-`ok` status — `skipped`/
+    `error`/`unavailable` — or an agent-reported `is_error`). Behavior-preserving: the obj/reason/
+    cost members and `_run_node`'s use of them are unchanged; the captured id is not consumed yet.
+    """
     cost = 0.0
     try:
         res = dispatch_fn(prompt, **kwargs)
     except Exception as exc:  # noqa: BLE001 — a worker must never raise
-        return None, f"dispatch raised: {exc}", cost
+        return None, f"dispatch raised: {exc}", cost, None
     cost += float(getattr(res, "cost_usd", 0.0) or 0.0)
 
     if getattr(res, "status", None) != "ok":
-        return None, f"dispatch {getattr(res, 'status', 'error')}", cost
+        return None, f"dispatch {getattr(res, 'status', 'error')}", cost, None
     if (getattr(res, "raw", None) or {}).get("is_error"):
-        return None, "agent reported is_error", cost
+        return None, "agent reported is_error", cost, None
+    # Past the `ok` + non-`is_error` gates the dispatch returned a resumable session; surface its
+    # id on every subsequent path (success, non-JSON, validation-failed) so a retry/heal can reuse it.
+    session_id = getattr(res, "session_id", None)
     try:
         parsed = json.loads(res.result or "")
     except (ValueError, TypeError):
-        return None, "non-JSON result", cost
+        return None, "non-JSON result", cost, session_id
     if node.validate is not None:
         try:
             parsed = node.validate(parsed)
         except Exception as exc:  # noqa: BLE001 — validation failure → drop, not crash
-            return None, f"validation failed: {exc}", cost
-    return parsed, None, cost
+            return None, f"validation failed: {exc}", cost, session_id
+    return parsed, None, cost, session_id
 
 
 # One bounded heal attempt per verified node (REQ-WF-002), mirroring autopilot's default
@@ -388,9 +399,12 @@ def _run_node(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
     """Dispatch a node with one retry on failure, then (if `node.verify` is set) gate the result
     with a fresh-session verdict and one bounded heal attempt. Returns (obj_or_None, reason,
     total_cost). Never raises."""
-    obj, reason, cost = _attempt(node, prompt, dispatch_fn, kwargs)
+    # `_attempt` returns a 4-tuple `(obj, reason, cost, session_id)` (REQ-WF-016). T-215 is the
+    # behavior-preserving capture refactor: the session id is unpacked and **ignored** here, so
+    # every re-dispatch stays fresh and the engine is byte-identical to v0.4.x. T-216 consumes it.
+    obj, reason, cost, _session_id = _attempt(node, prompt, dispatch_fn, kwargs)
     if obj is None:
-        obj, reason, cost2 = _attempt(node, prompt, dispatch_fn, kwargs)  # retry once
+        obj, reason, cost2, _session_id = _attempt(node, prompt, dispatch_fn, kwargs)  # retry once
         cost += cost2
         if obj is None:
             return None, reason, cost
@@ -408,7 +422,7 @@ def _run_node(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
     attempts = 0
     while _verify.should_heal(attempts, _NODE_HEAL_ATTEMPTS):
         attempts += 1
-        healed, hreason, hcost = _attempt(node, prompt, dispatch_fn, kwargs)
+        healed, hreason, hcost, _session_id = _attempt(node, prompt, dispatch_fn, kwargs)
         cost += hcost
         if healed is None:
             return None, f"verify failed; heal dispatch failed: {hreason}", cost

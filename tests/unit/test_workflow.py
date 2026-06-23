@@ -979,3 +979,126 @@ def test_runtime_admission_drop_emits_loud_narration(monkeypatch):
     _, out, err = _capture_run(spec, dispatch_fn=_echo_dispatch, max_total=2)
     assert "dropped:" in err  # the capped nodes are surfaced loudly on stderr
     assert out == ""
+
+
+# --------------------------------------------------------------------------- #
+# REQ-WF-016 / AC-WF-016 — `_attempt` surfaces the dispatch session_id (T-215).
+# Behavior-preserving refactor: the 4th tuple member is captured but never consumed
+# (every re-dispatch still fresh). The session id is returned on the `status="ok"`
+# path (a real resumable session exists) and None on every no-session path
+# (dispatch raised / non-ok status / is_error).
+# --------------------------------------------------------------------------- #
+
+
+def _bare_node(nid: str = "N"):
+    """A plain node (no validate, no verify) for exercising `_attempt` directly."""
+    return _wf.WorkflowNode(id=nid, build_prompt=lambda up: nid)
+
+
+def test_attempt_returns_four_tuple_with_session_id_on_ok() -> None:
+    """A successful dispatch surfaces its session_id as the 4th tuple member."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"k": "v"}),
+                               cost_usd=0.06, raw={"is_error": False},
+                               session_id="sess-abc")
+
+    out = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert len(out) == 4
+    obj, reason, cost, sid = out
+    assert obj == {"k": "v"}
+    assert reason is None
+    assert cost == 0.06
+    assert sid == "sess-abc"
+
+
+def test_attempt_surfaces_session_id_on_non_json_ok_result() -> None:
+    """`status="ok"` but unparseable output still returns the session id (the dispatch
+    DID return a resumable session) so a retry can `--resume` it (AC-WF-017 lineage)."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result="not json at all",
+                               cost_usd=0.06, raw={"is_error": False},
+                               session_id="sess-unparseable")
+
+    obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert obj is None
+    assert reason == "non-JSON result"
+    assert sid == "sess-unparseable"
+
+
+def test_attempt_surfaces_session_id_on_validation_failure() -> None:
+    """A validation failure is an `ok` dispatch with a real session — surface the id."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"bad": True}),
+                               cost_usd=0.06, raw={"is_error": False},
+                               session_id="sess-validate")
+
+    def _reject(_obj):
+        raise ValueError("nope")
+
+    node = _wf.WorkflowNode(id="N", build_prompt=lambda up: "N", validate=_reject)
+    obj, reason, cost, sid = _wf._attempt(node, "p", dispatch, {})
+    assert obj is None
+    assert reason.startswith("validation failed")
+    assert sid == "sess-validate"
+
+
+def test_attempt_returns_none_session_when_dispatch_raises() -> None:
+    """A dispatch that raises has no session to resume → session id is None."""
+    def dispatch(prompt, **kwargs):
+        raise RuntimeError("boom")
+
+    obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert obj is None
+    assert reason.startswith("dispatch raised")
+    assert cost == 0.0
+    assert sid is None
+
+
+def test_attempt_returns_none_session_on_non_ok_status() -> None:
+    """`error`/`skipped`/`unavailable` are all no-session paths → session id is None."""
+    for status in ("error", "skipped", "unavailable"):
+        def dispatch(prompt, _status=status, **kwargs):
+            return SimpleNamespace(status=_status, result=None, cost_usd=0.0,
+                                   raw=None, session_id="should-be-ignored")
+
+        obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+        assert obj is None
+        assert sid is None, f"status={status!r} must yield no session"
+
+
+def test_attempt_returns_none_session_on_is_error() -> None:
+    """An agent-reported `is_error` is a no-session path → session id is None."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"k": "v"}),
+                               cost_usd=0.06, raw={"is_error": True},
+                               session_id="should-be-ignored")
+
+    obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert obj is None
+    assert reason == "agent reported is_error"
+    assert sid is None
+
+
+def test_attempt_session_id_defaults_none_when_absent() -> None:
+    """A dispatch envelope lacking `session_id` (e.g. the existing fakes) → None, not crash."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"k": "v"}),
+                               cost_usd=0.01, raw={"is_error": False})
+
+    obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert obj == {"k": "v"}
+    assert sid is None
+
+
+def test_run_node_unpacks_attempt_and_behavior_unchanged() -> None:
+    """`_run_node` consumes the widened `_attempt` shape and still returns its 3-tuple
+    `(obj, reason, cost)` unchanged — the session is captured but ignored (T-215)."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"prompt": prompt}),
+                               cost_usd=0.06, raw={"is_error": False},
+                               session_id="sess-node")
+
+    obj, reason, cost = _wf._run_node(_bare_node(), "hello", dispatch, {})
+    assert obj == {"prompt": "hello"}
+    assert reason is None
+    assert cost == 0.06
