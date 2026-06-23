@@ -38,6 +38,10 @@ class OrchestrationConfig:
     parallel_build: bool = False
     worktree_isolation: bool = False
     allow_generated_subdags: bool = False
+    # Per-node session reuse (v0.6.0, REQ-WF-019): when on, a node's own retry/heal
+    # re-dispatches `--resume` the first attempt's session (cheaper floor). Default off ⇒
+    # the engine is byte-identical to v0.4.x. Strict `is True` like its sibling toggles.
+    session_reuse: bool = False
     # Engine tunables threaded into `run_workflow` (REQ-NF-027).
     max_parallel: int = DEFAULT_MAX_PARALLEL
     max_total: int = DEFAULT_MAX_TOTAL
@@ -49,7 +53,13 @@ class OrchestrationConfig:
     narrate: bool = True
 
 
-_TOGGLES = ("flows_enabled", "parallel_build", "worktree_isolation", "allow_generated_subdags")
+_TOGGLES = (
+    "flows_enabled",
+    "parallel_build",
+    "worktree_isolation",
+    "allow_generated_subdags",
+    "session_reuse",
+)
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:

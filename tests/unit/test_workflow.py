@@ -172,6 +172,50 @@ def test_budget_defaults_none_when_unset() -> None:
         assert call["resume"] is None
 
 
+# --------------------------------------------------------------------------- #
+# T-214 (REQ-WF-019 / NF-040) — `session_reuse` is accepted as an inert kwarg this task:
+# it must NOT yet alter any dispatch (no per-node reuse behavior until T-216), so the
+# engine output is byte-identical with it set on or off.
+# --------------------------------------------------------------------------- #
+
+
+def test_session_reuse_param_accepted_and_inert() -> None:
+    """run_workflow accepts session_reuse=True but it changes nothing this task: every
+    node still dispatches fresh (resume=None), no extra/fewer dispatches."""
+    recorded: list = []
+    res = _wf.run_workflow(
+        _diamond(), forge_dir=FORGE, feature="t",
+        session_reuse=True, dispatch_fn=_spy_dispatch(recorded),
+    )
+    assert res.completed == 4
+    assert len(recorded) == 4  # one dispatch per node, no reuse-driven re-dispatch
+    for call in recorded:
+        assert call["resume"] is None  # inert: no session threaded from a prior attempt
+
+
+def test_session_reuse_defaults_off() -> None:
+    """Backward-compat: omitting session_reuse defaults it off; no dispatch resumes."""
+    recorded: list = []
+    _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                     dispatch_fn=_spy_dispatch(recorded))
+    for call in recorded:
+        assert call["resume"] is None
+
+
+def test_session_reuse_on_off_byte_identical() -> None:
+    """AC-WF-019 lineage: with reuse on vs off, the engine's ordered result/drops/summary
+    is byte-identical (the param is inert this task)."""
+    on = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                          max_parallel=8, session_reuse=True, dispatch_fn=_echo_dispatch)
+    off = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                           max_parallel=8, session_reuse=False, dispatch_fn=_echo_dispatch)
+    assert on.results == off.results
+    assert on.completed == off.completed
+    assert on.dropped == off.dropped
+    assert on.dropped_reasons == off.dropped_reasons
+    assert on.total_cost_usd == off.total_cost_usd
+
+
 def test_budget_exhausted_fanout_drops_deterministic_set() -> None:
     """REQ-NF-029: when max_budget_usd admits only k of N fan-out nodes, the SAME k
     (lowest ids in topological order) are admitted on every run — independent of thread
@@ -935,3 +979,493 @@ def test_runtime_admission_drop_emits_loud_narration(monkeypatch):
     _, out, err = _capture_run(spec, dispatch_fn=_echo_dispatch, max_total=2)
     assert "dropped:" in err  # the capped nodes are surfaced loudly on stderr
     assert out == ""
+
+
+# --------------------------------------------------------------------------- #
+# REQ-WF-016 / AC-WF-016 — `_attempt` surfaces the dispatch session_id (T-215).
+# Behavior-preserving refactor: the 4th tuple member is captured but never consumed
+# (every re-dispatch still fresh). The session id is returned on the `status="ok"`
+# path (a real resumable session exists) and None on every no-session path
+# (dispatch raised / non-ok status / is_error).
+# --------------------------------------------------------------------------- #
+
+
+def _bare_node(nid: str = "N"):
+    """A plain node (no validate, no verify) for exercising `_attempt` directly."""
+    return _wf.WorkflowNode(id=nid, build_prompt=lambda up: nid)
+
+
+def test_attempt_returns_four_tuple_with_session_id_on_ok() -> None:
+    """A successful dispatch surfaces its session_id as the 4th tuple member."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"k": "v"}),
+                               cost_usd=0.06, raw={"is_error": False},
+                               session_id="sess-abc")
+
+    out = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert len(out) == 4
+    obj, reason, cost, sid = out
+    assert obj == {"k": "v"}
+    assert reason is None
+    assert cost == 0.06
+    assert sid == "sess-abc"
+
+
+def test_attempt_surfaces_session_id_on_non_json_ok_result() -> None:
+    """`status="ok"` but unparseable output still returns the session id (the dispatch
+    DID return a resumable session) so a retry can `--resume` it (AC-WF-017 lineage)."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result="not json at all",
+                               cost_usd=0.06, raw={"is_error": False},
+                               session_id="sess-unparseable")
+
+    obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert obj is None
+    assert reason == "non-JSON result"
+    assert sid == "sess-unparseable"
+
+
+def test_attempt_surfaces_session_id_on_validation_failure() -> None:
+    """A validation failure is an `ok` dispatch with a real session — surface the id."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"bad": True}),
+                               cost_usd=0.06, raw={"is_error": False},
+                               session_id="sess-validate")
+
+    def _reject(_obj):
+        raise ValueError("nope")
+
+    node = _wf.WorkflowNode(id="N", build_prompt=lambda up: "N", validate=_reject)
+    obj, reason, cost, sid = _wf._attempt(node, "p", dispatch, {})
+    assert obj is None
+    assert reason.startswith("validation failed")
+    assert sid == "sess-validate"
+
+
+def test_attempt_returns_none_session_when_dispatch_raises() -> None:
+    """A dispatch that raises has no session to resume → session id is None."""
+    def dispatch(prompt, **kwargs):
+        raise RuntimeError("boom")
+
+    obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert obj is None
+    assert reason.startswith("dispatch raised")
+    assert cost == 0.0
+    assert sid is None
+
+
+def test_attempt_returns_none_session_on_non_ok_status() -> None:
+    """`error`/`skipped`/`unavailable` are all no-session paths → session id is None."""
+    for status in ("error", "skipped", "unavailable"):
+        def dispatch(prompt, _status=status, **kwargs):
+            return SimpleNamespace(status=_status, result=None, cost_usd=0.0,
+                                   raw=None, session_id="should-be-ignored")
+
+        obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+        assert obj is None
+        assert sid is None, f"status={status!r} must yield no session"
+
+
+def test_attempt_returns_none_session_on_is_error() -> None:
+    """An agent-reported `is_error` is a no-session path → session id is None."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"k": "v"}),
+                               cost_usd=0.06, raw={"is_error": True},
+                               session_id="should-be-ignored")
+
+    obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert obj is None
+    assert reason == "agent reported is_error"
+    assert sid is None
+
+
+def test_attempt_session_id_defaults_none_when_absent() -> None:
+    """A dispatch envelope lacking `session_id` (e.g. the existing fakes) → None, not crash."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"k": "v"}),
+                               cost_usd=0.01, raw={"is_error": False})
+
+    obj, reason, cost, sid = _wf._attempt(_bare_node(), "p", dispatch, {})
+    assert obj == {"k": "v"}
+    assert sid is None
+
+
+def test_run_node_unpacks_attempt_and_behavior_unchanged() -> None:
+    """`_run_node` consumes the widened `_attempt` shape and still returns its 3-tuple
+    `(obj, reason, cost)` unchanged — the session is captured but ignored (T-215)."""
+    def dispatch(prompt, **kwargs):
+        return SimpleNamespace(status="ok", result=json.dumps({"prompt": prompt}),
+                               cost_usd=0.06, raw={"is_error": False},
+                               session_id="sess-node")
+
+    obj, reason, cost = _wf._run_node(_bare_node(), "hello", dispatch, {})
+    assert obj == {"prompt": "hello"}
+    assert reason is None
+    assert cost == 0.06
+
+
+# --------------------------------------------------------------------------- #
+# REQ-WF-017/018, AC-WF-017/018/019 — within-node session reuse (T-216).
+# When `session_reuse` is on, a node threads its first-attempt session_id into
+# its OWN retry/heal re-dispatches (per-attempt `{**kwargs, "resume": sid}` copy,
+# never mutating the shared kwargs that flows to the fresh verifier). A reused
+# re-dispatch that returns a non-ok status (stale session) falls back to ONE fresh
+# re-dispatch within the same attempt budget. Toggle off ⇒ byte-identical.
+# All exercised via an injected fake dispatch_fn returning deterministic session
+# ids — no real spend.
+# --------------------------------------------------------------------------- #
+
+_bg = sys.modules["_background_agent"]  # loaded transitively when _workflow imports it
+FRESH = _bg.FRESH_FLOOR_USD
+RESUME = _bg.RESUME_FLOOR_USD
+
+
+def _reuse_dispatch(recorded: list, *, node_results, verdicts=None, session_prefix="sess"):
+    """Fake dispatch_fn mirroring the real wrapper's reuse cost model.
+
+    - A verifier prompt ("INDEPENDENT verifier") pops the next verdict from `verdicts`.
+    - A node prompt pops the next envelope spec from `node_results`; each spec is a dict
+      with keys: `status` (default "ok"), `result` (JSON string or sentinel), optional
+      `is_error`. Successful (`ok` + parseable, no is_error) dispatches mint a fresh,
+      monotonically-numbered `session_id` so we can assert *which* id a re-dispatch resumes.
+    - Cost is `RESUME_FLOOR_USD` when called with `resume=<truthy>`, else `FRESH_FLOOR_USD`
+      — exactly the real `_background_agent.dispatch` floor logic, so realized cost is
+      observable from the recorded calls.
+    """
+    node_seq = list(node_results)
+    vseq = list(verdicts or [])
+    counter = {"n": 0}
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "INDEPENDENT verifier" in prompt:
+            v = vseq.pop(0) if vseq else "pass"
+            return SimpleNamespace(status="ok", reason="", result=json.dumps({"verdict": v}),
+                                   cost_usd=0.003)
+        spec = node_seq.pop(0) if node_seq else {"status": "ok", "result": '{"ok": true}'}
+        status = spec.get("status", "ok")
+        cost = RESUME if kwargs.get("resume") else FRESH
+        sid = None
+        if status == "ok" and not spec.get("is_error"):
+            counter["n"] += 1
+            sid = f"{session_prefix}-{counter['n']}"
+        return SimpleNamespace(status=status, result=spec.get("result"),
+                               cost_usd=cost, raw={"is_error": spec.get("is_error", False)},
+                               session_id=sid)
+
+    return dispatch
+
+
+def _node_dispatches(recorded):
+    return [c for c in recorded if "INDEPENDENT verifier" not in c["prompt"]]
+
+
+def _verifier_dispatches(recorded):
+    return [c for c in recorded if "INDEPENDENT verifier" in c["prompt"]]
+
+
+def test_reuse_heal_redispatch_resumes_first_session_and_verifier_fresh() -> None:
+    """AC-WF-017: with reuse on, a node that succeeds, fails verify, then heals has its
+    heal re-dispatch carry `resume=<first session id>` at RESUME_FLOOR cost, while every
+    verifier dispatch stays fresh (no resume)."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(
+        recorded,
+        node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],  # first + heal both ok
+        verdicts=["fail", "pass"],  # first verdict fails → heal, re-verify passes
+    )
+    res = _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t",
+                           session_reuse=True, dispatch_fn=dispatch)
+    assert res.completed == 1 and res.dropped == 0
+    nodes = _node_dispatches(recorded)
+    assert len(nodes) == 2                       # first attempt + one heal
+    assert nodes[0].get("resume") is None        # first attempt fresh
+    assert nodes[1]["resume"] == "sess-1"        # heal resumes the first session
+    for vc in _verifier_dispatches(recorded):
+        assert vc["resume"] is None              # verifier never reused (REQ-WF-002)
+
+
+def test_reuse_heal_realized_cost_lower_than_fresh() -> None:
+    """The heal re-dispatch is charged RESUME_FLOOR, not a second FRESH_FLOOR."""
+    rec_on: list = []
+    _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t", session_reuse=True,
+                     dispatch_fn=_reuse_dispatch(rec_on,
+                                                 node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],
+                                                 verdicts=["fail", "pass"]))
+    rec_off: list = []
+    _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t", session_reuse=False,
+                     dispatch_fn=_reuse_dispatch(rec_off,
+                                                 node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],
+                                                 verdicts=["fail", "pass"]))
+    heal_on = _node_dispatches(rec_on)[1]
+    heal_off = _node_dispatches(rec_off)[1]
+    # The fake reports RESUME cost iff called with resume — reuse ⇒ cheaper heal.
+    assert heal_on["resume"] == "sess-1"
+    assert heal_off["resume"] is None
+
+
+def test_reuse_retry_on_ok_unparseable_resumes_first_session() -> None:
+    """AC-WF-017: a node whose first attempt is `status="ok"` but unparseable (a real
+    resumable session exists) and then succeeds on retry has its retry `--resume` the
+    first session."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"status": "ok", "result": "not json at all"},  # ok but unparseable → session minted
+        {"status": "ok", "result": '{"ok": true}'},      # retry succeeds
+    ])
+    obj, reason, cost = _wf._run_node(_bare_node(), "p", dispatch, {"resume": None},
+                                      session_reuse=True)
+    assert obj == {"ok": True}
+    nodes = _node_dispatches(recorded)
+    assert nodes[0]["resume"] is None
+    assert nodes[1]["resume"] == "sess-1"     # retry resumes the ok-but-unparseable session
+
+
+def test_reuse_retry_after_hard_error_stays_fresh() -> None:
+    """AC-WF-017: a first attempt that returns `status="error"` returns NO session, so the
+    retry is dispatched fresh (nothing to resume) — reuse correctly does not invent a session."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"status": "error", "result": None},        # hard error → no session
+        {"status": "ok", "result": '{"ok": true}'},  # retry fresh, succeeds
+    ])
+    obj, reason, cost = _wf._run_node(_bare_node(), "p", dispatch, {"resume": None},
+                                      session_reuse=True)
+    assert obj == {"ok": True}
+    nodes = _node_dispatches(recorded)
+    assert nodes[0]["resume"] is None
+    assert nodes[1]["resume"] is None         # nothing to resume → still fresh
+
+
+def test_reuse_stale_session_falls_back_to_fresh_within_budget() -> None:
+    """AC-WF-018: a reused heal re-dispatch that returns `status="error"` (stale/invalid
+    session) triggers ONE fresh fallback re-dispatch within the same attempt budget; the node
+    still completes, no exception escapes, and no spurious drop reason is recorded."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"status": "ok", "result": '{"v": 1}'},     # first attempt ok → session sess-1
+        {"status": "error", "result": None},         # heal w/ resume=sess-1 → stale (error)
+        {"status": "ok", "result": '{"v": 2}'},      # fresh fallback heal → ok
+    ], verdicts=["fail", "pass"])  # first verdict fails → heal; re-verify after fallback passes
+    res = _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t",
+                           session_reuse=True, dispatch_fn=dispatch)
+    assert res.completed == 1 and res.dropped == 0
+    assert res.dropped_reasons == []
+    nodes = _node_dispatches(recorded)
+    assert len(nodes) == 3                       # first + stale-resume heal + fresh fallback
+    assert nodes[1]["resume"] == "sess-1"        # reused (stale) attempt
+    assert nodes[2]["resume"] is None            # fallback is fresh
+
+
+def test_reuse_stale_fallback_also_fails_drops_with_clean_reason() -> None:
+    """The fallback is bounded: if the fresh fallback ALSO fails the node drops with the normal
+    heal-failure reason — never raises, no extra attempts beyond the budget."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"status": "ok", "result": '{"v": 1}'},   # first ok → sess-1
+        {"status": "error", "result": None},        # stale resume heal
+        {"status": "error", "result": None},        # fresh fallback also fails
+    ], verdicts=["fail"])
+    res = _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t",
+                           session_reuse=True, dispatch_fn=dispatch)
+    assert res.completed == 0 and res.dropped == 1
+    assert any("heal" in r.lower() for r in res.dropped_reasons)
+    nodes = _node_dispatches(recorded)
+    assert len(nodes) == 3                       # first + stale heal + one fresh fallback only
+
+
+def test_reuse_off_no_resume_from_prior_attempt() -> None:
+    """AC-WF-019: with `session_reuse` off, no node dispatch carries a resume derived from a
+    prior same-node attempt — every retry/heal stays fresh (byte-identical to v0.4.x)."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded,
+                               node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],
+                               verdicts=["fail", "pass"])
+    _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t",
+                     session_reuse=False, dispatch_fn=dispatch)
+    for c in _node_dispatches(recorded):
+        assert c.get("resume") is None
+
+
+def test_reuse_off_preserves_run_level_resume_on_redispatch() -> None:
+    """With reuse off, the run-level `resume` token still threads into EVERY node dispatch
+    unchanged (the v0.4.x blunt run-level knob is untouched) — reuse-off must not strip it."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded,
+                               node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],
+                               verdicts=["fail", "pass"])
+    _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t", resume="RUN-LEVEL",
+                     session_reuse=False, dispatch_fn=dispatch)
+    for c in _node_dispatches(recorded):
+        assert c["resume"] == "RUN-LEVEL"     # run-level session preserved on first + heal
+
+
+def test_reuse_does_not_mutate_shared_kwargs() -> None:
+    """R-1: the per-attempt copy `{**kwargs, "resume": sid}` must never mutate the shared
+    kwargs dict the caller still holds (it flows on to the fresh verifier)."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"result": '{"v": 1}'}, {"result": '{"v": 2}'}], verdicts=["fail", "pass"])
+    shared = {"resume": None}
+    _wf._run_node(_verify_spec().nodes[0], "p", dispatch, shared, session_reuse=True)
+    assert shared["resume"] is None           # untouched after retry/heal reuse
+
+
+def test_run_node_session_reuse_defaults_off_byte_identical() -> None:
+    """`_run_node` defaults `session_reuse=False`; called positionally as v0.4.x did, a healing
+    node re-dispatches fresh — byte-identical behavior to before T-216."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"result": '{"v": 1}'}, {"result": '{"v": 2}'}], verdicts=["fail", "pass"])
+    obj, reason, cost = _wf._run_node(_verify_spec().nodes[0], "p", dispatch, {"resume": None})
+    assert reason is None
+    for c in _node_dispatches(recorded):
+        assert c.get("resume") is None
+
+
+# --------------------------------------------------------------------------- #
+# T-217 (REQ-WF-020/021, AC-WF-020/021, NF-039) — admission / estimator / audit
+# invariance + determinism under reuse. Reuse changes ONLY realized cost: the
+# deterministic admitted/dropped split, the estimator-equals-run-drops check
+# (AC-WF-014), and the one-line schema-versioned audit record are byte-identical
+# with `session_reuse` on vs off; only `total_cost_usd` drops. The
+# parallel≡sequential determinism split and the empty-stdout contract hold with
+# reuse ON. All via injected fake dispatch_fns — no real spend.
+# --------------------------------------------------------------------------- #
+
+
+def _healing_id_dispatch(recorded: list):
+    """Deterministic fake where EVERY node heals exactly once, routed by node id.
+
+    Each node's verifier fails the first verdict then passes (so the node succeeds via one
+    heal re-dispatch); production dispatches always return an ok, parseable result and mint a
+    monotonic per-node session id. Routing by the node id embedded in the prompt makes the fake
+    order-independent — a parallel run and a sequential run pop the *same* envelopes per node,
+    so realized cost and the result/drop split are deterministic regardless of thread
+    scheduling. Cost mirrors the real wrapper: RESUME_FLOOR when `resume` is truthy, else
+    FRESH_FLOOR — so reuse is observable purely as lower realized cost.
+    """
+    seen_verify: dict = {}   # node id -> count of verifier calls so far
+    counter = {"n": 0}
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "INDEPENDENT verifier" in prompt:
+            # The verifier prompt embeds the node id as `node 'X'`; first verdict per node fails.
+            nid = prompt.split("node ", 1)[1].split("'", 2)[1] if "node " in prompt else "?"
+            seen_verify[nid] = seen_verify.get(nid, 0) + 1
+            verdict = "fail" if seen_verify[nid] == 1 else "pass"
+            return SimpleNamespace(status="ok", reason="",
+                                   result=json.dumps({"verdict": verdict}), cost_usd=0.0)
+        cost = RESUME if kwargs.get("resume") else FRESH
+        counter["n"] += 1
+        return SimpleNamespace(status="ok", result=json.dumps({"prompt": prompt}),
+                               cost_usd=cost, raw={"is_error": False},
+                               session_id=f"sess-{counter['n']}")
+
+    return dispatch
+
+
+def _healing_diamond():
+    """A diamond where every node carries a VerifySpec (so every node heals once)."""
+    v = _wf.VerifySpec(skill="/forge:review", schema={"type": "object"})
+    return _wf.WorkflowSpec(nodes=[
+        _wf.WorkflowNode(id="A", build_prompt=lambda up: "A", verify=v),
+        _wf.WorkflowNode(id="B", build_prompt=lambda up: "B", depends_on=["A"], verify=v),
+        _wf.WorkflowNode(id="C", build_prompt=lambda up: "C", depends_on=["A"], verify=v),
+        _wf.WorkflowNode(id="D", build_prompt=lambda up: "D", depends_on=["B", "C"], verify=v),
+    ])
+
+
+def test_estimator_split_identical_reuse_on_vs_off_uncapped(monkeypatch):
+    """AC-WF-020: the run's admitted/dropped split is identical with reuse on vs off — reuse is
+    never an admission input. The estimator (which has no reuse param) matches both."""
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    est = _wf.estimate_admission(_diamond())
+    on = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                          session_reuse=True, dispatch_fn=_healing_id_dispatch([]))
+    off = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                           session_reuse=False, dispatch_fn=_healing_id_dispatch([]))
+    assert on.admitted == off.admitted == est.admitted
+    assert on.drops == off.drops
+    assert {d["id"] for d in est.dropped} == {d["id"] for d in on.drops}
+
+
+def test_estimator_split_equals_run_drops_capped_both_modes(monkeypatch):
+    """AC-WF-020 / AC-WF-014: for a `max_budget_usd`-capped spec the estimator split EQUALS the
+    run's drops — in BOTH reuse modes — because admission always charges FRESH_FLOOR_USD."""
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    budget = 2.5 * _wf.FRESH_FLOOR_USD  # exactly two fresh-floor nodes fit
+    est = _wf.estimate_admission(_diamond(), max_budget_usd=budget)
+    for reuse in (True, False):
+        res = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                               max_budget_usd=budget, session_reuse=reuse,
+                               dispatch_fn=_healing_id_dispatch([]))
+        assert est.admitted == res.admitted == ["A", "B"]
+        assert {d["id"] for d in est.dropped} == {d["id"] for d in res.drops} == {"C", "D"}
+
+
+def test_reuse_lowers_realized_cost_below_fresh(monkeypatch):
+    """AC-WF-021 lineage: a run where every node heals costs strictly LESS under reuse (heal
+    re-dispatches charge RESUME_FLOOR) while completing the identical node set."""
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    on = _wf.run_workflow(_healing_diamond(), forge_dir=FORGE, feature="t",
+                          session_reuse=True, dispatch_fn=_healing_id_dispatch([]))
+    off = _wf.run_workflow(_healing_diamond(), forge_dir=FORGE, feature="t",
+                           session_reuse=False, dispatch_fn=_healing_id_dispatch([]))
+    assert on.completed == off.completed == 4
+    assert on.dropped == off.dropped == 0
+    assert set(on.results) == set(off.results)
+    assert on.total_cost_usd < off.total_cost_usd  # reuse lowers ONLY realized cost
+
+
+def test_audit_one_line_lower_cost_unchanged_split_reuse(tmp_path, monkeypatch):
+    """AC-WF-021: a reuse-on run writes exactly ONE schema-versioned workflow_run line whose
+    completed/dropped/admitted match the reuse-off run and whose total_cost_usd is LOWER; the
+    record stays schema-versioned + PII-free."""
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    on_dir, off_dir = tmp_path / "on", tmp_path / "off"
+    _wf.run_workflow(_healing_diamond(), forge_dir=on_dir, feature="hf", name="hf",
+                     session_reuse=True, dispatch_fn=_healing_id_dispatch([]))
+    _wf.run_workflow(_healing_diamond(), forge_dir=off_dir, feature="hf", name="hf",
+                     session_reuse=False, dispatch_fn=_healing_id_dispatch([]))
+    on_recs, off_recs = _read_events(on_dir), _read_events(off_dir)
+    assert len(on_recs) == 1 and len(off_recs) == 1  # exactly one line per run, reuse or not
+    on_r, off_r = on_recs[0], off_recs[0]
+    # Unchanged structural fields — reuse touches only realized cost.
+    for field in ("completed", "dropped", "admitted"):
+        assert on_r[field] == off_r[field]
+    assert on_r["total_cost_usd"] < off_r["total_cost_usd"]   # lower under reuse
+    # Schema-versioned + PII-free (no free-text payload beyond ids/reasons/counts).
+    assert on_r["schema_version"] == _wf.AUDIT_SCHEMA_VERSION
+    assert set(on_r) == set(off_r)  # identical key set ⇒ schema unchanged across modes
+    assert "prompt" not in json.dumps(on_r)  # produced content never leaks into the audit line
+
+
+def test_determinism_split_parallel_equals_sequential_reuse_on():
+    """AC-WF-012 lineage with reuse ON: a parallel run and a sequential (max_parallel=1) run are
+    byte-identical in their ordered result/drops/completed/cost. Determinism is preserved."""
+    par = _wf.run_workflow(_healing_diamond(), forge_dir=FORGE, feature="t",
+                           max_parallel=8, session_reuse=True,
+                           dispatch_fn=_healing_id_dispatch([]))
+    seq = _wf.run_workflow(_healing_diamond(), forge_dir=FORGE, feature="t",
+                           max_parallel=1, session_reuse=True,
+                           dispatch_fn=_healing_id_dispatch([]))
+    assert par.results == seq.results
+    assert par.completed == seq.completed
+    assert par.dropped == seq.dropped
+    assert par.drops == seq.drops
+    assert par.total_cost_usd == seq.total_cost_usd  # cost order-independent under reuse
+    assert json.dumps(par.results, sort_keys=True) == json.dumps(seq.results, sort_keys=True)
+
+
+def test_stdout_byte_identical_with_reuse_on(monkeypatch):
+    """AC-WF-012 lineage / T-128: reuse writes NO byte to stdout. With narration on and reuse on,
+    stdout is empty and matches the reuse-off run (all cost/audit output stays in stderr/.forge)."""
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+    _, out_on, _err_on = _capture_run(_healing_diamond(),
+                                      dispatch_fn=_healing_id_dispatch([]), session_reuse=True)
+    _, out_off, _err_off = _capture_run(_healing_diamond(),
+                                        dispatch_fn=_healing_id_dispatch([]), session_reuse=False)
+    assert out_on == ""           # not a single stdout byte from the reuse path
+    assert out_on == out_off      # stdout byte-identical on vs off

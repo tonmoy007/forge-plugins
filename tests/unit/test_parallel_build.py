@@ -201,6 +201,61 @@ def test_default_build_prompt_mentions_task_id() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# REQ-WF-017/019, AC-WF-017/019 — `config.session_reuse` threads end-to-end through
+# run_parallel_build → run_workflow → _run_node into a node's OWN retry re-dispatch (T-216).
+# --------------------------------------------------------------------------- #
+
+
+def _retry_then_ok_dispatch(recorded: list):
+    """A node dispatch that is `status="ok"` but unparseable on the first call (minting a
+    resumable session) and parseable on the retry — so a node retries once. Cost mirrors the
+    real wrapper (RESUME floor when resumed, else FRESH)."""
+    counter = {"n": 0}
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        counter["n"] += 1
+        sid = f"sess-{counter['n']}"
+        if counter["n"] == 1:
+            return SimpleNamespace(status="ok", result="not json", cost_usd=_wf.FRESH_FLOOR_USD,
+                                   raw={"is_error": False}, session_id=sid)
+        cost = _bg.RESUME_FLOOR_USD if kwargs.get("resume") else _wf.FRESH_FLOOR_USD
+        return SimpleNamespace(status="ok", result=json.dumps({"prompt": prompt}),
+                               cost_usd=cost, raw={"is_error": False}, session_id=sid)
+
+    return dispatch
+
+
+_bg = sys.modules["_background_agent"]  # loaded transitively when _workflow imports it
+
+
+def test_parallel_build_session_reuse_on_retry_resumes_session() -> None:
+    """With `config.session_reuse` on, a node that retries `--resume`s its first session."""
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, session_reuse=True)
+    recorded: list = []
+    res = _pb.run_parallel_build(
+        [_task("T1")], done=set(), config=cfg, forge_dir=FORGE, feature="t",
+        dispatch_fn=_retry_then_ok_dispatch(recorded))
+    assert res.completed == 1
+    assert len(recorded) == 2                  # first (unparseable) + retry
+    assert recorded[0].get("resume") is None
+    assert recorded[1]["resume"] == "sess-1"   # retry resumed the first node session
+
+
+def test_parallel_build_session_reuse_off_retry_stays_fresh() -> None:
+    """With `config.session_reuse` off (default), the same retry stays fresh — byte-identical
+    to v0.4.x: no resume derived from a prior same-node attempt."""
+    cfg = _cfg.OrchestrationConfig(parallel_build=True, session_reuse=False)
+    recorded: list = []
+    res = _pb.run_parallel_build(
+        [_task("T1")], done=set(), config=cfg, forge_dir=FORGE, feature="t",
+        dispatch_fn=_retry_then_ok_dispatch(recorded))
+    assert res.completed == 1
+    assert len(recorded) == 2
+    assert all(c.get("resume") is None for c in recorded)
+
+
+# --------------------------------------------------------------------------- #
 # AC-WF-008 / T-197 — git worktree isolation + lifecycle + merge join
 # --------------------------------------------------------------------------- #
 

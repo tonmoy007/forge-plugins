@@ -236,6 +236,10 @@ def flow_estimate(spec, forge_dir, config, *, now=None):
         daily_headroom = None
         monthly_headroom = None
 
+    # NOTE: `config.session_reuse` (v0.6.0, REQ-WF-019) is deliberately NOT read here. Admission
+    # and the pre-flight estimate stay on `FRESH_FLOOR_USD` per node regardless of reuse
+    # (REQ-WF-020), so the estimator split is byte-identical with reuse on or off and still equals
+    # the run drops (AC-WF-014). Reuse lowers only *realized* cost; it is never an admission input.
     return _workflow.estimate_admission(
         spec,
         max_total=getattr(config, "max_total", _workflow.DEFAULT_MAX_TOTAL),

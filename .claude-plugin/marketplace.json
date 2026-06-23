@@ -14,7 +14,7 @@
         "repo": "tonmoy007/forge-plugins"
       },
       "description": "12-stage SDLC pipeline, specialized agents, persistent memory, auto-reflection",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "license": "MIT",
       "category": "development"
     }

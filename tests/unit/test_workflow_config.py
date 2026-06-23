@@ -176,3 +176,49 @@ def test_narrate_truthy_nonbool_does_not_disable(tmp_path):
     forge = _write_config(tmp_path, "orchestration:\n  narrate: 0\n")
     cfg = _wfc.load_orchestration_config(forge)
     assert cfg.narrate is True
+
+
+# --------------------------------------------------------------------------- #
+# T-214 (REQ-WF-019) — session_reuse capability toggle: default OFF, strict `is True`,
+# fail-soft; mirrors the v0.4.0 capability toggles (flows_enabled & siblings).
+# --------------------------------------------------------------------------- #
+
+
+def test_session_reuse_defaults_off(tmp_path):
+    forge = _write_config(tmp_path, "orchestration:\n  parallel_build: true\n")
+    cfg = _wfc.load_orchestration_config(forge)
+    assert cfg.session_reuse is False
+
+
+def test_session_reuse_defaults_off_when_no_config(tmp_path):
+    cfg = _wfc.load_orchestration_config(tmp_path / ".forge")
+    assert cfg.session_reuse is False
+
+
+def test_session_reuse_true_enables(tmp_path):
+    forge = _write_config(tmp_path, "orchestration:\n  session_reuse: true\n")
+    cfg = _wfc.load_orchestration_config(forge)
+    assert cfg.session_reuse is True
+
+
+def test_session_reuse_truthy_nonbool_does_not_enable(tmp_path):
+    # Strict `is True`: a stray `1` / `"yes"` never silently enables the capability.
+    for stray in ("1", '"yes"'):
+        forge = _write_config(tmp_path, f"orchestration:\n  session_reuse: {stray}\n")
+        cfg = _wfc.load_orchestration_config(forge)
+        assert cfg.session_reuse is False
+
+
+def test_session_reuse_in_toggles_tuple(tmp_path):
+    # session_reuse is a real capability toggle — it must live in `_TOGGLES` so the strict
+    # `is True` parse loop covers it (not a bespoke branch).
+    assert "session_reuse" in _wfc._TOGGLES
+
+
+def test_session_reuse_independent_of_other_toggles(tmp_path):
+    # Enabling session_reuse alone leaves every other capability toggle off.
+    forge = _write_config(tmp_path, "orchestration:\n  session_reuse: true\n")
+    cfg = _wfc.load_orchestration_config(forge)
+    assert cfg.session_reuse is True
+    for other in TOGGLES:
+        assert getattr(cfg, other) is False, f"{other} should stay False"
