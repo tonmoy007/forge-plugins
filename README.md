@@ -191,13 +191,14 @@ orchestration:
   parallel_build: false          # fan independent build tasks out in parallel
   worktree_isolation: false      # each parallel mutating node in its own git worktree
   allow_generated_subdags: false # the validated `decompose` sub-DAG node
+  session_reuse: false           # within-node --resume of a node's own retry/heal (v0.6.0)
   max_parallel: 4                # max concurrent dispatches per wave
   max_total: 64                  # hard cap on total nodes per run
   max_budget_usd:                # optional admission ceiling (omit = no cap)
   narrate: true                  # live [Forge] stderr narration (off: FORGE_WF_QUIET=1)
 ```
 
-The four capability toggles are **independent and default `false`** — with no `orchestration:`
+The five capability toggles are **independent and default `false`** — with no `orchestration:`
 block Forge behaves exactly as before. `narrate` is **not** a capability toggle: it only controls
 the side-channel stderr narration and changes no engine behavior (the stdout result is
 byte-identical with it on or off).
@@ -214,6 +215,11 @@ byte-identical with it on or off).
 - **Hybrid generation** (`allow_generated_subdags`) — a `decompose` node lets a cheap model
   generate a *sub-DAG*, validated (acyclicity + node-count + token budget) **before** any
   child runs.
+- **Session reuse** (`session_reuse`, v0.6.0) — a node's **own** retry/heal re-dispatch
+  `--resume`s the first attempt's session (same prompt + model), paying the cheaper resume
+  floor instead of a second fresh floor. Cost-only: admission still charges the fresh floor, the
+  independent verifier always runs fresh, and a stale session falls back to a fresh dispatch — so
+  it never changes the admitted/dropped set (off ⇒ byte-identical to v0.4.x).
 
 **Observable + predictable.** Every run narrates its waves, per-node start/done/dropped, and a
 final id-ordered summary on **stderr** (`narrate`), appends exactly one structured

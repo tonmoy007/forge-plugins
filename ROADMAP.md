@@ -164,7 +164,8 @@ producing all 12 stage artifacts with traceability intact. ✅
 | **v0.3.6** | 🟢 released | **Context-aware autopilot** — when an autopilot run crosses a configurable context threshold, it automatically **checkpoints → compacts → continues**. Background dispatches rotate the session on a real token-pressure signal (`usage.input_tokens`); in-session runs ride native auto-compaction via a new **PreCompact** checkpoint + **SessionStart(`compact`)** resume injection, with a shared schema-versioned checkpoint and run-log idempotency. Opt-in (default 80%). Tag `v0.3.6`, both remotes. SRS `build/01-srs/srs-v0.3.6.md`, DAG `build/04-plan/task-dag-v0.3.6.md` (T-185–T-190). |
 | **v0.4.0** | 🟢 released | **Dynamic workflow engine** — generalizes Forge's orchestration into a topological **DAG executor** (`scripts/_workflow.py`): heterogeneous agent steps, `depends_on` waves, bounded parallel fan-out, inter-step data passing, per-node verify, budget/resume-plumbed, deterministic + never-raises. Capabilities are **independent opt-in toggles** (`orchestration:` block, all default off): user-defined flows (`.forge/workflows/*.yaml` + `/forge:flow`), per-stage parallel build + git-worktree isolation + adversarial-verify join, and hybrid validated sub-DAG generation (`decompose`). Forge's own `/forge:review`/`/forge:adopt`/`/forge:why` fan-outs now run on the engine (behavior-preserving). Adversarially verified (SHIP-WITH-NOTES, both notes closed). Tag `v0.4.0`, both remotes. SRS `build/01-srs/srs-v0.4.0.md`, DAG `build/04-plan/task-dag-v0.4.0.md` (T-191–T-201). |
 | **v0.4.1** | 🟢 released | **Operable engine** (hardening, **zero semantic change**) — make the shipped v0.4.0 engine observable + cost-predictable: live `[Forge]` **stderr narration** (stdout byte-identical), one structured **`.forge/events.jsonl`** audit line per run, a **pure cost pre-flight estimator** over the existing deterministic admission set (surfaced in `/forge:flow` before dispatch, loud at a runtime drop), and a dogfood **`.forge/workflows/doc-review.yaml`** + a parallel-build integration test. Tag `v0.4.1`, origin. SRS `build/01-srs/srs-v0.4.1.md`, DAG `build/04-plan/task-dag-v0.4.1.md` (T-202–T-206). |
-| **v0.5.0** | 🟡 landing | **Unified `~/.forge` graduation layer** — generalizes the T-022 lesson promoter into one tier-agnostic core (`scripts/_graduation.py`: registry · atomic IO · 30-day TTL · idempotent keyed merge · `Tier` protocol · fail-soft `graduate()` driver), then adds **skills** and **workflows** tiers behind **per-tier gates** (breadth for lessons; approved + ExpeL `weight>0` + `use≥2` for skills; validates-clean + ≥2 successful `workflow_run` records for workflows). **Project-wins** recall in every tier; skill recall = **symlink** (ADR-009), workflows recall via the loader search path. Automatic, silent, fail-soft at session-start (`FORGE_NO_GRADUATE=1` escape); new `/forge:graduate` (dry-run / list / scan). Behavior-preserving for lessons. ADR-008 + ADR-009. SRS `build/01-srs/srs-v0.5.0.md`, DAG `build/04-plan/task-dag-v0.5.0.md` (T-207–T-213). |
+| **v0.5.0** | 🟢 released | **Unified `~/.forge` graduation layer** — generalizes the T-022 lesson promoter into one tier-agnostic core (`scripts/_graduation.py`: registry · atomic IO · 30-day TTL · idempotent keyed merge · `Tier` protocol · fail-soft `graduate()` driver), then adds **skills** and **workflows** tiers behind **per-tier gates** (breadth for lessons; approved + ExpeL `weight>0` + `use≥2` for skills; validates-clean + ≥2 successful `workflow_run` records for workflows). **Project-wins** recall in every tier; skill recall = **symlink** (ADR-009), workflows recall via the loader search path. Automatic, silent, fail-soft at session-start (`FORGE_NO_GRADUATE=1` escape); new `/forge:graduate` (dry-run / list / scan). Behavior-preserving for lessons. ADR-008 + ADR-009. Tag `v0.5.0`, both remotes. SRS `build/01-srs/srs-v0.5.0.md`, DAG `build/04-plan/task-dag-v0.5.0.md` (T-207–T-213). |
+| **v0.6.0** | 🟡 landing | **Engine made real I — per-node session reuse** (cost-reduction, **zero default behavior change**). Drives the already-built-but-unused `_background_agent.dispatch(resume=...)` path from the v0.4.0 DAG engine: capture each node's first-attempt `session_id` and `--resume` it into **that same node's** retry/heal re-dispatches (same prompt + model), lowering their realized floor from `FRESH_FLOOR_USD` `$0.06` to `RESUME_FLOOR_USD` `$0.01`. **Within-node only**; the independent verifier is **never** reused (REQ-WF-002); admission stays on `FRESH_FLOOR_USD` so the estimator/admitted-set split is identical on vs off (AC-WF-014); a stale session **falls back to fresh** within the attempt budget. Opt-in `orchestration.session_reuse` (strict `is True`, default off ⇒ byte-identical to v0.4.x). ADR-010. **Deferred follow-ups**: per-branch/cross-node reuse (trio item 1's other half, measurement-gated), trio items 2–3 (top-level generation · pipeline-as-WorkflowSpec), and **caveman mode** (orthogonal prompt-compression, candidate v0.6.1). SRS `build/01-srs/srs-v0.6.0.md`, DAG `build/04-plan/task-dag-v0.6.0.md` (T-214–T-219). |
 
 ---
 
@@ -176,28 +177,44 @@ producing all 12 stage artifacts with traceability intact. ✅
 > deferred *three* times). Decided once, on the record. **Nothing here is built yet.**
 
 > **Re-sequencing note (2026-06-22).** The unified `~/.forge` graduation layer was pulled
-> ahead of the "engine made real" trio and is now **v0.5.0** (landing) — lower-risk,
-> generalizes built machinery, high cross-project leverage. The engine trio below becomes the
-> subsequent engine work (≥ v0.5.1 / v0.6). See srs-v0.5.0 §6.
+> ahead of the "engine made real" trio and shipped as **v0.5.0** (released) — lower-risk,
+> generalizes built machinery, high cross-project leverage. The engine trio below is the
+> subsequent engine work; its first slice ships as **v0.6.0**. See srs-v0.5.0 §6 / srs-v0.6.0 §6.
 
-### v0.5.0 — Unified `~/.forge` graduation layer (landing) 🟡
+### v0.5.0 — Unified `~/.forge` graduation layer (released) 🟢
 
 Generalize the T-022 lesson promoter into one tier-agnostic core + skills and workflows
 tiers behind per-tier gates, recalled with project-wins. See the v0.5.0 row above and
 [`references/graduation-layer.md`](references/graduation-layer.md) ·
 ADR-008 / ADR-009.
 
-### Engine "made real" trio (≥ v0.5.1 / v0.6)
+### Engine "made real" trio (v0.6.x)
 
-1. **Session reuse across heterogeneous DAG nodes** — v0.4.0 is fresh-session per node;
-   design a per-branch / within-retry reuse strategy that lowers the floor without
-   breaking deterministic admission. M–L.
+1. **Session reuse across heterogeneous DAG nodes.** ✅ **within-node** half **shipped as
+   v0.6.0** — a node's own retry/heal re-dispatch `--resume`s its first-attempt session
+   (cost-only; admission stays on the fresh floor; verifier never reused; fallback-to-fresh;
+   default-off). ADR-010. **Deferred**: **per-branch / cross-node** reuse — resuming a
+   *dependency's* session for a *dependent* node defeats `--resume` on heterogeneous
+   prompts/models and has a weaker correctness argument; a future, **measurement-gated**
+   follow-up with its own SRS + ADR (srs-v0.6.0 §6). M–L.
 2. **Top-level LLM-generated workflows** — extend the validated-slot model
    (`allow_generated_subdags`) from a sub-DAG-in-a-node to a whole generated top-level
-   `WorkflowSpec`, behind the same validate-before-dispatch rails. L; higher risk.
+   `WorkflowSpec`, behind the same validate-before-dispatch rails. L; higher risk. Deferred.
 3. **Pipeline-as-WorkflowSpec** — express the 12-stage SDLC as a `WorkflowSpec` on the
    engine, unifying `autopilot.py`'s sequencer with `run_workflow`. "Stretch, never
-   required" — only if it simplifies. L; architecturally significant.
+   required" — only if it simplifies. L; architecturally significant. Deferred.
+
+### Caveman mode — prompt-compression (candidate v0.6.1, measurement-gated)
+
+Orthogonal to session reuse (decided 2026-06-23 to ship **separately**): an opt-in
+`orchestration.caveman_mode` (default off) that statically tightens Forge-authored prompt
+constants and prepends a stdlib "terse-output" preamble at the single dispatch chokepoint
+(`hooks/_background_agent.dispatch`). The `caveman-compress` / `caveman-shrink` levers are
+**out** (they need a model call + `pip` / a Node-MCP proxy — violating stdlib-only, REQ-NF-024).
+Honest expectation: Forge's background output is mostly schema-constrained JSON the model is
+already told to keep terse, so caveman's headline ~65% does **not** transfer — low-double-digit %
+on free-prose dispatches, ~0% on JSON. **Measurement-gated**: prove the saving via the
+`_cost_cap` output-token ledger before committing the toggle. Its own SRS + ADR. See srs-v0.6.0 §6.
 
 ### Separate programs / parked
 
