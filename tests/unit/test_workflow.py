@@ -1321,3 +1321,151 @@ def test_run_node_session_reuse_defaults_off_byte_identical() -> None:
     assert reason is None
     for c in _node_dispatches(recorded):
         assert c.get("resume") is None
+
+
+# --------------------------------------------------------------------------- #
+# T-217 (REQ-WF-020/021, AC-WF-020/021, NF-039) — admission / estimator / audit
+# invariance + determinism under reuse. Reuse changes ONLY realized cost: the
+# deterministic admitted/dropped split, the estimator-equals-run-drops check
+# (AC-WF-014), and the one-line schema-versioned audit record are byte-identical
+# with `session_reuse` on vs off; only `total_cost_usd` drops. The
+# parallel≡sequential determinism split and the empty-stdout contract hold with
+# reuse ON. All via injected fake dispatch_fns — no real spend.
+# --------------------------------------------------------------------------- #
+
+
+def _healing_id_dispatch(recorded: list):
+    """Deterministic fake where EVERY node heals exactly once, routed by node id.
+
+    Each node's verifier fails the first verdict then passes (so the node succeeds via one
+    heal re-dispatch); production dispatches always return an ok, parseable result and mint a
+    monotonic per-node session id. Routing by the node id embedded in the prompt makes the fake
+    order-independent — a parallel run and a sequential run pop the *same* envelopes per node,
+    so realized cost and the result/drop split are deterministic regardless of thread
+    scheduling. Cost mirrors the real wrapper: RESUME_FLOOR when `resume` is truthy, else
+    FRESH_FLOOR — so reuse is observable purely as lower realized cost.
+    """
+    seen_verify: dict = {}   # node id -> count of verifier calls so far
+    counter = {"n": 0}
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "INDEPENDENT verifier" in prompt:
+            # The verifier prompt embeds the node id as `node 'X'`; first verdict per node fails.
+            nid = prompt.split("node ", 1)[1].split("'", 2)[1] if "node " in prompt else "?"
+            seen_verify[nid] = seen_verify.get(nid, 0) + 1
+            verdict = "fail" if seen_verify[nid] == 1 else "pass"
+            return SimpleNamespace(status="ok", reason="",
+                                   result=json.dumps({"verdict": verdict}), cost_usd=0.0)
+        cost = RESUME if kwargs.get("resume") else FRESH
+        counter["n"] += 1
+        return SimpleNamespace(status="ok", result=json.dumps({"prompt": prompt}),
+                               cost_usd=cost, raw={"is_error": False},
+                               session_id=f"sess-{counter['n']}")
+
+    return dispatch
+
+
+def _healing_diamond():
+    """A diamond where every node carries a VerifySpec (so every node heals once)."""
+    v = _wf.VerifySpec(skill="/forge:review", schema={"type": "object"})
+    return _wf.WorkflowSpec(nodes=[
+        _wf.WorkflowNode(id="A", build_prompt=lambda up: "A", verify=v),
+        _wf.WorkflowNode(id="B", build_prompt=lambda up: "B", depends_on=["A"], verify=v),
+        _wf.WorkflowNode(id="C", build_prompt=lambda up: "C", depends_on=["A"], verify=v),
+        _wf.WorkflowNode(id="D", build_prompt=lambda up: "D", depends_on=["B", "C"], verify=v),
+    ])
+
+
+def test_estimator_split_identical_reuse_on_vs_off_uncapped(monkeypatch):
+    """AC-WF-020: the run's admitted/dropped split is identical with reuse on vs off — reuse is
+    never an admission input. The estimator (which has no reuse param) matches both."""
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    est = _wf.estimate_admission(_diamond())
+    on = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                          session_reuse=True, dispatch_fn=_healing_id_dispatch([]))
+    off = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                           session_reuse=False, dispatch_fn=_healing_id_dispatch([]))
+    assert on.admitted == off.admitted == est.admitted
+    assert on.drops == off.drops
+    assert {d["id"] for d in est.dropped} == {d["id"] for d in on.drops}
+
+
+def test_estimator_split_equals_run_drops_capped_both_modes(monkeypatch):
+    """AC-WF-020 / AC-WF-014: for a `max_budget_usd`-capped spec the estimator split EQUALS the
+    run's drops — in BOTH reuse modes — because admission always charges FRESH_FLOOR_USD."""
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    budget = 2.5 * _wf.FRESH_FLOOR_USD  # exactly two fresh-floor nodes fit
+    est = _wf.estimate_admission(_diamond(), max_budget_usd=budget)
+    for reuse in (True, False):
+        res = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                               max_budget_usd=budget, session_reuse=reuse,
+                               dispatch_fn=_healing_id_dispatch([]))
+        assert est.admitted == res.admitted == ["A", "B"]
+        assert {d["id"] for d in est.dropped} == {d["id"] for d in res.drops} == {"C", "D"}
+
+
+def test_reuse_lowers_realized_cost_below_fresh(monkeypatch):
+    """AC-WF-021 lineage: a run where every node heals costs strictly LESS under reuse (heal
+    re-dispatches charge RESUME_FLOOR) while completing the identical node set."""
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    on = _wf.run_workflow(_healing_diamond(), forge_dir=FORGE, feature="t",
+                          session_reuse=True, dispatch_fn=_healing_id_dispatch([]))
+    off = _wf.run_workflow(_healing_diamond(), forge_dir=FORGE, feature="t",
+                           session_reuse=False, dispatch_fn=_healing_id_dispatch([]))
+    assert on.completed == off.completed == 4
+    assert on.dropped == off.dropped == 0
+    assert set(on.results) == set(off.results)
+    assert on.total_cost_usd < off.total_cost_usd  # reuse lowers ONLY realized cost
+
+
+def test_audit_one_line_lower_cost_unchanged_split_reuse(tmp_path, monkeypatch):
+    """AC-WF-021: a reuse-on run writes exactly ONE schema-versioned workflow_run line whose
+    completed/dropped/admitted match the reuse-off run and whose total_cost_usd is LOWER; the
+    record stays schema-versioned + PII-free."""
+    monkeypatch.setenv("FORGE_WF_QUIET", "1")
+    on_dir, off_dir = tmp_path / "on", tmp_path / "off"
+    _wf.run_workflow(_healing_diamond(), forge_dir=on_dir, feature="hf", name="hf",
+                     session_reuse=True, dispatch_fn=_healing_id_dispatch([]))
+    _wf.run_workflow(_healing_diamond(), forge_dir=off_dir, feature="hf", name="hf",
+                     session_reuse=False, dispatch_fn=_healing_id_dispatch([]))
+    on_recs, off_recs = _read_events(on_dir), _read_events(off_dir)
+    assert len(on_recs) == 1 and len(off_recs) == 1  # exactly one line per run, reuse or not
+    on_r, off_r = on_recs[0], off_recs[0]
+    # Unchanged structural fields — reuse touches only realized cost.
+    for field in ("completed", "dropped", "admitted"):
+        assert on_r[field] == off_r[field]
+    assert on_r["total_cost_usd"] < off_r["total_cost_usd"]   # lower under reuse
+    # Schema-versioned + PII-free (no free-text payload beyond ids/reasons/counts).
+    assert on_r["schema_version"] == _wf.AUDIT_SCHEMA_VERSION
+    assert set(on_r) == set(off_r)  # identical key set ⇒ schema unchanged across modes
+    assert "prompt" not in json.dumps(on_r)  # produced content never leaks into the audit line
+
+
+def test_determinism_split_parallel_equals_sequential_reuse_on():
+    """AC-WF-012 lineage with reuse ON: a parallel run and a sequential (max_parallel=1) run are
+    byte-identical in their ordered result/drops/completed/cost. Determinism is preserved."""
+    par = _wf.run_workflow(_healing_diamond(), forge_dir=FORGE, feature="t",
+                           max_parallel=8, session_reuse=True,
+                           dispatch_fn=_healing_id_dispatch([]))
+    seq = _wf.run_workflow(_healing_diamond(), forge_dir=FORGE, feature="t",
+                           max_parallel=1, session_reuse=True,
+                           dispatch_fn=_healing_id_dispatch([]))
+    assert par.results == seq.results
+    assert par.completed == seq.completed
+    assert par.dropped == seq.dropped
+    assert par.drops == seq.drops
+    assert par.total_cost_usd == seq.total_cost_usd  # cost order-independent under reuse
+    assert json.dumps(par.results, sort_keys=True) == json.dumps(seq.results, sort_keys=True)
+
+
+def test_stdout_byte_identical_with_reuse_on(monkeypatch):
+    """AC-WF-012 lineage / T-128: reuse writes NO byte to stdout. With narration on and reuse on,
+    stdout is empty and matches the reuse-off run (all cost/audit output stays in stderr/.forge)."""
+    monkeypatch.delenv("FORGE_WF_QUIET", raising=False)
+    _, out_on, _err_on = _capture_run(_healing_diamond(),
+                                      dispatch_fn=_healing_id_dispatch([]), session_reuse=True)
+    _, out_off, _err_off = _capture_run(_healing_diamond(),
+                                        dispatch_fn=_healing_id_dispatch([]), session_reuse=False)
+    assert out_on == ""           # not a single stdout byte from the reuse path
+    assert out_on == out_off      # stdout byte-identical on vs off
