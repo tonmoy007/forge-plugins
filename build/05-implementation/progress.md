@@ -5,14 +5,21 @@
 
 ## Current State
 
-- **v0.6.0 (engine made real I: per-node session reuse) BUILD IN PROGRESS — T-214..T-219.** Drives the
+- **v0.6.0 (engine made real I: per-node session reuse) RELEASED — T-214..T-219.** Drives the
   already-built-but-unused `_background_agent.dispatch(resume=...)` reuse path from the v0.4.0 DAG engine,
   lowering a node's *own* retry/heal re-dispatch floor from `FRESH_FLOOR_USD` to `RESUME_FLOOR_USD` — a
   **cost-reduction** minor with **zero default behavior change** (opt-in `orchestration.session_reuse`,
   default off ⇒ byte-identical to v0.4.x). Within-node reuse only; admission stays `FRESH_FLOOR_USD`
-  (AC-WF-014 unchanged); the independent verifier is never reused (REQ-WF-002). Branch
-  `feat/v0.6.0-session-reuse`. SRS `build/01-srs/srs-v0.6.0.md`, DAG `build/04-plan/task-dag-v0.6.0.md`
-  (T-214..T-219). **T-214..T-218 done; T-219 (release v0.6.0) is next.**
+  (AC-WF-014 unchanged); the independent verifier is never reused (REQ-WF-002); a stale session falls
+  back to fresh within the attempt budget. T-214 toggle + inert `run_workflow` param (`03b08b2`); T-215
+  behavior-preserving `_attempt` 4-tuple session capture (`2a8f9bd`); T-216 within-node reuse + fail-soft
+  fallback (`baa76ed`); T-217 admission/estimator/audit invariance + determinism proofs (`deb4e85`);
+  T-218 ADR-010 + docs (`2486373`). 1776 unit tests green, validate 0, full-pipeline 12/12. Released via
+  T-219: bump 0.6.0, CHANGELOG `[0.6.0]`, manifests 0.6.0; banner/social evergreen (no refresh);
+  PR→develop→main→tag `v0.6.0`→mirror origin+polygon→GitHub releases→delete branch. SRS
+  `build/01-srs/srs-v0.6.0.md`, DAG `build/04-plan/task-dag-v0.6.0.md` (T-214..T-219). **NEXT:** per-branch
+  reuse (trio item 1's deferred half) · trio items 2–3 (top-level generation · pipeline-as-WorkflowSpec) ·
+  caveman mode (orthogonal prompt-compression, candidate v0.6.1).
 
 - **v0.5.0 (unified `~/.forge` graduation layer) RELEASED — T-207..T-213.** Generalizes the
   T-022 lesson promoter into one tier-agnostic core `scripts/_graduation.py` (registry `~/.forge/projects.yaml` ·
