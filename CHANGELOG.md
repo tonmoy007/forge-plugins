@@ -14,6 +14,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] — 2026-06-23
+
+**Engine made real I — per-node session reuse.** The first step of the "engine made real" trio,
+shipped in its safest slice: a **cost reduction with zero default behavior change**. The DAG engine
+dispatched every node as a *fresh* `claude -p` session (~$0.06 cache-creation floor) even though the
+dispatch wrapper already supported `--resume` at the ~$0.01 resume floor and returned each run's
+`session_id` — the engine just threw it away. Now it captures each node's first-attempt session and
+`--resume`s it into **that same node's** retry and heal re-dispatches (same prompt + model), dropping
+their realized floor from `FRESH_FLOOR_USD` to `RESUME_FLOOR_USD`. **Within-node only**: the
+independent verifier is never reused (its fresh-context critique is the point), and cross-node reuse is
+deferred. Admission stays on the fresh floor, so the deterministic admitted/dropped split and the cost
+pre-flight estimator are **identical with reuse on or off** — reuse lowers only *realized* spend. A
+stale/invalid resumed session **falls back to a fresh re-dispatch** within the same attempt budget, so
+reuse can never turn a would-succeed node into a drop. Opt-in and **off by default** (`orchestration.
+session_reuse`, strict `is True`) ⇒ byte-identical to v0.4.x unless enabled. stdlib-only, fail-soft,
+never-raises. ADR-010.
+
+### Added
+- `orchestration.session_reuse` config toggle (bool, default `false`, strict `is True`, fail-soft) and a
+  `session_reuse` parameter on `run_workflow`.
+- Within-node session reuse for a node's retry and verify-heal re-dispatches, with a fail-soft
+  fallback-to-fresh on a stale/invalid session.
+- ADR-010 (per-node session reuse: within-node only, admission stays fresh, default-off) +
+  `references/workflow-engine.md` documentation of the toggle and reuse semantics.
+
+### Changed
+- `_attempt` now surfaces the dispatch `session_id` (4-tuple) so a node's own re-dispatch can resume it;
+  behavior-preserving — every re-dispatch stays fresh with the toggle off.
+
+---
+
 ## [0.5.0] — 2026-06-22
 
 **Unified `~/.forge` graduation layer.** Forge already promoted the best *lessons* across

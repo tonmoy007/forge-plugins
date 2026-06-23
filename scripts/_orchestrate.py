@@ -82,6 +82,7 @@ def fan_out(
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
     output_schema: Optional[dict] = None,
+    session_reuse: bool = False,
 ) -> FanOutResult:
     """Fan `work_items` out across bounded parallel dispatches; return index-ordered,
     validated, deduplicated results. Never raises.
@@ -118,6 +119,8 @@ def fan_out(
         dispatch_fn=adapter,
         claude_bin=claude_bin,
         cwd=cwd,
+        # Threaded for plumbing parity (v0.6.0, REQ-WF-019); inert this task (T-214).
+        session_reuse=session_reuse,
     )
 
     dropped_reasons = list(wf.dropped_reasons)

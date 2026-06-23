@@ -122,12 +122,13 @@ fail-soft table live in [`orchestration-config.md`](orchestration-config.md); th
 | `parallel_build` | bool | `false` | parallel fan-out of independent build tasks |
 | `worktree_isolation` | bool | `false` | each parallel mutating node in its own git worktree |
 | `allow_generated_subdags` | bool | `false` | the validated `decompose` sub-DAG node |
+| `session_reuse` | bool | `false` | within-node `--resume` of a node's own retry/heal re-dispatches (v0.6.0; see *Per-node session reuse* below) |
 | `max_parallel` | int ≥1 | `4` | max concurrent dispatches per wave |
 | `max_total` | int ≥1 | `64` | hard cap on total nodes admitted per run |
 | `max_budget_usd` | float | `null` (no cap) | per-run **admission** ceiling (one floor/node; not realized spend — see above) |
 | `narrate` | bool | `true` | live `[Forge]` stderr narration (v0.4.1); **not** a capability toggle — gates no engine behavior |
 
-The four capability toggles use strict `is True` semantics: a stray `1` / `"yes"` does **not**
+The five capability toggles use strict `is True` semantics: a stray `1` / `"yes"` does **not**
 enable a capability. With every toggle off (the default), behavior matches v0.3.6. `narrate` is
 the one observability control (default **on**); only an explicit `false` silences it, and it
 changes no engine output on stdout (see *Observability* below).
@@ -231,11 +232,14 @@ decompose node is inert and behaves as a plain node — no generation, no childr
 
 ## Cost economics: per-node fresh sessions
 
-Cost is **per-node fresh-session** in v0.4.0. Heterogeneous nodes (distinct prompts/models)
-defeat `--resume` session reuse, so each node pays the fresh-session cache-creation floor.
-The engine charges `_workflow.FRESH_FLOOR_USD`, sourced from `_background_agent.FRESH_FLOOR_USD`
-(currently **`$0.06`**; a resumed dispatch would be `RESUME_FLOOR_USD` `$0.01`) so the admission
-estimate can never drift from the real cost gate.
+Cost is **per-node fresh-session** by default. *Heterogeneous* nodes (distinct prompts/models
+across a DAG) defeat `--resume` session reuse, so each node pays the fresh-session
+cache-creation floor. The engine charges `_workflow.FRESH_FLOOR_USD`, sourced from
+`_background_agent.FRESH_FLOOR_USD` (currently **`$0.06`**; a resumed dispatch is
+`RESUME_FLOOR_USD` `$0.01`) so the admission estimate can never drift from the real cost gate.
+The one safe exception — a node's **own** retry/heal re-dispatch, which is the *same prompt and
+model* — is the opt-in `session_reuse` capability below; even with it on, **admission still
+charges the fresh floor** (reuse lowers only realized spend, never the admitted set).
 
 **Sizing rule.** `FRESH_FLOOR_USD × node_count` must fit the budget. A run is bounded by three
 knobs: `max_total` (node count), `max_budget_usd` (per-run spend), and the `_cost_cap` daily cap
@@ -246,6 +250,37 @@ pre-allocation), so cap pressure always drops the *same* fixed set, never a thre
 
 `max_budget_usd` and `resume` are threaded from `run_workflow` into every node's `dispatch`
 call: the CLI enforces the per-dispatch ceiling and reuses the given session when one is passed.
+
+## Per-node session reuse (`session_reuse`, v0.6.0)
+
+A node that **fails and retries**, or **fails verification and heals**, re-dispatches the *same
+prompt with the same model* — so its second/third dispatch can `--resume` the first attempt's
+session (a cache read at `RESUME_FLOOR_USD` `$0.01`) instead of paying a second
+`FRESH_FLOOR_USD` `$0.06`. With `session_reuse` on, the engine captures each node's first-attempt
+`session_id` and threads it as `resume=<id>` into **that same node's** retry and heal
+re-dispatches, via a per-attempt copy (`{**kwargs, "resume": sid}`) that never mutates the shared
+kwargs. This is a **cost-only** optimization with strict guardrails (ADR-010):
+
+- **Within-node only.** Reuse never crosses node boundaries; a dependent node never resumes a
+  dependency's session (heterogeneous prompts/models defeat `--resume`). Per-branch/cross-node
+  reuse is a deferred, measurement-gated follow-up.
+- **The verifier is never reused.** The independent verifier always dispatches **fresh** — its
+  fresh-context independence is the point (REQ-WF-002); `_verify.run_verify` forces
+  `resume=None` even if the node's kwargs carry one.
+- **Admission stays on `FRESH_FLOOR_USD`.** `_preallocate` and `estimate_admission` charge the
+  fresh floor regardless of reuse, so the admitted/dropped split — and the
+  estimator-equals-run-drops invariant (AC-WF-014) — are **identical with reuse on or off**.
+  Reuse only makes the realized run cheaper than the estimate.
+- **Fallback to fresh on a stale session.** A resumed re-dispatch that returns a non-`ok` status
+  (stale/invalid session) triggers **one fresh fallback re-dispatch within the same attempt
+  budget**, so reuse can never turn a would-succeed node into a drop. Fail-soft, never-raises.
+- **Default-off ⇒ byte-identical to v0.4.x.** The toggle is strict `is True` (a stray `1`/`"yes"`
+  stays off); with it off no session is captured and every re-dispatch is fresh, so the engine's
+  ordered result/drops/summary and its (empty) stdout are unchanged. The T-203 `events.jsonl`
+  `workflow_run` line stays exactly one schema-versioned, PII-free record per run — reuse shows up
+  only as a **lower `total_cost_usd`**.
+
+See **[ADR-010](../build/02-architecture/adr/010-session-reuse.md)** for the full decision record.
 
 ## Observability (v0.4.1)
 
