@@ -15,6 +15,9 @@ on:
       target:
         description: "Commit SHA or ref to tag (the release commit on main)"
         required: true
+      title:
+        description: "Release title (defaults to the tag, e.g. v0.6.0)"
+        required: false
 
 permissions:
   contents: write
@@ -54,14 +57,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
           TARGET: ${{ inputs.target }}
+          TITLE: ${{ inputs.title }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists — nothing to do."
             exit 0
           fi
+          # Title defaults to the tag when the optional `title` input is omitted, so the
+          # release name is never a stale hard-coded theme. Read from an env var (never inline
+          # ${{ }}) so a dispatcher-supplied title can't inject into the shell.
           gh release create "$TAG" \
             --target "$TARGET" \
-            --title "$TAG — operable engine" \
+            --title "${TITLE:-$TAG}" \
             --notes-file release-notes.md
-          echo "Created release $TAG at $TARGET"
+          echo "Created release $TAG at $TARGET (title: ${TITLE:-$TAG})"
