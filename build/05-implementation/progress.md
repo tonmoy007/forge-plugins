@@ -5,6 +5,15 @@
 
 ## Current State
 
+- **v0.6.0 (engine made real I: per-node session reuse) BUILD IN PROGRESS — T-214..T-219.** Drives the
+  already-built-but-unused `_background_agent.dispatch(resume=...)` reuse path from the v0.4.0 DAG engine,
+  lowering a node's *own* retry/heal re-dispatch floor from `FRESH_FLOOR_USD` to `RESUME_FLOOR_USD` — a
+  **cost-reduction** minor with **zero default behavior change** (opt-in `orchestration.session_reuse`,
+  default off ⇒ byte-identical to v0.4.x). Within-node reuse only; admission stays `FRESH_FLOOR_USD`
+  (AC-WF-014 unchanged); the independent verifier is never reused (REQ-WF-002). Branch
+  `feat/v0.6.0-session-reuse`. SRS `build/01-srs/srs-v0.6.0.md`, DAG `build/04-plan/task-dag-v0.6.0.md`
+  (T-214..T-219). **T-214 done; T-215 (`_attempt` session capture) is next.**
+
 - **v0.5.0 (unified `~/.forge` graduation layer) RELEASED — T-207..T-213.** Generalizes the
   T-022 lesson promoter into one tier-agnostic core `scripts/_graduation.py` (registry `~/.forge/projects.yaml` ·
   `write_atomic` · 30-day `is_stale` TTL · idempotent `merge_by_key` · `Tier` protocol collect/gate/key/promote/recall ·
@@ -150,6 +159,17 @@
 - **Workflow**: branch from `main` → PR into `develop` → test → merge `develop→main`
   → tag from `main`. Two remotes kept in sync: `origin` + `polygon`.
 - **Last hotfix**: v0.1.5.1 — PyYAML fail-soft guard in the 6 active hooks.
+
+## v0.6.0 Task Status
+
+> DAG: `build/04-plan/task-dag-v0.6.0.md` (T-214..T-219). SRS `build/01-srs/srs-v0.6.0.md`.
+> Per-node within-node session reuse — drive the existing `dispatch(resume=...)` path from the
+> engine; opt-in toggle (default off ⇒ byte-identical to v0.4.x); admission stays `FRESH_FLOOR_USD`;
+> verifier never reused. Branch `feat/v0.6.0-session-reuse`.
+
+| Task | Status | Notes |
+|------|--------|-------|
+| T-214 | 🟢 done | `session_reuse` config toggle + inert `run_workflow` param (REQ-WF-019, NF-038, NF-040). Added `session_reuse: bool = False` to `OrchestrationConfig` **and** `_TOGGLES` in `scripts/_workflow_config.py` (strict `is True`, fail-soft — a stray `1`/`"yes"` stays off; absent/malformed → off; mirrors `flows_enabled` & siblings). Added `session_reuse: bool = False` kwarg to `run_workflow` (`scripts/_workflow.py`) — **inert this task** (no node `--resume`s a prior same-node attempt) so engine output is **byte-identical to v0.4.x** with it on or off; threaded into the nested decompose `run_kwargs` for recursive parity. Config value threaded through `scripts/parallel_build.py` (both `run_workflow` call sites) and `scripts/_orchestrate.py` (`fan_out` → inner `run_workflow`); `scripts/workflow_loader.py` `flow_estimate` carries a load-bearing comment that `session_reuse` is **deliberately not** an admission/estimator input (AC-WF-014 preserved, REQ-WF-020). TDD red-first (8 tests RED on missing attr/`_TOGGLES` membership/`TypeError`, then GREEN). +11 tests (6 config: defaults-off ×2, true-enables, strict-bool, `_TOGGLES` membership, toggle-independence; 5 workflow: param-accepted-inert, defaults-off, on==off byte-identical). Full unit suite **1746 pass**; `validate-plugin.py` exit 0; caller-chain suites (orchestrate/parallel_build/workflow_loader) 66 pass. |
 
 ## v0.5.0 Task Status
 

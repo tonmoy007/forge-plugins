@@ -259,6 +259,7 @@ def _run_plain(
         max_total=getattr(config, "max_total", _wf.DEFAULT_MAX_TOTAL),
         max_budget_usd=getattr(config, "max_budget_usd", None),
         resume=resume,
+        session_reuse=getattr(config, "session_reuse", False),
         dispatch_fn=dispatch_fn,
         claude_bin=claude_bin,
         cwd=cwd,
@@ -305,7 +306,8 @@ def _run_isolated(
             max_parallel=config.max_parallel,
             max_total=getattr(config, "max_total", _wf.DEFAULT_MAX_TOTAL),
             max_budget_usd=getattr(config, "max_budget_usd", None),
-            resume=resume, dispatch_fn=dispatch_fn, claude_bin=claude_bin,
+            resume=resume, session_reuse=getattr(config, "session_reuse", False),
+            dispatch_fn=dispatch_fn, claude_bin=claude_bin,
             narrator=narrator,
             # The inner fan-out is part of THIS build run — it must not write its own audit
             # line; the single post-merge record is written below (exactly one per run).

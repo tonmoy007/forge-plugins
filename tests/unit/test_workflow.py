@@ -172,6 +172,50 @@ def test_budget_defaults_none_when_unset() -> None:
         assert call["resume"] is None
 
 
+# --------------------------------------------------------------------------- #
+# T-214 (REQ-WF-019 / NF-040) — `session_reuse` is accepted as an inert kwarg this task:
+# it must NOT yet alter any dispatch (no per-node reuse behavior until T-216), so the
+# engine output is byte-identical with it set on or off.
+# --------------------------------------------------------------------------- #
+
+
+def test_session_reuse_param_accepted_and_inert() -> None:
+    """run_workflow accepts session_reuse=True but it changes nothing this task: every
+    node still dispatches fresh (resume=None), no extra/fewer dispatches."""
+    recorded: list = []
+    res = _wf.run_workflow(
+        _diamond(), forge_dir=FORGE, feature="t",
+        session_reuse=True, dispatch_fn=_spy_dispatch(recorded),
+    )
+    assert res.completed == 4
+    assert len(recorded) == 4  # one dispatch per node, no reuse-driven re-dispatch
+    for call in recorded:
+        assert call["resume"] is None  # inert: no session threaded from a prior attempt
+
+
+def test_session_reuse_defaults_off() -> None:
+    """Backward-compat: omitting session_reuse defaults it off; no dispatch resumes."""
+    recorded: list = []
+    _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                     dispatch_fn=_spy_dispatch(recorded))
+    for call in recorded:
+        assert call["resume"] is None
+
+
+def test_session_reuse_on_off_byte_identical() -> None:
+    """AC-WF-019 lineage: with reuse on vs off, the engine's ordered result/drops/summary
+    is byte-identical (the param is inert this task)."""
+    on = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                          max_parallel=8, session_reuse=True, dispatch_fn=_echo_dispatch)
+    off = _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                           max_parallel=8, session_reuse=False, dispatch_fn=_echo_dispatch)
+    assert on.results == off.results
+    assert on.completed == off.completed
+    assert on.dropped == off.dropped
+    assert on.dropped_reasons == off.dropped_reasons
+    assert on.total_cost_usd == off.total_cost_usd
+
+
 def test_budget_exhausted_fanout_drops_deterministic_set() -> None:
     """REQ-NF-029: when max_budget_usd admits only k of N fan-out nodes, the SAME k
     (lowest ids in topological order) are admitted on every run — independent of thread

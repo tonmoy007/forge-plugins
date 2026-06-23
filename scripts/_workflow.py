@@ -651,6 +651,7 @@ def run_workflow(
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
     allow_generated_subdags: bool = False,
+    session_reuse: bool = False,
     name: Optional[str] = None,
     narrator: Optional["_Narrator"] = None,
     audit: bool = True,
@@ -674,6 +675,11 @@ def run_workflow(
     that is admitted via `validate_spec` + node-count cap + token-budget proxy *before* any child
     dispatches; a rejected/garbage/failed generation runs the deterministic fallback. With the
     toggle off (default) such a node behaves as a plain node — no generation, no children.
+
+    Per-node session reuse (v0.6.0, REQ-WF-019): `session_reuse` is accepted and threaded but
+    **inert this release-task (T-214)** — no node yet `--resume`s a prior same-node attempt, so
+    the engine's output is byte-identical with it on or off. T-216 consumes it. Admission stays
+    on `FRESH_FLOOR_USD` regardless (REQ-WF-020), so reuse never alters the admitted/dropped split.
     """
     dispatch_fn = dispatch_fn or _background_agent.dispatch
     nodes = list(getattr(spec, "nodes", []) or [])
@@ -788,6 +794,8 @@ def run_workflow(
                     "max_budget_usd": max_budget_usd, "claude_bin": claude_bin,
                     "cwd": node.cwd if node.cwd is not None else cwd,
                     "allow_generated_subdags": allow_generated_subdags,
+                    # Inherit the reuse toggle into child sub-DAGs (inert this task, T-214).
+                    "session_reuse": session_reuse,
                     # Nested child run is part of THIS run — it must not write its own audit
                     # line (exactly one record per top-level run, REQ-WF-012).
                     "audit": False,
