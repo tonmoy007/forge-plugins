@@ -395,17 +395,58 @@ def _run_verify(node: WorkflowNode, obj, dispatch_fn, kwargs) -> tuple:
     return (not _verify.verdict_failed(res)), cost
 
 
-def _run_node(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
+def _reuse_attempt(
+    node: WorkflowNode, prompt: str, dispatch_fn, kwargs, *, session_reuse: bool, sid,
+) -> tuple:
+    """One same-node re-dispatch (retry or heal) with within-node session reuse (REQ-WF-017/018).
+
+    Returns the `_attempt` 4-tuple `(obj, reason, cost, session_id)` plus the realized cost.
+    When `session_reuse` is on and a prior same-node `sid` exists, the re-dispatch resumes it via
+    a **per-attempt copy** `{**kwargs, "resume": sid}` — the shared `kwargs` dict is never mutated
+    (it still flows to the fresh verifier). A resumed re-dispatch that returns a non-`ok` status
+    (stale/invalid session ⇒ no parsed obj AND no new session) **falls back to one fresh
+    re-dispatch within the same attempt budget** (REQ-WF-018), so reuse can never turn a
+    would-succeed node into a drop. With reuse off (or no `sid`), the original `kwargs` flow
+    through unchanged — byte-identical to v0.4.x (the run-level `resume` token is preserved).
+    Never raises.
+    """
+    if not (session_reuse and sid):
+        obj, reason, cost, new_sid = _attempt(node, prompt, dispatch_fn, kwargs)
+        return obj, reason, cost, new_sid
+
+    resumed = {**kwargs, "resume": sid}  # per-attempt copy — never mutate the shared dict (R-1)
+    obj, reason, cost, new_sid = _attempt(node, prompt, dispatch_fn, resumed)
+    # A stale/invalid resumed session surfaces as a no-session failure (the dispatch returned a
+    # non-`ok` status, so `_attempt` yields obj=None AND new_sid=None). Fall back to a single fresh
+    # re-dispatch within the same attempt budget; an ok-but-unparseable/validation-failed result
+    # (new_sid set) is a genuine retry case, not a stale session, so it does not fall back.
+    if obj is None and new_sid is None:
+        f_obj, f_reason, f_cost, f_sid = _attempt(node, prompt, dispatch_fn, kwargs)
+        return f_obj, f_reason, cost + f_cost, f_sid
+    return obj, reason, cost, new_sid
+
+
+def _run_node(node: WorkflowNode, prompt: str, dispatch_fn, kwargs,
+              session_reuse: bool = False) -> tuple:
     """Dispatch a node with one retry on failure, then (if `node.verify` is set) gate the result
     with a fresh-session verdict and one bounded heal attempt. Returns (obj_or_None, reason,
-    total_cost). Never raises."""
-    # `_attempt` returns a 4-tuple `(obj, reason, cost, session_id)` (REQ-WF-016). T-215 is the
-    # behavior-preserving capture refactor: the session id is unpacked and **ignored** here, so
-    # every re-dispatch stays fresh and the engine is byte-identical to v0.4.x. T-216 consumes it.
-    obj, reason, cost, _session_id = _attempt(node, prompt, dispatch_fn, kwargs)
+    total_cost). Never raises.
+
+    Within-node session reuse (REQ-WF-017, T-216): when `session_reuse` is on, the node's own
+    retry and heal re-dispatches `--resume` the **most-recent captured `session_id`** (lowering
+    their realized floor from `FRESH_FLOOR_USD` to `RESUME_FLOOR_USD`) via a per-attempt kwargs
+    copy that never mutates the shared dict — so the independent verifier (which reads the same
+    `kwargs` through `_run_verify`/`_verify.run_verify`) still dispatches fresh (REQ-WF-002). With
+    reuse off the param is inert and every re-dispatch is fresh — byte-identical to v0.4.x.
+    """
+    # `_attempt` returns a 4-tuple `(obj, reason, cost, session_id)` (REQ-WF-016). Track the newest
+    # non-None same-node session so each re-dispatch resumes the most recent context.
+    obj, reason, cost, session_id = _attempt(node, prompt, dispatch_fn, kwargs)
     if obj is None:
-        obj, reason, cost2, _session_id = _attempt(node, prompt, dispatch_fn, kwargs)  # retry once
+        obj, reason, cost2, retry_sid = _reuse_attempt(  # retry once
+            node, prompt, dispatch_fn, kwargs, session_reuse=session_reuse, sid=session_id)
         cost += cost2
+        session_id = retry_sid or session_id
         if obj is None:
             return None, reason, cost
 
@@ -413,7 +454,8 @@ def _run_node(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
         return obj, None, cost
 
     # Per-node verification (REQ-WF-002): fresh-session verdict; on a clean `fail`, make one
-    # bounded heal (re-dispatch + re-verify) before dropping. Heal economics are per-node fresh.
+    # bounded heal (re-dispatch + re-verify) before dropping. The heal re-dispatch reuses the
+    # node's session under `session_reuse`; the verifier is always fresh.
     passed, vcost = _run_verify(node, obj, dispatch_fn, kwargs)
     cost += vcost
     if passed:
@@ -422,8 +464,10 @@ def _run_node(node: WorkflowNode, prompt: str, dispatch_fn, kwargs) -> tuple:
     attempts = 0
     while _verify.should_heal(attempts, _NODE_HEAL_ATTEMPTS):
         attempts += 1
-        healed, hreason, hcost, _session_id = _attempt(node, prompt, dispatch_fn, kwargs)
+        healed, hreason, hcost, heal_sid = _reuse_attempt(
+            node, prompt, dispatch_fn, kwargs, session_reuse=session_reuse, sid=session_id)
         cost += hcost
+        session_id = heal_sid or session_id
         if healed is None:
             return None, f"verify failed; heal dispatch failed: {hreason}", cost
         passed, vcost = _run_verify(node, healed, dispatch_fn, kwargs)
@@ -816,7 +860,8 @@ def run_workflow(
                 }
                 return pool.submit(_run_decompose, node, prompt, dispatch_fn,
                                    node_kwargs, run_kwargs)
-            return pool.submit(_run_node, node, prompt, dispatch_fn, node_kwargs)
+            return pool.submit(_run_node, node, prompt, dispatch_fn, node_kwargs,
+                               session_reuse)
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {_submit(pool, node, prompt): node.id for node, prompt in prepared}

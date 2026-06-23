@@ -1102,3 +1102,222 @@ def test_run_node_unpacks_attempt_and_behavior_unchanged() -> None:
     assert obj == {"prompt": "hello"}
     assert reason is None
     assert cost == 0.06
+
+
+# --------------------------------------------------------------------------- #
+# REQ-WF-017/018, AC-WF-017/018/019 — within-node session reuse (T-216).
+# When `session_reuse` is on, a node threads its first-attempt session_id into
+# its OWN retry/heal re-dispatches (per-attempt `{**kwargs, "resume": sid}` copy,
+# never mutating the shared kwargs that flows to the fresh verifier). A reused
+# re-dispatch that returns a non-ok status (stale session) falls back to ONE fresh
+# re-dispatch within the same attempt budget. Toggle off ⇒ byte-identical.
+# All exercised via an injected fake dispatch_fn returning deterministic session
+# ids — no real spend.
+# --------------------------------------------------------------------------- #
+
+_bg = sys.modules["_background_agent"]  # loaded transitively when _workflow imports it
+FRESH = _bg.FRESH_FLOOR_USD
+RESUME = _bg.RESUME_FLOOR_USD
+
+
+def _reuse_dispatch(recorded: list, *, node_results, verdicts=None, session_prefix="sess"):
+    """Fake dispatch_fn mirroring the real wrapper's reuse cost model.
+
+    - A verifier prompt ("INDEPENDENT verifier") pops the next verdict from `verdicts`.
+    - A node prompt pops the next envelope spec from `node_results`; each spec is a dict
+      with keys: `status` (default "ok"), `result` (JSON string or sentinel), optional
+      `is_error`. Successful (`ok` + parseable, no is_error) dispatches mint a fresh,
+      monotonically-numbered `session_id` so we can assert *which* id a re-dispatch resumes.
+    - Cost is `RESUME_FLOOR_USD` when called with `resume=<truthy>`, else `FRESH_FLOOR_USD`
+      — exactly the real `_background_agent.dispatch` floor logic, so realized cost is
+      observable from the recorded calls.
+    """
+    node_seq = list(node_results)
+    vseq = list(verdicts or [])
+    counter = {"n": 0}
+
+    def dispatch(prompt, **kwargs):
+        recorded.append({"prompt": prompt, **kwargs})
+        if "INDEPENDENT verifier" in prompt:
+            v = vseq.pop(0) if vseq else "pass"
+            return SimpleNamespace(status="ok", reason="", result=json.dumps({"verdict": v}),
+                                   cost_usd=0.003)
+        spec = node_seq.pop(0) if node_seq else {"status": "ok", "result": '{"ok": true}'}
+        status = spec.get("status", "ok")
+        cost = RESUME if kwargs.get("resume") else FRESH
+        sid = None
+        if status == "ok" and not spec.get("is_error"):
+            counter["n"] += 1
+            sid = f"{session_prefix}-{counter['n']}"
+        return SimpleNamespace(status=status, result=spec.get("result"),
+                               cost_usd=cost, raw={"is_error": spec.get("is_error", False)},
+                               session_id=sid)
+
+    return dispatch
+
+
+def _node_dispatches(recorded):
+    return [c for c in recorded if "INDEPENDENT verifier" not in c["prompt"]]
+
+
+def _verifier_dispatches(recorded):
+    return [c for c in recorded if "INDEPENDENT verifier" in c["prompt"]]
+
+
+def test_reuse_heal_redispatch_resumes_first_session_and_verifier_fresh() -> None:
+    """AC-WF-017: with reuse on, a node that succeeds, fails verify, then heals has its
+    heal re-dispatch carry `resume=<first session id>` at RESUME_FLOOR cost, while every
+    verifier dispatch stays fresh (no resume)."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(
+        recorded,
+        node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],  # first + heal both ok
+        verdicts=["fail", "pass"],  # first verdict fails → heal, re-verify passes
+    )
+    res = _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t",
+                           session_reuse=True, dispatch_fn=dispatch)
+    assert res.completed == 1 and res.dropped == 0
+    nodes = _node_dispatches(recorded)
+    assert len(nodes) == 2                       # first attempt + one heal
+    assert nodes[0].get("resume") is None        # first attempt fresh
+    assert nodes[1]["resume"] == "sess-1"        # heal resumes the first session
+    for vc in _verifier_dispatches(recorded):
+        assert vc["resume"] is None              # verifier never reused (REQ-WF-002)
+
+
+def test_reuse_heal_realized_cost_lower_than_fresh() -> None:
+    """The heal re-dispatch is charged RESUME_FLOOR, not a second FRESH_FLOOR."""
+    rec_on: list = []
+    _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t", session_reuse=True,
+                     dispatch_fn=_reuse_dispatch(rec_on,
+                                                 node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],
+                                                 verdicts=["fail", "pass"]))
+    rec_off: list = []
+    _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t", session_reuse=False,
+                     dispatch_fn=_reuse_dispatch(rec_off,
+                                                 node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],
+                                                 verdicts=["fail", "pass"]))
+    heal_on = _node_dispatches(rec_on)[1]
+    heal_off = _node_dispatches(rec_off)[1]
+    # The fake reports RESUME cost iff called with resume — reuse ⇒ cheaper heal.
+    assert heal_on["resume"] == "sess-1"
+    assert heal_off["resume"] is None
+
+
+def test_reuse_retry_on_ok_unparseable_resumes_first_session() -> None:
+    """AC-WF-017: a node whose first attempt is `status="ok"` but unparseable (a real
+    resumable session exists) and then succeeds on retry has its retry `--resume` the
+    first session."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"status": "ok", "result": "not json at all"},  # ok but unparseable → session minted
+        {"status": "ok", "result": '{"ok": true}'},      # retry succeeds
+    ])
+    obj, reason, cost = _wf._run_node(_bare_node(), "p", dispatch, {"resume": None},
+                                      session_reuse=True)
+    assert obj == {"ok": True}
+    nodes = _node_dispatches(recorded)
+    assert nodes[0]["resume"] is None
+    assert nodes[1]["resume"] == "sess-1"     # retry resumes the ok-but-unparseable session
+
+
+def test_reuse_retry_after_hard_error_stays_fresh() -> None:
+    """AC-WF-017: a first attempt that returns `status="error"` returns NO session, so the
+    retry is dispatched fresh (nothing to resume) — reuse correctly does not invent a session."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"status": "error", "result": None},        # hard error → no session
+        {"status": "ok", "result": '{"ok": true}'},  # retry fresh, succeeds
+    ])
+    obj, reason, cost = _wf._run_node(_bare_node(), "p", dispatch, {"resume": None},
+                                      session_reuse=True)
+    assert obj == {"ok": True}
+    nodes = _node_dispatches(recorded)
+    assert nodes[0]["resume"] is None
+    assert nodes[1]["resume"] is None         # nothing to resume → still fresh
+
+
+def test_reuse_stale_session_falls_back_to_fresh_within_budget() -> None:
+    """AC-WF-018: a reused heal re-dispatch that returns `status="error"` (stale/invalid
+    session) triggers ONE fresh fallback re-dispatch within the same attempt budget; the node
+    still completes, no exception escapes, and no spurious drop reason is recorded."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"status": "ok", "result": '{"v": 1}'},     # first attempt ok → session sess-1
+        {"status": "error", "result": None},         # heal w/ resume=sess-1 → stale (error)
+        {"status": "ok", "result": '{"v": 2}'},      # fresh fallback heal → ok
+    ], verdicts=["fail", "pass"])  # first verdict fails → heal; re-verify after fallback passes
+    res = _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t",
+                           session_reuse=True, dispatch_fn=dispatch)
+    assert res.completed == 1 and res.dropped == 0
+    assert res.dropped_reasons == []
+    nodes = _node_dispatches(recorded)
+    assert len(nodes) == 3                       # first + stale-resume heal + fresh fallback
+    assert nodes[1]["resume"] == "sess-1"        # reused (stale) attempt
+    assert nodes[2]["resume"] is None            # fallback is fresh
+
+
+def test_reuse_stale_fallback_also_fails_drops_with_clean_reason() -> None:
+    """The fallback is bounded: if the fresh fallback ALSO fails the node drops with the normal
+    heal-failure reason — never raises, no extra attempts beyond the budget."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"status": "ok", "result": '{"v": 1}'},   # first ok → sess-1
+        {"status": "error", "result": None},        # stale resume heal
+        {"status": "error", "result": None},        # fresh fallback also fails
+    ], verdicts=["fail"])
+    res = _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t",
+                           session_reuse=True, dispatch_fn=dispatch)
+    assert res.completed == 0 and res.dropped == 1
+    assert any("heal" in r.lower() for r in res.dropped_reasons)
+    nodes = _node_dispatches(recorded)
+    assert len(nodes) == 3                       # first + stale heal + one fresh fallback only
+
+
+def test_reuse_off_no_resume_from_prior_attempt() -> None:
+    """AC-WF-019: with `session_reuse` off, no node dispatch carries a resume derived from a
+    prior same-node attempt — every retry/heal stays fresh (byte-identical to v0.4.x)."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded,
+                               node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],
+                               verdicts=["fail", "pass"])
+    _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t",
+                     session_reuse=False, dispatch_fn=dispatch)
+    for c in _node_dispatches(recorded):
+        assert c.get("resume") is None
+
+
+def test_reuse_off_preserves_run_level_resume_on_redispatch() -> None:
+    """With reuse off, the run-level `resume` token still threads into EVERY node dispatch
+    unchanged (the v0.4.x blunt run-level knob is untouched) — reuse-off must not strip it."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded,
+                               node_results=[{"result": '{"v": 1}'}, {"result": '{"v": 2}'}],
+                               verdicts=["fail", "pass"])
+    _wf.run_workflow(_verify_spec(), forge_dir=FORGE, feature="t", resume="RUN-LEVEL",
+                     session_reuse=False, dispatch_fn=dispatch)
+    for c in _node_dispatches(recorded):
+        assert c["resume"] == "RUN-LEVEL"     # run-level session preserved on first + heal
+
+
+def test_reuse_does_not_mutate_shared_kwargs() -> None:
+    """R-1: the per-attempt copy `{**kwargs, "resume": sid}` must never mutate the shared
+    kwargs dict the caller still holds (it flows on to the fresh verifier)."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"result": '{"v": 1}'}, {"result": '{"v": 2}'}], verdicts=["fail", "pass"])
+    shared = {"resume": None}
+    _wf._run_node(_verify_spec().nodes[0], "p", dispatch, shared, session_reuse=True)
+    assert shared["resume"] is None           # untouched after retry/heal reuse
+
+
+def test_run_node_session_reuse_defaults_off_byte_identical() -> None:
+    """`_run_node` defaults `session_reuse=False`; called positionally as v0.4.x did, a healing
+    node re-dispatches fresh — byte-identical behavior to before T-216."""
+    recorded: list = []
+    dispatch = _reuse_dispatch(recorded, node_results=[
+        {"result": '{"v": 1}'}, {"result": '{"v": 2}'}], verdicts=["fail", "pass"])
+    obj, reason, cost = _wf._run_node(_verify_spec().nodes[0], "p", dispatch, {"resume": None})
+    assert reason is None
+    for c in _node_dispatches(recorded):
+        assert c.get("resume") is None
