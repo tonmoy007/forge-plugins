@@ -5,6 +5,22 @@
 
 ## Current State
 
+- **v0.6.1 (caveman mode → static prompt tightening only) LANDING — T-220..T-226.** Investigated the
+  `caveman` token-reduction approach. The one stdlib-legal lever (a terse-output preamble at the dispatch
+  chokepoint) was **built behind a default-off `orchestration.caveman_mode` toggle (T-220 config `b49ef00`,
+  T-221 `hooks/_caveman.py` `02464d0`, T-222 chokepoint + engine wiring `52bc5d1`) and measured** against
+  the `_cost_cap` output-token ledger per the REQ-CM-005 gate. A real before/after on the Dreamer
+  free-prose prompt (`haiku`, N=5/arm, actual `usage.output_tokens`) showed **mean −52.9%** — no saving,
+  well under the ≥10% bar (Forge's free-prose prompts are already length-bounded). **Decision (T-224
+  `475cf5a`): DROP the runtime toggle** — reverted T-220/T-221/T-222 (dispatch/engine/config byte-identical
+  to v0.6.0); **kept T-223 `550851e`** = deterministic static tightening of verbose non-verdict prompt
+  constants (`dreamer`/`autopilot`/`parallel_build`; verify/skeptic/gate/observer untouched). T-225 ADR-011
+  + ROADMAP/progress docs. The measurement gate worked as designed: it stopped a token-reduction feature
+  that didn't reduce tokens. 1783 unit tests green, validate 0, full-pipeline 12/12. Data:
+  `build/06-evaluation/v0.6.1-caveman-measurement.md`. **NEXT:** T-226 release (bump 0.6.1, CHANGELOG,
+  PR→develop→main→tag→mirror both remotes→GitHub releases→delete branch). SRS `build/01-srs/srs-v0.6.1.md`,
+  DAG `build/04-plan/task-dag-v0.6.1.md`.
+
 - **v0.6.0 (engine made real I: per-node session reuse) RELEASED — T-214..T-219.** Drives the
   already-built-but-unused `_background_agent.dispatch(resume=...)` reuse path from the v0.4.0 DAG engine,
   lowering a node's *own* retry/heal re-dispatch floor from `FRESH_FLOOR_USD` to `RESUME_FLOOR_USD` — a
