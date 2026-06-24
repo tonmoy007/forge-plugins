@@ -430,3 +430,18 @@ def test_run_returns_correct_shape(tmp_path: Path) -> None:
     assert isinstance(result["consolidation_used"], bool)
     # Duplicate pair should be flagged
     assert len(result["duplicates"]) >= 1
+
+
+# --- T-223 (REQ-CM-004): static tightening of the free-prose consolidation prompt -----------
+
+def test_consolidation_prompt_tightened_keeps_output_spec():
+    # Pure filler dropped; the output spec (one short paragraph, 3-5 sentences, terse, no bullets)
+    # is preserved. Deterministic — no toggle.
+    p = _drm._CONSOLIDATION_PROMPT
+    assert "Forge's Dreamer" in p
+    assert "3-5 sentences" in p
+    assert "Terse and concrete" in p
+    assert "No bullet lists" in p
+    # dropped filler:
+    assert "You have just completed a lesson consolidation run" not in p
+    assert "Provide a single short paragraph" not in p

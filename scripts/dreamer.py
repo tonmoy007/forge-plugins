@@ -50,9 +50,9 @@ _DREAMER_STAGE = 9
 _NEGATION_TOKENS = frozenset({"never", "don't", "do not", "avoid", "no"})
 
 _CONSOLIDATION_PROMPT = (
-    "You are Forge's Dreamer. You have just completed a lesson consolidation run. "
-    "Provide a single short paragraph (3-5 sentences) summarising what the consolidation "
-    "found and any patterns worth noting. Be terse and concrete. No bullet lists."
+    "You are Forge's Dreamer, reporting a just-completed lesson consolidation. "
+    "Write one short paragraph (3-5 sentences): what it found and any patterns worth "
+    "noting. Terse and concrete. No bullet lists."
 )
 
 

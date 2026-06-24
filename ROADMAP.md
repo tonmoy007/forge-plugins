@@ -166,6 +166,7 @@ producing all 12 stage artifacts with traceability intact. ✅
 | **v0.4.1** | 🟢 released | **Operable engine** (hardening, **zero semantic change**) — make the shipped v0.4.0 engine observable + cost-predictable: live `[Forge]` **stderr narration** (stdout byte-identical), one structured **`.forge/events.jsonl`** audit line per run, a **pure cost pre-flight estimator** over the existing deterministic admission set (surfaced in `/forge:flow` before dispatch, loud at a runtime drop), and a dogfood **`.forge/workflows/doc-review.yaml`** + a parallel-build integration test. Tag `v0.4.1`, origin. SRS `build/01-srs/srs-v0.4.1.md`, DAG `build/04-plan/task-dag-v0.4.1.md` (T-202–T-206). |
 | **v0.5.0** | 🟢 released | **Unified `~/.forge` graduation layer** — generalizes the T-022 lesson promoter into one tier-agnostic core (`scripts/_graduation.py`: registry · atomic IO · 30-day TTL · idempotent keyed merge · `Tier` protocol · fail-soft `graduate()` driver), then adds **skills** and **workflows** tiers behind **per-tier gates** (breadth for lessons; approved + ExpeL `weight>0` + `use≥2` for skills; validates-clean + ≥2 successful `workflow_run` records for workflows). **Project-wins** recall in every tier; skill recall = **symlink** (ADR-009), workflows recall via the loader search path. Automatic, silent, fail-soft at session-start (`FORGE_NO_GRADUATE=1` escape); new `/forge:graduate` (dry-run / list / scan). Behavior-preserving for lessons. ADR-008 + ADR-009. Tag `v0.5.0`, both remotes. SRS `build/01-srs/srs-v0.5.0.md`, DAG `build/04-plan/task-dag-v0.5.0.md` (T-207–T-213). |
 | **v0.6.0** | 🟢 released | **Engine made real I — per-node session reuse** (cost-reduction, **zero default behavior change**). Drives the already-built-but-unused `_background_agent.dispatch(resume=...)` path from the v0.4.0 DAG engine: capture each node's first-attempt `session_id` and `--resume` it into **that same node's** retry/heal re-dispatches (same prompt + model), lowering their realized floor from `FRESH_FLOOR_USD` `$0.06` to `RESUME_FLOOR_USD` `$0.01`. **Within-node only**; the independent verifier is **never** reused (REQ-WF-002); admission stays on `FRESH_FLOOR_USD` so the estimator/admitted-set split is identical on vs off (AC-WF-014); a stale session **falls back to fresh** within the attempt budget. Opt-in `orchestration.session_reuse` (strict `is True`, default off ⇒ byte-identical to v0.4.x). ADR-010. **Deferred follow-ups**: per-branch/cross-node reuse (trio item 1's other half, measurement-gated), trio items 2–3 (top-level generation · pipeline-as-WorkflowSpec), and **caveman mode** (orthogonal prompt-compression, candidate v0.6.1). ADR-010. Tag `v0.6.0`, both remotes. SRS `build/01-srs/srs-v0.6.0.md`, DAG `build/04-plan/task-dag-v0.6.0.md` (T-214–T-219). |
+| **v0.6.1** | 🟢 released | **Caveman mode — measured and rejected; static prompt tightening only** (**zero default behavior change**). Investigated the `caveman` token-reduction approach: the one stdlib-legal lever (a terse-output preamble at the dispatch chokepoint) was built behind a default-off `orchestration.caveman_mode` toggle and **measured** against the `_cost_cap` output-token ledger — a real before/after on the Dreamer free-prose prompt (`haiku`, N=5/arm) showed **mean −52.9%**, no saving, well under the REQ-CM-005 ≥10% gate (Forge's free-prose prompts are already length-bounded). Per the gate the **runtime toggle was dropped** (config + `_caveman.py` + wiring reverted; dispatch byte-identical to v0.6.0); v0.6.1 ships only the **deterministic static tightening** of verbose non-verdict prompt constants (`dreamer`/`autopilot`/`parallel_build`) — verify/skeptic/gate/observer untouched. The measurement gate worked as designed. ADR-011. Tag `v0.6.1`, both remotes. SRS `build/01-srs/srs-v0.6.1.md`, DAG `build/04-plan/task-dag-v0.6.1.md` (T-220–T-226). |
 
 ---
 
@@ -204,17 +205,19 @@ ADR-008 / ADR-009.
    engine, unifying `autopilot.py`'s sequencer with `run_workflow`. "Stretch, never
    required" — only if it simplifies. L; architecturally significant. Deferred.
 
-### Caveman mode — prompt-compression (candidate v0.6.1, measurement-gated)
+### Caveman mode — prompt-compression (v0.6.1: measured, runtime toggle rejected)
 
-Orthogonal to session reuse (decided 2026-06-23 to ship **separately**): an opt-in
-`orchestration.caveman_mode` (default off) that statically tightens Forge-authored prompt
-constants and prepends a stdlib "terse-output" preamble at the single dispatch chokepoint
-(`hooks/_background_agent.dispatch`). The `caveman-compress` / `caveman-shrink` levers are
-**out** (they need a model call + `pip` / a Node-MCP proxy — violating stdlib-only, REQ-NF-024).
-Honest expectation: Forge's background output is mostly schema-constrained JSON the model is
-already told to keep terse, so caveman's headline ~65% does **not** transfer — low-double-digit %
-on free-prose dispatches, ~0% on JSON. **Measurement-gated**: prove the saving via the
-`_cost_cap` output-token ledger before committing the toggle. Its own SRS + ADR. See srs-v0.6.0 §6.
+Investigated separately from session reuse. The one stdlib lever that ported under REQ-NF-024 — a
+terse-output preamble at the single dispatch chokepoint (`hooks/_background_agent.dispatch`) — was
+**built behind a default-off `orchestration.caveman_mode` toggle and measured**: a real before/after on
+the Dreamer free-prose prompt (`haiku`, N=5/arm, actual `usage.output_tokens`) showed **mean −52.9%** —
+no saving, well under the REQ-CM-005 ≥10% bar, because Forge's free-prose prompts are already
+length-bounded ("3-5 sentences, terse, no bullet lists"). Per the gate the **runtime toggle was
+dropped**; v0.6.1 ships only the **deterministic static tightening** of verbose non-verdict prompt
+constants. The `caveman-compress` / `caveman-shrink` levers were rejected at research time (model call +
+`pip` / Node-MCP proxy — stdlib violation). The measurement-gated discipline worked as designed: it
+stopped a token-reduction feature that didn't reduce tokens. See
+`build/02-architecture/adr/011-caveman-mode.md` and `build/06-evaluation/v0.6.1-caveman-measurement.md`.
 
 ### Separate programs / parked
 
