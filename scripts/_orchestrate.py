@@ -83,6 +83,7 @@ def fan_out(
     cwd: Optional[str] = None,
     output_schema: Optional[dict] = None,
     session_reuse: bool = False,
+    caveman: Optional[str] = None,
 ) -> FanOutResult:
     """Fan `work_items` out across bounded parallel dispatches; return index-ordered,
     validated, deduplicated results. Never raises.
@@ -121,6 +122,9 @@ def fan_out(
         cwd=cwd,
         # Threaded for plumbing parity (v0.6.0, REQ-WF-019); inert this task (T-214).
         session_reuse=session_reuse,
+        # Caveman level (v0.6.1, REQ-CM-003): threaded through to the chokepoint; reaches dispatch
+        # only when set, so a free-prose fan-out can opt into terse output. None ⇒ byte-identical.
+        caveman=caveman,
     )
 
     dropped_reasons = list(wf.dropped_reasons)

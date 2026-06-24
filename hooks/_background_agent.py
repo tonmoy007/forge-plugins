@@ -35,6 +35,11 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 import _cost_cap  # noqa: E402  (sibling hooks/ module — the spend gate)
+import _caveman  # noqa: E402  (sibling hooks/ module — the v0.6.1 terse-output preamble)
+
+# Caveman intensities recognised at the chokepoint (REQ-CM-002). Anything else (a typo, the
+# unsupported `ultra`/`wenyan`, an env `off`/garbage) resolves to *off* — caveman stays inert.
+_CAVEMAN_LEVELS = ("lite", "full")
 
 # Conservative pre-dispatch floor estimates used only to gate spend *before* the
 # run (spike O-2): a fresh session pays the ~42k-token cache-creation tax (~$0.05);
@@ -162,6 +167,7 @@ def dispatch(
     output_schema: Optional[dict] = None,
     max_budget_usd: Optional[float] = None,
     floor_usd: Optional[float] = None,
+    caveman: Optional[str] = None,
     claude_bin: Optional[str] = None,
     cwd: Optional[str] = None,
     timeout: float = 120.0,
@@ -192,6 +198,19 @@ def dispatch(
         if not decision.allowed:
             _cost_cap.note_skip(forge_dir, feature=feature, session_id=resume or "", reason=decision.reason)
             return DispatchResult("skipped", decision.reason)
+
+        # Caveman mode (v0.6.1, REQ-CM-002): prepend a terse-output preamble to FREE-PROSE
+        # prompts only. The level resolves from the threaded `caveman` arg, else the
+        # FORGE_CAVEMAN env var, else off; a schema-constrained dispatch (`output_schema` set)
+        # is skipped structurally, so verify/skeptic/gate/miner output is never altered. With no
+        # level resolved this is the identity ⇒ byte-identical to v0.6.0 (REQ-NF-041).
+        _level = caveman if caveman is not None else os.environ.get("FORGE_CAVEMAN")
+        prompt = _caveman.apply(
+            prompt,
+            enabled=_level in _CAVEMAN_LEVELS,
+            has_schema=output_schema is not None,
+            level=_level if _level in _CAVEMAN_LEVELS else "lite",
+        )
 
         cmd = [bin_, "-p", prompt, "--output-format", "json"]
         if resume:

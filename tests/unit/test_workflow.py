@@ -172,6 +172,28 @@ def test_budget_defaults_none_when_unset() -> None:
         assert call["resume"] is None
 
 
+def test_caveman_level_threads_into_dispatch() -> None:
+    """REQ-CM-003 (v0.6.1): the resolved caveman level threads into every node dispatch,
+    mirroring how `resume`/`max_budget_usd` reach the chokepoint."""
+    recorded: list = []
+    _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                     caveman="lite", dispatch_fn=_spy_dispatch(recorded))
+    assert len(recorded) == 4
+    for call in recorded:
+        assert call["caveman"] == "lite"
+
+
+def test_caveman_absent_from_dispatch_kwargs_when_unset() -> None:
+    """Off ⇒ byte-identical (REQ-NF-041): with no caveman threaded, the key is not even present
+    in the dispatch kwargs, so the engine's dispatch contract is unchanged from v0.6.0."""
+    recorded: list = []
+    _wf.run_workflow(_diamond(), forge_dir=FORGE, feature="t",
+                     dispatch_fn=_spy_dispatch(recorded))
+    assert recorded
+    for call in recorded:
+        assert "caveman" not in call
+
+
 # --------------------------------------------------------------------------- #
 # T-214 (REQ-WF-019 / NF-040) — `session_reuse` is accepted as an inert kwarg this task:
 # it must NOT yet alter any dispatch (no per-node reuse behavior until T-216), so the
