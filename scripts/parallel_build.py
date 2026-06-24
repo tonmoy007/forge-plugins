@@ -61,8 +61,8 @@ def _default_build_prompt(task_id: str) -> str:
     """Prompt for a single build task when the caller supplies no custom builder. Embeds the task
     id so the dispatched builder knows which task-DAG node to implement."""
     return (
-        f"Implement task {task_id} from the project's task DAG: build the code for this task per "
-        f"the technical spec and plan, then return a JSON summary of the files changed."
+        f"Implement task {task_id} from the task DAG: build the code per the technical spec "
+        f"and plan, then return a JSON summary of the files changed."
     )
 
 

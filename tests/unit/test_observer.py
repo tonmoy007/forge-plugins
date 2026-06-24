@@ -225,3 +225,12 @@ def test_run_never_raises_on_dispatch_failure(tmp_path: Path) -> None:
     code, _ = _obs.start(forge, cwd=str(tmp_path), claude_bin=bin_, now=NOW)
     assert code in ("error", "started")  # dispatch failed but did not raise
     assert _obs.read_findings(forge) == []
+
+
+def test_observer_prompt_unchanged_not_tightened() -> None:
+    # T-223 (REQ-CM-004): the Observer poll expects compact JSON — it is NOT tightened, and its
+    # JSON-only output spec is preserved verbatim so caveman/tightening never risks its parse.
+    p = _obs._PROMPT
+    assert "ONLY a compact JSON" in p
+    assert "No prose." in p
+    assert "Forge's Observer (Stage 9)" in p
