@@ -710,7 +710,6 @@ def run_workflow(
     cwd: Optional[str] = None,
     allow_generated_subdags: bool = False,
     session_reuse: bool = False,
-    caveman: Optional[str] = None,
     name: Optional[str] = None,
     narrator: Optional["_Narrator"] = None,
     audit: bool = True,
@@ -739,12 +738,6 @@ def run_workflow(
     **inert this release-task (T-214)** — no node yet `--resume`s a prior same-node attempt, so
     the engine's output is byte-identical with it on or off. T-216 consumes it. Admission stays
     on `FRESH_FLOOR_USD` regardless (REQ-WF-020), so reuse never alters the admitted/dropped split.
-
-    Caveman mode (v0.6.1, REQ-CM-003): when `caveman` is a level (`lite`|`full`) it threads into
-    every node's `dispatch` call, where the chokepoint prepends a terse-output preamble to
-    *free-prose* dispatches only (schema-constrained ones are skipped). It is added to the dispatch
-    kwargs **only when set**, so with it unset (default) the kwargs are byte-identical to v0.6.0
-    (REQ-NF-041). Cost admission is unaffected.
     """
     dispatch_fn = dispatch_fn or _background_agent.dispatch
     nodes = list(getattr(spec, "nodes", []) or [])
@@ -850,11 +843,6 @@ def run_workflow(
                 # Per-node `cwd` (T-196) overrides the scalar; unset ⇒ scalar fallback.
                 "cwd": node.cwd if node.cwd is not None else cwd,
             }
-            # Caveman level (v0.6.1, REQ-CM-003) threads into the dispatch call ONLY when set, so
-            # with it off the kwargs are byte-identical to v0.6.0 (REQ-NF-041). The chokepoint
-            # skips schema-constrained dispatches, so verify/skeptic/gate output is never altered.
-            if caveman is not None:
-                node_kwargs["caveman"] = caveman
             if allow_generated_subdags and node.decompose is not None:
                 # Nested run_workflow kwargs for the generated/fallback children: same bounds,
                 # same cwd/toggle, fresh sessions (generation never resumes a parent session).
@@ -870,9 +858,6 @@ def run_workflow(
                     # line (exactly one record per top-level run, REQ-WF-012).
                     "audit": False,
                 }
-                # Inherit the caveman level into child sub-DAGs only when set (REQ-CM-003).
-                if caveman is not None:
-                    run_kwargs["caveman"] = caveman
                 return pool.submit(_run_decompose, node, prompt, dispatch_fn,
                                    node_kwargs, run_kwargs)
             return pool.submit(_run_node, node, prompt, dispatch_fn, node_kwargs,

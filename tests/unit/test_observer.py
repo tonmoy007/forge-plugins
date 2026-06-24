@@ -229,7 +229,7 @@ def test_run_never_raises_on_dispatch_failure(tmp_path: Path) -> None:
 
 def test_observer_prompt_unchanged_not_tightened() -> None:
     # T-223 (REQ-CM-004): the Observer poll expects compact JSON — it is NOT tightened, and its
-    # JSON-only output spec is preserved verbatim so caveman/tightening never risks its parse.
+    # JSON-only output spec is preserved verbatim so the static tightening never risks its parse.
     p = _obs._PROMPT
     assert "ONLY a compact JSON" in p
     assert "No prose." in p

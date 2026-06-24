@@ -4,28 +4,23 @@
 
 ---
 
-## v0.6.1 — caveman mode (T-220..T-226) — ACTIVE (2026-06-24)
+## v0.6.1 — caveman mode → static tightening only (T-220..T-226) — ACTIVE (2026-06-24)
 
-Branch `feat/v0.6.1-caveman-mode` (from main @18f568e). Baseline 1776 unit tests.
-Plan: `build/04-plan/task-dag-v0.6.1.md` · SRS: `build/01-srs/srs-v0.6.1.md`.
+Branch `feat/v0.6.1-caveman-mode`. **The measurement gate (T-224) DROPPED the runtime toggle.**
+A real before/after on the Dreamer free-prose prompt (haiku, N=5/arm) measured **mean −52.9%**
+(no saving; <10% gate) → per REQ-CM-005, reverted the toggle/mechanism/wiring and kept only the
+deterministic static prompt tightening. See `build/06-evaluation/v0.6.1-caveman-measurement.md`.
 
-Invariants every task: stdlib-only · fail-soft · never-raises · off ⇒ byte-identical to v0.6.0 ·
-schema-constrained dispatches never altered · verifier/skeptic/gate/observer prompts never
-tightened · TDD red-first · full suite + validate 0 + full-pipeline 12/12 (toggles off AND on).
+- [x] **T-220** config `caveman_mode`/`caveman_level` — built (b49ef00), **reverted by T-224 gate**
+- [x] **T-221** `hooks/_caveman.py` core — built (02464d0), **reverted by T-224 gate**
+- [x] **T-222** dispatch chokepoint + engine wiring — built (52bc5d1), **reverted by T-224 gate**
+- [x] **T-223** static non-verdict prompt tightening (dreamer/autopilot/parallel_build) — **KEPT** (550851e)
+- [x] **T-224** measurement + decision: **DROP toggle**, ship only static tightening (eval note + decisions.md + reverts)
+- [ ] **T-225** ADR-011 (caveman: measured, rejected for Forge) + references/README/ROADMAP/progress docs
+- [ ] **T-226** release v0.6.1 — bump, CHANGELOG (honest negative result + tightening), PR→develop→main→tag→mirror→GH→delete
 
-- [ ] **T-220 [S]** `caveman_mode` + `caveman_level` config in `OrchestrationConfig` (inert) — TDD
-- [ ] **T-221 [M]** `hooks/_caveman.py` core (`terse_preamble`, `apply`) — TDD, never-raises
-- [ ] **T-222 [M]** wire `_caveman.apply` at `dispatch` chokepoint (schema-skip + `FORGE_CAVEMAN`
-      env fallback) + thread `caveman` config→`run_workflow`→`node_kwargs` via `_orchestrate`/`parallel_build`
-- [ ] **T-223 [S]** static non-verdict prompt tightening (dreamer/autopilot/parallel_build) — separate commit
-- [ ] **T-224 [S]** measurement (Dreamer digest via `_cost_cap` ledger) + mechanism tests + keep/drop decision (<10% ⇒ drop toggle)
-- [ ] **T-225 [S]** ADR-011 + references/README/ROADMAP/progress docs
-- [ ] **T-226 [S]** release v0.6.1 — bump, CHANGELOG, PR→develop→main→tag→mirror both remotes→GH releases→delete branch
-
-Design: caveman level threads as `Optional[str]` (`"lite"|"full"|None`) mirroring `session_reuse` bool;
-engine path `_orchestrate.fan_out` + `parallel_build` → `run_workflow(caveman=...)` → `node_kwargs`.
-Daemon callers honor the global `FORGE_CAVEMAN` env via the chokepoint; observer (JSON poll, no
-`--json-schema`) is a documented known-limit, never config-threaded.
+v0.6.1 ships = T-223 prompt tightening + the documented caveman negative result. Engine/dispatch
+return byte-identical to v0.6.0.
 
 ---
 

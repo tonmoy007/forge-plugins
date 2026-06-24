@@ -164,31 +164,6 @@ def test_no_output_schema_not_passed() -> None:
     assert "output_schema" not in captured  # absent unless requested
 
 
-def test_caveman_level_threaded_to_dispatch() -> None:
-    # REQ-CM-003 (v0.6.1): a resolved caveman level reaches the chokepoint via fan_out.
-    captured: dict = {}
-
-    def disp(prompt, **kw):
-        captured.update(kw)
-        return _ok({"item": prompt})
-
-    _orch.fan_out(["a"], lambda p: p, forge_dir=FORGE, feature="t",
-                  caveman="lite", dispatch_fn=disp)
-    assert captured.get("caveman") == "lite"
-
-
-def test_caveman_not_passed_when_unset() -> None:
-    # Off ⇒ byte-identical: caveman never enters the dispatch kwargs unless threaded.
-    captured: dict = {}
-
-    def disp(prompt, **kw):
-        captured.update(kw)
-        return _ok({"item": prompt})
-
-    _orch.fan_out(["a"], lambda p: p, forge_dir=FORGE, feature="t", dispatch_fn=disp)
-    assert "caveman" not in captured
-
-
 # --- engine equivalence (T-194, REQ-WF-004, AC-WF-005) ---------------------
 # `fan_out` is the single-wave special case of `run_workflow`: a flat list of
 # independent nodes (no `depends_on`), one shared prompt + schema mapped over the
