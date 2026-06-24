@@ -4,6 +4,26 @@
 
 ---
 
+## v0.6.1 — caveman mode → static tightening only (T-220..T-226) — ACTIVE (2026-06-24)
+
+Branch `feat/v0.6.1-caveman-mode`. **The measurement gate (T-224) DROPPED the runtime toggle.**
+A real before/after on the Dreamer free-prose prompt (haiku, N=5/arm) measured **mean −52.9%**
+(no saving; <10% gate) → per REQ-CM-005, reverted the toggle/mechanism/wiring and kept only the
+deterministic static prompt tightening. See `build/06-evaluation/v0.6.1-caveman-measurement.md`.
+
+- [x] **T-220** config `caveman_mode`/`caveman_level` — built (b49ef00), **reverted by T-224 gate**
+- [x] **T-221** `hooks/_caveman.py` core — built (02464d0), **reverted by T-224 gate**
+- [x] **T-222** dispatch chokepoint + engine wiring — built (52bc5d1), **reverted by T-224 gate**
+- [x] **T-223** static non-verdict prompt tightening (dreamer/autopilot/parallel_build) — **KEPT** (550851e)
+- [x] **T-224** measurement + decision: **DROP toggle**, ship only static tightening (eval note + decisions.md + reverts)
+- [x] **T-225** ADR-011 (caveman: measured, rejected for Forge) + ROADMAP/progress docs (bf79f31)
+- [x] **T-226** release v0.6.1 — bump, CHANGELOG (honest negative result + tightening), PR→develop→main→tag→mirror→GH→delete
+
+v0.6.1 ships = T-223 prompt tightening + the documented caveman negative result. Engine/dispatch
+return byte-identical to v0.6.0.
+
+---
+
 ## v0.1.5 — COMPLETE (2026-06-09)
 
 All 25 tasks done (T-101..T-125). 986 tests pass, 0 xfail; validate-plugin.py

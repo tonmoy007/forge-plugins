@@ -24,6 +24,39 @@
 
 ## Decisions
 
+## 2026-06-24 T-224 — Caveman runtime toggle DROPPED by the measurement gate; ship only static tightening
+
+**Context**: v0.6.1 added an opt-in `orchestration.caveman_mode` that prepends a terse-output preamble
+to free-prose `claude -p` dispatches (T-220 config, T-221 `hooks/_caveman.py`, T-222 chokepoint +
+engine wiring), gated by REQ-CM-005: **prove a ≥10% output-token saving on a representative free-prose
+dispatch, or drop the toggle and ship only the deterministic static prompt tightening (T-223).**
+
+**Decision**: **Drop the runtime toggle.** A real before/after on the Dreamer consolidation prompt
+(model `haiku`, N=5/arm, actual `usage.output_tokens` via the dispatch chokepoint) measured **mean
+−52.9%** (OFF 621.2 → ON 949.6) — i.e. *no* reduction; the preamble arm was larger on average, and even
+the noise-robust median saving (~5%) is under 10%. Reverted T-220/T-221/T-222 (config + `_caveman.py` +
+wiring + their tests); **kept T-223** (non-verdict prompt tightening — a real always-on input-token win,
+independent of any toggle). Full data: `build/06-evaluation/v0.6.1-caveman-measurement.md`. See ADR-011.
+
+**Why**: Forge's free-prose prompts are already length-bounded ("3-5 sentences, terse, no bullet
+lists"), leaving no headroom for a generic brevity instruction to recover — exactly the prior the SRS
+recorded ("the feature must prove its saving, not assert it"; caveman's headline ~65% "does not
+transfer"). Shipping a token-reduction toggle that measurably does not reduce tokens would be
+dishonest. Following the pre-registered gate — rather than rationalizing around it because the code was
+already written and default-off — is the discipline the gate exists to enforce.
+
+**Alternatives considered**: (1) *Keep the toggle, document it as experimental* — rejected: contradicts
+the binding REQ-CM-005 gate and would ship an unproven "saving." (2) *Take more samples hoping to find a
+hidden ≥10% win* — rejected: the mean points the wrong way and the prompt is already bounded; more
+samples refine an estimate that isn't ≥10%, they don't create one. (3) *Keep `_caveman.py` as dead
+code* — rejected: drop means remove.
+
+**Consequences**: v0.6.1 is a smaller, honest release: the static non-verdict prompt tightening plus a
+documented negative result that closes the caveman investigation. `_background_agent.dispatch` returns
+byte-identical to v0.6.0. The caveman approach is recorded as rejected-for-Forge in ADR-011, so future
+sessions do not re-litigate it. The deterministic tightening of verbose prompts remains a valid,
+low-risk lever for any future cost work.
+
 ## 2026-06-23 T-216/T-218 — Per-node session reuse: within-node only, admission stays fresh, default-off (ADR-010)
 
 **Context**: v0.6.0 drives the already-built-but-unused `_background_agent.dispatch(resume=...)`

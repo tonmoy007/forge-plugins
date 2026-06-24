@@ -496,19 +496,18 @@ def _background_available(forge_dir) -> tuple[bool, str]:
 
 def _stage_prompt(stage: int, skill: str, label: str) -> str:
     return (
-        f"You are Forge autopilot executing pipeline stage {stage} ({label}). Run the "
-        f"work for {skill} in this project — produce the stage's canonical artifact — "
-        f"then stop. Do NOT advance the stage pointer; the foreground loop checks the "
-        f"gate and advances."
+        f"You are Forge autopilot executing pipeline stage {stage} ({label}). Run {skill} "
+        f"— produce the stage's canonical artifact — then stop. Do NOT advance the stage "
+        f"pointer; the foreground loop checks the gate."
     )
 
 
 def _heal_prompt(stage: int, skill: str, label: str, blockers: str = "") -> str:
     base = (
         f"You are Forge autopilot self-healing pipeline stage {stage} ({label}). The "
-        f"stage gate FAILED with blocking issues. Run the work for {skill} to fix the "
-        f"blockers and repair the stage's canonical artifact, then stop. Do NOT advance "
-        f"the stage pointer; the foreground loop re-checks the gate."
+        f"stage gate FAILED. Run {skill} to fix the blockers and repair the stage's "
+        f"canonical artifact, then stop. Do NOT advance the stage pointer; the foreground "
+        f"loop re-checks the gate."
     )
     if blockers:
         base += f"\n\nBlocking gate criteria to resolve:\n{blockers}"

@@ -801,3 +801,36 @@ def test_cli_plan_unattended_accepted(tmp_path):
     assert r.returncode == 0
     plan = json.loads(r.stdout)
     assert [p["stage"] for p in plan] == [6, 7, 8, 9, 10, 11, 12]
+
+
+# --- T-223 (REQ-CM-004): static non-verdict prompt tightening --------------------------------
+
+def test_stage_prompt_tightened():
+    p = _ap._stage_prompt(1, "forge:srs", "SRS")
+    assert "executing pipeline stage 1 (SRS)" in p
+    assert "Run forge:srs" in p
+    assert "produce the stage's canonical artifact" in p
+    assert "Do NOT advance the stage pointer" in p
+    # dropped filler:
+    assert "Run the work for" not in p
+    assert "in this project" not in p
+    assert "checks the gate and advances" not in p
+
+
+def test_heal_prompt_tightened():
+    p = _ap._heal_prompt(2, "forge:ux", "UX")
+    assert "self-healing pipeline stage 2 (UX)" in p
+    assert "stage gate FAILED." in p
+    assert "Run forge:ux to fix the blockers" in p
+    assert "Do NOT advance the stage pointer" in p
+    # dropped filler:
+    assert "with blocking issues" not in p
+    assert "Run the work for" not in p
+
+
+def test_verify_prompt_unchanged_not_tightened():
+    # The verdict prompt is clarity-/verdict-sensitive — left UNCHANGED (REQ-CM-004 / NF-041).
+    p = _ap._verify_prompt(1, "forge:srs", "SRS")
+    assert "INDEPENDENT Forge verifier" in p
+    assert "running in fresh context" in p
+    assert "Return a verdict" in p

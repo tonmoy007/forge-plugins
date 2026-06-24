@@ -200,6 +200,26 @@ def test_default_build_prompt_mentions_task_id() -> None:
     assert any("T42" in c["prompt"] for c in recorded)
 
 
+# --- T-223 (REQ-CM-004): static tightening of the default build prompt; skeptic unchanged ----
+
+def test_default_build_prompt_tightened():
+    p = _pb._default_build_prompt("T42")
+    assert "Implement task T42 from the task DAG" in p
+    assert "technical spec" in p
+    assert "JSON summary of the files changed" in p
+    # dropped filler:
+    assert "the project's task DAG" not in p
+    assert "for this task per" not in p
+
+
+def test_skeptic_prompt_unchanged_not_tightened():
+    # The adversarial skeptic verdict prompt is clarity-sensitive — left UNCHANGED.
+    p = _pb._skeptic_prompt("N1", {"x": 1}, 1, 3)
+    assert "adversarial skeptic" in p
+    assert "REFUTE" in p
+    assert "running in fresh context" in p
+
+
 # --------------------------------------------------------------------------- #
 # REQ-WF-017/019, AC-WF-017/019 — `config.session_reuse` threads end-to-end through
 # run_parallel_build → run_workflow → _run_node into a node's OWN retry re-dispatch (T-216).
