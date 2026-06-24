@@ -4,6 +4,31 @@
 
 ---
 
+## v0.6.1 — caveman mode (T-220..T-226) — ACTIVE (2026-06-24)
+
+Branch `feat/v0.6.1-caveman-mode` (from main @18f568e). Baseline 1776 unit tests.
+Plan: `build/04-plan/task-dag-v0.6.1.md` · SRS: `build/01-srs/srs-v0.6.1.md`.
+
+Invariants every task: stdlib-only · fail-soft · never-raises · off ⇒ byte-identical to v0.6.0 ·
+schema-constrained dispatches never altered · verifier/skeptic/gate/observer prompts never
+tightened · TDD red-first · full suite + validate 0 + full-pipeline 12/12 (toggles off AND on).
+
+- [ ] **T-220 [S]** `caveman_mode` + `caveman_level` config in `OrchestrationConfig` (inert) — TDD
+- [ ] **T-221 [M]** `hooks/_caveman.py` core (`terse_preamble`, `apply`) — TDD, never-raises
+- [ ] **T-222 [M]** wire `_caveman.apply` at `dispatch` chokepoint (schema-skip + `FORGE_CAVEMAN`
+      env fallback) + thread `caveman` config→`run_workflow`→`node_kwargs` via `_orchestrate`/`parallel_build`
+- [ ] **T-223 [S]** static non-verdict prompt tightening (dreamer/autopilot/parallel_build) — separate commit
+- [ ] **T-224 [S]** measurement (Dreamer digest via `_cost_cap` ledger) + mechanism tests + keep/drop decision (<10% ⇒ drop toggle)
+- [ ] **T-225 [S]** ADR-011 + references/README/ROADMAP/progress docs
+- [ ] **T-226 [S]** release v0.6.1 — bump, CHANGELOG, PR→develop→main→tag→mirror both remotes→GH releases→delete branch
+
+Design: caveman level threads as `Optional[str]` (`"lite"|"full"|None`) mirroring `session_reuse` bool;
+engine path `_orchestrate.fan_out` + `parallel_build` → `run_workflow(caveman=...)` → `node_kwargs`.
+Daemon callers honor the global `FORGE_CAVEMAN` env via the chokepoint; observer (JSON poll, no
+`--json-schema`) is a documented known-limit, never config-threaded.
+
+---
+
 ## v0.1.5 — COMPLETE (2026-06-09)
 
 All 25 tasks done (T-101..T-125). 986 tests pass, 0 xfail; validate-plugin.py

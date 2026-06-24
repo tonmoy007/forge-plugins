@@ -42,6 +42,13 @@ class OrchestrationConfig:
     # re-dispatches `--resume` the first attempt's session (cheaper floor). Default off ⇒
     # the engine is byte-identical to v0.4.x. Strict `is True` like its sibling toggles.
     session_reuse: bool = False
+    # Caveman mode (v0.6.1, REQ-CM-003): when on, the dispatch chokepoint prepends a terse-output
+    # preamble to *free-prose* `claude -p` dispatches (schema-constrained ones are skipped). Default
+    # off ⇒ dispatch is byte-identical to v0.6.0. Strict `is True` like its sibling toggles.
+    # `caveman_level` selects the preamble intensity (`lite`|`full`); an invalid value coerces to
+    # `lite`. The resolved level (level if mode else None) threads into `dispatch` like `session_reuse`.
+    caveman_mode: bool = False
+    caveman_level: str = "lite"
     # Engine tunables threaded into `run_workflow` (REQ-NF-027).
     max_parallel: int = DEFAULT_MAX_PARALLEL
     max_total: int = DEFAULT_MAX_TOTAL
@@ -59,7 +66,12 @@ _TOGGLES = (
     "worktree_isolation",
     "allow_generated_subdags",
     "session_reuse",
+    "caveman_mode",
 )
+
+# Valid caveman intensities (REQ-CM-003). `ultra`/`wenyan`/abbreviation are out of scope; any
+# value outside this set (including a non-string) coerces to the safe default `lite`.
+_CAVEMAN_LEVELS = ("lite", "full")
 
 
 def _safe_yaml_load(text: str) -> Optional[dict]:
@@ -114,6 +126,11 @@ def load_orchestration_config(forge_dir) -> OrchestrationConfig:
     # Narration defaults ON; only an explicit bool `false` silences it (REQ-WF-011).
     if section.get("narrate") is False:
         cfg.narrate = False
+
+    # Caveman intensity (REQ-CM-003): accept only a known level; anything else (typo, unsupported
+    # `ultra`/`wenyan`, non-string) keeps the safe default `lite`. Independent of `caveman_mode`.
+    if section.get("caveman_level") in _CAVEMAN_LEVELS:
+        cfg.caveman_level = section["caveman_level"]
 
     parallel = _coerce_positive_int(section.get("max_parallel"))
     if parallel is not None:
