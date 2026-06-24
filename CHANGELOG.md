@@ -14,6 +14,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.1] — 2026-06-24
+
+**Caveman mode — measured and rejected; prompt tightening only.** An honest, measurement-gated
+release with **zero default behavior change**. We investigated the `caveman` token-reduction
+approach to cut the output tokens Forge pays for on its background `claude -p` dispatches. The one
+stdlib-legal lever (a terse-output preamble at the single dispatch chokepoint) was built behind a
+default-off toggle and **measured** against the cost ledger — a real before/after on the Dreamer
+free-prose prompt (`haiku`, N=5/arm, actual `usage.output_tokens`) showed **mean −52.9%**: no
+saving, well under the pre-registered ≥10% bar, because Forge's free-prose prompts are already
+length-bounded ("3-5 sentences, terse, no bullet lists"). Per the gate, the runtime toggle was
+**dropped**. What ships is the reliable part: a deterministic tightening of verbose, non-verdict
+prompt constants. The measurement gate worked as designed — it stopped a token-reduction feature
+that didn't reduce tokens.
+
+### Changed
+- **Tightened verbose non-verdict prompt constants** (deterministic, always-on, no toggle): dropped
+  pure filler from `dreamer._CONSOLIDATION_PROMPT`, `autopilot._stage_prompt`/`_heal_prompt`, and
+  `parallel_build._default_build_prompt` — a small input-token win every dispatch. The
+  verify / skeptic / gate-verdict / observer prompts are **left unchanged** (clarity-/JSON-sensitive).
+
+### Rejected (measured, not shipped)
+- **Caveman runtime toggle** (`orchestration.caveman_mode` / `caveman_level`, `hooks/_caveman.py`,
+  dispatch-chokepoint + engine wiring) — built and fully tested, then **dropped** because the measured
+  free-prose output-token saving was negative (mean −52.9%, median ~5%), under the REQ-CM-005 ≥10%
+  gate. `caveman-compress` / `caveman-shrink` were rejected at research time (model call + `pip` /
+  Node-MCP proxy — stdlib violation, REQ-NF-024). See ADR-011 and
+  `build/06-evaluation/v0.6.1-caveman-measurement.md`.
+
+### Unchanged
+- `_background_agent.dispatch`, `run_workflow`, `_orchestrate.fan_out`, and `OrchestrationConfig`
+  are **byte-identical to v0.6.0**. There is no new config and no `FORGE_CAVEMAN` env var.
+
+---
+
 ## [0.6.0] — 2026-06-23
 
 **Engine made real I — per-node session reuse.** The first step of the "engine made real" trio,

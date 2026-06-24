@@ -16,8 +16,8 @@ deterministic static prompt tightening. See `build/06-evaluation/v0.6.1-caveman-
 - [x] **T-222** dispatch chokepoint + engine wiring — built (52bc5d1), **reverted by T-224 gate**
 - [x] **T-223** static non-verdict prompt tightening (dreamer/autopilot/parallel_build) — **KEPT** (550851e)
 - [x] **T-224** measurement + decision: **DROP toggle**, ship only static tightening (eval note + decisions.md + reverts)
-- [ ] **T-225** ADR-011 (caveman: measured, rejected for Forge) + references/README/ROADMAP/progress docs
-- [ ] **T-226** release v0.6.1 — bump, CHANGELOG (honest negative result + tightening), PR→develop→main→tag→mirror→GH→delete
+- [x] **T-225** ADR-011 (caveman: measured, rejected for Forge) + ROADMAP/progress docs (bf79f31)
+- [x] **T-226** release v0.6.1 — bump, CHANGELOG (honest negative result + tightening), PR→develop→main→tag→mirror→GH→delete
 
 v0.6.1 ships = T-223 prompt tightening + the documented caveman negative result. Engine/dispatch
 return byte-identical to v0.6.0.

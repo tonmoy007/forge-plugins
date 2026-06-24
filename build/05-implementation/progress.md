@@ -5,7 +5,7 @@
 
 ## Current State
 
-- **v0.6.1 (caveman mode → static prompt tightening only) LANDING — T-220..T-226.** Investigated the
+- **v0.6.1 (caveman mode → static prompt tightening only) RELEASED — T-220..T-226.** Investigated the
   `caveman` token-reduction approach. The one stdlib-legal lever (a terse-output preamble at the dispatch
   chokepoint) was **built behind a default-off `orchestration.caveman_mode` toggle (T-220 config `b49ef00`,
   T-221 `hooks/_caveman.py` `02464d0`, T-222 chokepoint + engine wiring `52bc5d1`) and measured** against
@@ -17,9 +17,11 @@
   constants (`dreamer`/`autopilot`/`parallel_build`; verify/skeptic/gate/observer untouched). T-225 ADR-011
   + ROADMAP/progress docs. The measurement gate worked as designed: it stopped a token-reduction feature
   that didn't reduce tokens. 1783 unit tests green, validate 0, full-pipeline 12/12. Data:
-  `build/06-evaluation/v0.6.1-caveman-measurement.md`. **NEXT:** T-226 release (bump 0.6.1, CHANGELOG,
-  PR→develop→main→tag→mirror both remotes→GitHub releases→delete branch). SRS `build/01-srs/srs-v0.6.1.md`,
-  DAG `build/04-plan/task-dag-v0.6.1.md`.
+  `build/06-evaluation/v0.6.1-caveman-measurement.md`. Released via T-226: bump 0.6.1, CHANGELOG
+  `[0.6.1]`, manifests 0.6.1; banner/social evergreen (no refresh); PR→develop→main→tag `v0.6.1`→mirror
+  origin+polygon→GitHub releases→delete branch. SRS `build/01-srs/srs-v0.6.1.md`, DAG
+  `build/04-plan/task-dag-v0.6.1.md` (T-220..T-226). **NEXT:** per-branch reuse (trio item 1's deferred
+  half, measurement-gated) · trio items 2–3 (top-level generation · pipeline-as-WorkflowSpec).
 
 - **v0.6.0 (engine made real I: per-node session reuse) RELEASED — T-214..T-219.** Drives the
   already-built-but-unused `_background_agent.dispatch(resume=...)` reuse path from the v0.4.0 DAG engine,
