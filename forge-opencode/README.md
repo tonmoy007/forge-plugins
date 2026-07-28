@@ -33,6 +33,7 @@ Copy `forge-opencode/` to `~/.config/opencode/plugin/forge-opencode/` or `.openc
 /forge:status       # check current stage
 /forge:orchestrate  # drive the whole pipeline, stage by stage (see below)
 /forge:validate     # gap analysis — malformed/misplaced/unimplemented IDs, traceability
+/forge:trace-matrix # full id x stage matrix, gaps attributed to the responsible agent
 ```
 
 ## Full-Pipeline Orchestration
@@ -54,6 +55,19 @@ definitions (e.g. a `REQ-*` heading defined outside `pipeline/01-srs/srs.md`),
 unimplemented/orphaned requirements (a `REQ-*`/`NFR-*` never referenced past Stage 1),
 and the existing `traceability-check.py --full-chain` + gate-completeness scripts,
 folded into one report. See `skills/forge-validate/SKILL.md`.
+
+## Traceability Matrix & Gap Attribution
+
+`/forge:trace-matrix` (`scripts/trace-matrix.py`, `agents/traceability-matrix.md`)
+generates the full id x stage traceability matrix — every id found under `pipeline/`
+as a row, every stage with activity on it as a column, defined vs merely referenced
+— plus the same four gap categories `/forge:validate` checks, each one **attributed
+to the specific stage agent responsible for it** (e.g. an unimplemented `REQ-*` is
+attributed to the earliest downstream stage that should have referenced it, not the
+stage that defined it). It writes `.forge/traceability-gaps.jsonl` — a fresh
+snapshot each run — which `hooks/session-start.py` reads to advise the responsible
+agent only when their stage is currently active (informational, never blocking). See
+`skills/forge-trace-matrix/SKILL.md`.
 
 ## Architecture
 

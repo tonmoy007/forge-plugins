@@ -142,6 +142,46 @@ def _health_surface_note(cwd: Path) -> str:
         return ""
 
 
+def _traceability_gap_note(cwd: Path, stage: int) -> str:
+    """Surface open traceability gaps assigned to the CURRENT stage's agent.
+
+    `.forge/traceability-gaps.jsonl` is written by scripts/trace-matrix.py as a
+    fresh, complete snapshot each run (overwritten, not appended) — each record
+    carries the `stage` responsible for resolving that gap, computed via
+    _trace_scan.attribute(). This only surfaces gaps whose `stage` matches the
+    session's current stage, since that's when the responsible agent is actually
+    the one in the room; a gap assigned to a future or past stage stays silent
+    here (advisory only, never blocking — /forge:trace-matrix shows the full
+    list regardless of current stage). Read-only, never raises.
+    """
+    path = cwd / ".forge" / "traceability-gaps.jsonl"
+    try:
+        if not path.exists():
+            return ""
+        mine: list[dict] = []
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(rec, dict) and rec.get("stage") == stage:
+                mine.append(rec)
+        if not mine:
+            return ""
+        agent = mine[0].get("agent") or "this stage"
+        ids = ", ".join(str(r.get("id", "?")) for r in mine[:5])
+        more = f" (+{len(mine) - 5} more)" if len(mine) > 5 else ""
+        return (
+            f"\n[Forge] Traceability: {len(mine)} gap(s) assigned to you ({agent}) — "
+            f"{ids}{more}. Run /forge:trace-matrix for details."
+        )
+    except OSError:
+        return ""
+
+
 def _poll_observer_if_running(cwd: Path) -> None:
     """Lazily trigger an Observer poll at session start when it's overdue (REQ-F-008).
 
@@ -471,6 +511,7 @@ def run(cwd: Path, session_id: str = "", source: str = "") -> Optional[str]:
     # REQ-F-012: surface unread Observer findings; REQ-F-026: Health auto-disable alert
     context += _unread_findings_note(cwd)
     context += _health_surface_note(cwd)
+    context += _traceability_gap_note(cwd, stage)
     context += _autopilot_resume_note(cwd, source)  # REQ-CTX-007: resume after compaction
 
     return context

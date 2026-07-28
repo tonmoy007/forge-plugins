@@ -38,6 +38,12 @@ two OpenCode-only additions:
   `skills/forge-validate/SKILL.md`): malformed/misplaced ID detection, unimplemented
   (orphaned) requirement detection, and a rollup of the existing traceability/gate
   scripts into one report.
+- `/forge:trace-matrix` — full id x stage traceability matrix
+  (`scripts/trace-matrix.py` + `agents/traceability-matrix.md` +
+  `skills/forge-trace-matrix/SKILL.md`): same gap categories as `/forge:validate`,
+  but each one attributed to the specific stage agent responsible for it, and
+  written to `.forge/traceability-gaps.jsonl` — `hooks/session-start.py` surfaces an
+  advisory note to that agent when their stage becomes active.
 
 ## Differences from Claude Code Version
 
@@ -56,16 +62,23 @@ two OpenCode-only additions:
 ## Scripts
 
 Most Python scripts work unchanged — they read `FORGE_ROOT` env var for their path.
-Two scripts have diverged from the root Claude Code plugin specifically for this
-port (root and `forge-opencode/` are no longer byte-identical for these):
+`scripts/extract-lessons.py`'s `--propose` fix and `scripts/validate-traceability.py`
++ `scripts/trace-matrix.py` + `scripts/_trace_scan.py` were built in this port first,
+then ported back to the root Claude Code plugin — both trees are back in parity for
+these files (no intentional divergence remains):
 
-- `scripts/extract-lessons.py` gained a `--propose` flag (emits YAML to stdout
-  instead of writing `tasks/lessons.md` directly) — `hooks/stop-reflect.py`'s Step 2
-  now calls it with `--cwd`/`--input`/`--propose` and `cwd=` pinned on the
-  subprocess. Previously it was called with `--transcript`/`--since-flag`, which
-  don't exist in the script's argparse — every invocation failed with an argparse
-  usage error (exit 2), silently, so lessons were never written under this port.
-- `scripts/validate-traceability.py` is new (see Commands above).
+- `scripts/extract-lessons.py`'s `--propose` flag emits YAML to stdout instead of
+  writing `tasks/lessons.md` directly — `hooks/stop-reflect.py`'s Step 2 calls it
+  with `--cwd`/`--input`/`--propose` and `cwd=` pinned on the subprocess. It used to
+  be called with `--transcript`/`--since-flag`, which don't exist in the script's
+  argparse — every invocation failed with an argparse usage error (exit 2), so
+  lessons were never written until this fix.
+- `scripts/_trace_scan.py` is the shared module both `validate-traceability.py` and
+  `trace-matrix.py` import — ID-scanning primitives (malformed/misplaced/
+  duplicate/unimplemented detection) plus the `attribute()` helper that resolves a
+  gap to its responsible `(stage, agent)` via `_stage_table.py`.
+- `scripts/validate-traceability.py` and `scripts/trace-matrix.py` — see Commands
+  above.
 
 ## Dependencies
 
