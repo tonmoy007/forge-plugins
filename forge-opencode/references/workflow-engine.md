@@ -1,0 +1,318 @@
+# Dynamic workflow engine (`scripts/_workflow.py`)
+
+> Loaded on demand. The technical reference for the v0.4.0 dynamic-workflow engine — the DAG
+> model, the `orchestration:` toggles + tunables, hybrid sub-DAG generation, git-worktree
+> isolation, and the per-node fresh-session cost economics. The engine itself is **always
+> available**; every capability *built on top of it* is an independent opt-in toggle, all
+> default `false`, so with no `orchestration:` block Forge behaves exactly as v0.3.6
+> (REQ-NF-025). For the config-loading rules see [`orchestration-config.md`](orchestration-config.md).
+
+## What the engine is
+
+`run_workflow` generalizes `_orchestrate.fan_out` from a flat *homogeneous* parallel map (one
+shared prompt + one schema, no edges) to a topological **DAG executor** over *heterogeneous*
+agent steps: each node carries its own prompt builder, optional output schema, model, and
+validator; nodes declare `depends_on` edges; downstream nodes receive their upstream results
+for inter-step data passing. Nodes are scheduled in dependency *waves* (Kahn's algorithm) and
+each wave fans out across bounded parallel `claude -p` dispatches. Forge's own fan-outs
+(`/forge:review`, `/forge:adopt`, `/forge:why`) run on it as the single-wave special case.
+
+### The platform constraint (ADR-006)
+
+A Python `scripts/` primitive **cannot** drive Claude's in-session Agent/Task tool. "Parallel
+agents" therefore means parallel `claude -p` subprocess dispatches through the single
+`hooks/_background_agent.dispatch` wrapper (cost-gated via `_cost_cap`, never-raises) — never a
+subprocess invoking the Agent tool. Every node, verifier, and skeptic in this engine is a
+`dispatch` call. This is why the deterministic plan lives in Python and only the leaf agent
+invocations are stochastic.
+
+## The DAG model
+
+The data model is plain `dataclasses` in `scripts/_workflow.py`:
+
+### `WorkflowNode`
+
+One step in the DAG.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | `str` | Unique node id; results are keyed and ordered by it. |
+| `build_prompt` | `Callable[[dict], str]` | Receives `{dep_id: validated_result}` for this node's completed upstream deps and returns the prompt string — the inter-step data channel. |
+| `depends_on` | `list[str]` | Upstream node ids (default `[]`). |
+| `output_schema` | `Optional[dict]` | JSON schema passed to `dispatch` to constrain the reply. |
+| `model` | `Optional[str]` | Per-node model override (else the dispatch default). |
+| `validate` | `Optional[Callable[[dict], Any]]` | Post-parse validator; a raise → drop-with-reason, not a crash. |
+| `verify` | `Optional[VerifySpec]` | Per-node fresh-session verification (below). |
+| `cwd` | `Optional[str]` | Per-node working directory (T-196); `None` ⇒ inherit `run_workflow`'s scalar `cwd`, so existing single-`cwd` callers are unaffected. |
+| `decompose` | `Optional[DecomposeSpec]` | Marks a sub-DAG-generating node (below); `None` ⇒ a plain node. |
+
+### `VerifySpec`
+
+A declarative per-node verification request: `skill: str`, `model: Optional[str]`,
+`schema: Optional[dict]`. When a node carries one, an **independent fresh-session** verifier
+runs after the node's own dispatch and gates its result; a clean `fail` verdict triggers one
+bounded heal (re-dispatch + re-verify) before dropping. An unavailable or garbage verdict
+degrades to *passed* — the verifier is an extra check and must not block (REQ-NF-013). The
+shared primitives (`run_verify` / `VERIFY_SCHEMA` / `verdict_failed` / `should_heal`) live in
+`scripts/_verify.py`, imported by **both** the engine and `autopilot.py`.
+
+### `WorkflowSpec` / `WorkflowResult`
+
+`WorkflowSpec` is just `nodes: list[WorkflowNode]`. `WorkflowResult` carries
+`results: dict` (`{node_id: validated_output}`, **ordered by node id**), `completed: int`,
+`dropped: int`, `total_cost_usd: float`, and `dropped_reasons: list[str]`. A dropped or
+over-cap node is never silently truncated — it appears in `dropped_reasons`.
+
+### `plan_waves(spec) -> list[list[str]]`
+
+Groups node ids into dependency waves via Kahn's algorithm, **sorted within each wave** for
+determinism. Returns `[]` when the graph has a cycle (no valid ordering). Unknown dependencies
+are ignored here — they are reported by `validate_spec`.
+
+### `validate_spec(spec) -> list[str]`
+
+Returns structural errors (`[]` == valid), never raises:
+
+- **duplicate node id** — two nodes share an `id`.
+- **unknown dependency** — a `depends_on` names a node not in the spec.
+- **cycle detected** — `plan_waves` finds no valid ordering.
+
+`run_workflow` calls `validate_spec` **first**; an invalid spec dispatches nothing and returns
+all nodes dropped with `invalid spec: …` reasons.
+
+## Execution & determinism
+
+`run_workflow(spec, *, forge_dir, feature, max_parallel=4, max_total=64, max_budget_usd=None,
+resume=None, dispatch_fn=None, claude_bin=None, cwd=None, allow_generated_subdags=False)`:
+
+1. **Validate** the spec (invalid ⇒ nothing dispatched).
+2. **Budget-aware admission** — walk nodes in topological order (wave, then sorted id) and admit
+   each while it fits *both* the count cap (`max_total`) and the spend cap (`max_budget_usd`,
+   charged one fresh-session floor per node). This pass is single-threaded, so cap pressure
+   drops a **fixed** set, identical across parallel and sequential runs (REQ-NF-029).
+   `max_budget_usd` bounds the **admission set** (one floor per admitted node), *not* realized
+   spend: a node's retry, per-node verify, or heal dispatches are not pre-charged, so actual cost
+   can exceed it. Size with headroom and keep the `_cost_cap` daily cap as the hard spend gate.
+3. **Run wave by wave** — each wave's ready nodes fan out across at most `max_parallel` threads;
+   results pass to downstream nodes via `build_prompt`.
+4. **Retry-once-then-drop** — a failed dispatch is retried once, then dropped with a reason; a
+   node whose dependency dropped is skipped (no orphan dispatch).
+
+**Determinism is split** (REQ-NF-026):
+
+- **(a) Engine result.** `results` is id-ordered; a parallel run (`max_parallel=N`) and a
+  sequential run (`max_parallel=1`) are **byte-identical** *given identical dispatch outcomes
+  and no mid-run cap trip*. Enforced as a test invariant.
+- **(b) Drops are deterministic.** Budget pre-allocated in topological order, not by thread race.
+- **(c) Worktree file merges are out** of the byte-identical invariant (see below); they instead
+  guarantee conflicts surface via git, never silent clobber, given a fixed admission + merge order.
+
+The engine **never raises**: every failure path becomes a structured `dropped_reasons` entry.
+
+## The `orchestration:` config block
+
+`.forge/config.yaml` gains an opt-in `orchestration:` block, loaded fail-soft by
+`scripts/_workflow_config.py:load_orchestration_config`. The toggles are **independent** — any
+combination is valid; turning one on never implies another. Full coercion rules and the
+fail-soft table live in [`orchestration-config.md`](orchestration-config.md); the real defaults:
+
+| Key | Type | Default | Gates |
+|-----|------|---------|-------|
+| `flows_enabled` | bool | `false` | `/forge:flow` + `.forge/workflows/*.yaml` |
+| `parallel_build` | bool | `false` | parallel fan-out of independent build tasks |
+| `worktree_isolation` | bool | `false` | each parallel mutating node in its own git worktree |
+| `allow_generated_subdags` | bool | `false` | the validated `decompose` sub-DAG node |
+| `session_reuse` | bool | `false` | within-node `--resume` of a node's own retry/heal re-dispatches (v0.6.0; see *Per-node session reuse* below) |
+| `max_parallel` | int ≥1 | `4` | max concurrent dispatches per wave |
+| `max_total` | int ≥1 | `64` | hard cap on total nodes admitted per run |
+| `max_budget_usd` | float | `null` (no cap) | per-run **admission** ceiling (one floor/node; not realized spend — see above) |
+| `narrate` | bool | `true` | live `[Forge]` stderr narration (v0.4.1); **not** a capability toggle — gates no engine behavior |
+
+The five capability toggles use strict `is True` semantics: a stray `1` / `"yes"` does **not**
+enable a capability. With every toggle off (the default), behavior matches v0.3.6. `narrate` is
+the one observability control (default **on**); only an explicit `false` silences it, and it
+changes no engine output on stdout (see *Observability* below).
+
+## User-defined flows (`flows_enabled`)
+
+A declarative `.forge/workflows/<name>.yaml` compiles to a `WorkflowSpec` via
+`scripts/workflow_loader.py`:
+
+```yaml
+name: research-brief
+description: gather sources then draft a brief
+nodes:
+  - id: gather
+    prompt: "Research the topic and return JSON {findings: [...]}"
+  - id: draft
+    depends_on: [gather]
+    prompt_template: "Write a draft from these findings: {{gather}}"
+    schema: {type: object}      # optional → WorkflowNode.output_schema
+    model: claude-haiku-4-5     # optional → WorkflowNode.model
+```
+
+A literal `prompt` compiles to a constant `build_prompt`; a `prompt_template` compiles to a
+closure that substitutes `{{upstream_id}}` tokens with the matching upstream result at run time.
+Interpolated upstream output is treated as **untrusted data** — it is spliced in with plain
+`str()` (never `str.format`/eval), so a result containing `{`/`}` cannot hijack the prompt; it
+was schema-validated at the upstream node boundary. The loader is fail-soft: a missing file,
+absent PyYAML, malformed YAML, or a structurally invalid spec all yield
+`LoadResult(spec=None, errors=[...])` — it never raises.
+
+`/forge:flow` is the command surface (active only when `flows_enabled`):
+
+- `/forge:flow` — list available workflows.
+- `/forge:flow <name>` — run a workflow through `run_workflow`.
+- `/forge:flow <name> --plan` — show the `plan_waves` dependency plan + the **cost pre-flight
+  estimate** without dispatching.
+
+Persisted output flows through the Proposal→Validator→Executor rails (ADR-006): nothing is
+written to the project unapproved. When background is unavailable (`claude` not on PATH or
+`FORGE_NO_BACKGROUND=1`), it degrades to the deterministic dry-run plan.
+
+**Dogfood example.** Forge ships a real, validated workflow in-repo:
+[`.forge/workflows/doc-review.yaml`](../.forge/workflows/doc-review.yaml) — a `split →
+{reviewer-a, reviewer-b} → synthesize` diamond that fans a document out to two independent
+reviewers and merges their notes. Run it with `/forge:flow doc-review` (with `flows_enabled`).
+
+## Per-stage parallel build (`parallel_build`)
+
+`scripts/parallel_build.py:run_parallel_build` maps the *ready* task-DAG nodes — those whose
+`depends_on` are all done — to a `WorkflowSpec` of independent (edge-less) nodes and runs them
+through the engine. With `parallel_build` on, the width is `config.max_parallel`; off, it is `1`
+(sequential), preserving today's behavior. Each node gets its own `cwd` via the caller's
+`cwd_for(task_id)` (T-196), which is how worktree isolation hands each node its own checkout.
+
+## Worktree isolation + lifecycle (`worktree_isolation`)
+
+When `worktree_isolation` is on and the target is a git work tree, each parallel file-mutating
+node runs in its **own git worktree** on a **branch-per-node** (`scripts/_worktree.py`):
+
+- **Branch naming** — every branch is namespaced under `forge/wt/<safe-node-id>`, so it can
+  never be (or move) a protected branch; a node literally named `main` becomes `forge/wt/main`,
+  distinct from `main`. Checkouts live under `<repo>/.forge-worktrees/<node>`.
+- **Join** — sequential, deterministic id order (git cannot merge two branches into one tree
+  concurrently). Each node commits in its worktree, then merges back with `--no-ff`. A
+  **conflicting** merge fails loudly: it is `git merge --abort`-ed so the base ref is untouched
+  (never silent last-write-wins) and the node is excluded with a reason.
+- **Lifecycle** — every worktree is torn down in a `finally`, so teardown happens on success
+  **and** on any drop/crash; the branch is force-deleted and the checkout removed (no orphaned
+  `.git/worktrees`).
+- **Degradation** — when worktrees are unavailable, it degrades to a **sequential single
+  worktree** (`max_parallel=1`), never raising.
+
+### Adversarial-verify join (`adversarial_skeptics > 0`)
+
+Before a built node merges, `adversarial_admit` can gate it through N independent skeptics, each
+prompted to **refute** the work (fresh context, schema-constrained verdict, reusing the
+`_verify` primitive). Admission is by **majority of *dispatched* skeptics**: a cost-cap-dropped
+skeptic (`status == "skipped"`) counts toward neither the numerator nor the denominator, so it
+can never silently lower the bar. A strict majority is required (`admit_votes * 2 > dispatched`;
+a tie is not a majority). If zero skeptics dispatch, the verifier is unavailable and degrades to
+*admit*. Refuted nodes are excluded from the merge with reasons.
+
+## Hybrid sub-DAG generation (`allow_generated_subdags`)
+
+A node carrying a `DecomposeSpec` is a `decompose` node: its `build_prompt` is a cheap-model,
+schema-constrained **generation** prompt whose reply is a sub-DAG (a JSON node/edge list).
+Generation **never escapes a validated slot** — before *any* child dispatches, the candidate
+sub-DAG is admitted by `_admit_subdag`, three pure-function gates:
+
+1. **node-count cap** — `len(nodes) <= DecomposeSpec.max_nodes` (default `8`).
+2. **token-budget proxy** — a deterministic stdlib heuristic (`len(json) // 4`, since there is
+   no stdlib tokenizer) compared against `DecomposeSpec.max_chars // 4` (default `max_chars`
+   `4096` ≈ 1024 tokens).
+3. **`validate_spec`** — acyclicity + duplicate-id + unknown-dependency.
+
+The first failing gate yields a reason; the whole admission is a pure function of the generated
+JSON (same JSON ⇒ same accept/reject). Any violation — or garbage/failed generation — drops the
+generated set with a reason and runs the **deterministic** `DecomposeSpec.fallback` sub-DAG
+(`[]` ⇒ a pure no-op). Gated by `allow_generated_subdags` (**off by default**); with it off the
+decompose node is inert and behaves as a plain node — no generation, no children.
+
+## Cost economics: per-node fresh sessions
+
+Cost is **per-node fresh-session** by default. *Heterogeneous* nodes (distinct prompts/models
+across a DAG) defeat `--resume` session reuse, so each node pays the fresh-session
+cache-creation floor. The engine charges `_workflow.FRESH_FLOOR_USD`, sourced from
+`_background_agent.FRESH_FLOOR_USD` (currently **`$0.06`**; a resumed dispatch is
+`RESUME_FLOOR_USD` `$0.01`) so the admission estimate can never drift from the real cost gate.
+The one safe exception — a node's **own** retry/heal re-dispatch, which is the *same prompt and
+model* — is the opt-in `session_reuse` capability below; even with it on, **admission still
+charges the fresh floor** (reuse lowers only realized spend, never the admitted set).
+
+**Sizing rule.** `FRESH_FLOOR_USD × node_count` must fit the budget. A run is bounded by three
+knobs: `max_total` (node count), `max_budget_usd` (per-run spend), and the `_cost_cap` daily cap
+(`DEFAULT_DAILY_USD` = `$0.50`). At the `$0.06` floor, the default daily cap admits only ~8 fresh
+nodes before it trips — i.e. **only small workflows run under defaults**. Larger runs require
+raising `max_budget_usd` and/or the daily cap. Admission is deterministic (topological
+pre-allocation), so cap pressure always drops the *same* fixed set, never a thread-race set.
+
+`max_budget_usd` and `resume` are threaded from `run_workflow` into every node's `dispatch`
+call: the CLI enforces the per-dispatch ceiling and reuses the given session when one is passed.
+
+## Per-node session reuse (`session_reuse`, v0.6.0)
+
+A node that **fails and retries**, or **fails verification and heals**, re-dispatches the *same
+prompt with the same model* — so its second/third dispatch can `--resume` the first attempt's
+session (a cache read at `RESUME_FLOOR_USD` `$0.01`) instead of paying a second
+`FRESH_FLOOR_USD` `$0.06`. With `session_reuse` on, the engine captures each node's first-attempt
+`session_id` and threads it as `resume=<id>` into **that same node's** retry and heal
+re-dispatches, via a per-attempt copy (`{**kwargs, "resume": sid}`) that never mutates the shared
+kwargs. This is a **cost-only** optimization with strict guardrails (ADR-010):
+
+- **Within-node only.** Reuse never crosses node boundaries; a dependent node never resumes a
+  dependency's session (heterogeneous prompts/models defeat `--resume`). Per-branch/cross-node
+  reuse is a deferred, measurement-gated follow-up.
+- **The verifier is never reused.** The independent verifier always dispatches **fresh** — its
+  fresh-context independence is the point (REQ-WF-002); `_verify.run_verify` forces
+  `resume=None` even if the node's kwargs carry one.
+- **Admission stays on `FRESH_FLOOR_USD`.** `_preallocate` and `estimate_admission` charge the
+  fresh floor regardless of reuse, so the admitted/dropped split — and the
+  estimator-equals-run-drops invariant (AC-WF-014) — are **identical with reuse on or off**.
+  Reuse only makes the realized run cheaper than the estimate.
+- **Fallback to fresh on a stale session.** A resumed re-dispatch that returns a non-`ok` status
+  (stale/invalid session) triggers **one fresh fallback re-dispatch within the same attempt
+  budget**, so reuse can never turn a would-succeed node into a drop. Fail-soft, never-raises.
+- **Default-off ⇒ byte-identical to v0.4.x.** The toggle is strict `is True` (a stray `1`/`"yes"`
+  stays off); with it off no session is captured and every re-dispatch is fresh, so the engine's
+  ordered result/drops/summary and its (empty) stdout are unchanged. The T-203 `events.jsonl`
+  `workflow_run` line stays exactly one schema-versioned, PII-free record per run — reuse shows up
+  only as a **lower `total_cost_usd`**.
+
+See **[ADR-010](../build/02-architecture/adr/010-session-reuse.md)** for the full decision record.
+
+## Observability (v0.4.1)
+
+The engine is correct *and* operable: every run is visible while it runs, auditable after, and
+cost-predictable before — all as a **side channel** that never changes what the engine computes
+(stdout is byte-identical with observability on or off; REQ-NF-030).
+
+- **Live narration (`narrate`, REQ-WF-011).** `run_workflow` / `parallel_build` emit `[Forge]`
+  progress to **stderr only**: a per-wave header (`workflow '<name>': wave k/N — M node(s)`),
+  per-node `start` → `done`/`dropped: <reason>` with the node's cost, and a final **id-ordered
+  summary block** (`completed:[…] dropped:[{id: reason}…] total $X.XXXX`). Live per-node lines may
+  interleave under parallelism (accepted, informational); the *summary block is deterministic*.
+  Default on; silenced by `orchestration.narrate: false` or `FORGE_WF_QUIET=1`. A narration
+  failure degrades to silence — never raises, never touches stdout.
+- **Audit record (`.forge/events.jsonl`, REQ-WF-012).** On every run, **exactly one**
+  schema-versioned, PII-free `workflow_run` JSON line is appended via the rotation-aware atomic
+  writer (`hooks/_error_log.append_jsonl`): `ts`, `name`, `nodes`, `waves`, id-ordered
+  `completed` / `dropped:[{id,reason}]` / `admitted`, `total_cost_usd`, and `verdicts`. Over-cap
+  **and** invalid-spec runs still write their record; an unwritable `.forge` degrades silently.
+- **Cost pre-flight (`estimate_admission`, REQ-WF-013).** A **pure** estimator replays the *same*
+  topological pre-allocation (`_preallocate`, shared with `run_workflow`) against the single
+  `_cost_cap` source — zero dispatch — returning `estimate ≈ admitted × FRESH_FLOOR_USD` and the
+  deterministic admitted-vs-dropped split, plus remaining daily/monthly headroom. `/forge:flow`
+  surfaces it **before** running; the split is identical, node-for-node, to what the run drops
+  (no second cost model). A runtime admission drop fires a loud narration line.
+
+## Failure & safety summary
+
+- Every new module (engine, loader, worktree helpers, config) is **stdlib + fail-soft PyYAML**
+  and **never raises** (REQ-NF-024) — every path degrades to a structured result.
+- Every dispatch routes through the single `_background_agent` adapter and is `_cost_cap`-gated;
+  the `FORGE_NO_BACKGROUND=1` kill switch and the capability probe are honored.
+- Parallel file-mutating nodes never share a worktree; conflicts surface via git; worktrees are
+  torn down on success and failure; isolation degrades to sequential when unavailable.
+- With all `orchestration` toggles off (default), behavior matches v0.3.6.

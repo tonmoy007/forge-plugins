@@ -126,6 +126,79 @@ class TestAutopilotResumeAfterCompact:
         assert "resuming after compaction" not in r.stdout.lower()
 
 
+class TestTraceabilityGapNote:
+    """_traceability_gap_note: advisory surfacing of .forge/traceability-gaps.jsonl,
+    filtered to gaps assigned to the CURRENT stage's agent. Read-only, fail-soft,
+    never blocking — mirrors the _health_surface_note / _unread_findings_note
+    pattern."""
+
+    def _write_gaps(self, tmp_path: Path, gaps: list[dict]) -> None:
+        forge = tmp_path / ".forge"
+        forge.mkdir(parents=True, exist_ok=True)
+        content = "\n".join(json.dumps(g) for g in gaps)
+        (forge / "traceability-gaps.jsonl").write_text(content + ("\n" if gaps else ""))
+
+    def test_no_file_returns_empty(self, tmp_path):
+        mod = _load_hook_module()
+        assert mod._traceability_gap_note(tmp_path, 5) == ""
+
+    def test_gap_matching_current_stage_surfaced(self, tmp_path):
+        self._write_gaps(tmp_path, [
+            {"id": "REQ-004", "category": "unimplemented", "file": "pipeline/01-srs/srs.md",
+             "detail": "never referenced", "stage": 5, "agent": "planner"},
+        ])
+        mod = _load_hook_module()
+        note = mod._traceability_gap_note(tmp_path, 5)
+        assert "1 gap(s)" in note
+        assert "planner" in note
+        assert "REQ-004" in note
+
+    def test_gap_for_different_stage_stays_silent(self, tmp_path):
+        self._write_gaps(tmp_path, [
+            {"id": "REQ-004", "category": "unimplemented", "file": "pipeline/01-srs/srs.md",
+             "detail": "never referenced", "stage": 5, "agent": "planner"},
+        ])
+        mod = _load_hook_module()
+        assert mod._traceability_gap_note(tmp_path, 3) == ""
+
+    def test_multiple_gaps_same_stage_counted(self, tmp_path):
+        self._write_gaps(tmp_path, [
+            {"id": "REQ-004", "category": "unimplemented", "file": "pipeline/01-srs/srs.md",
+             "detail": "x", "stage": 5, "agent": "planner"},
+            {"id": "NFR-001", "category": "unimplemented", "file": "pipeline/01-srs/srs.md",
+             "detail": "y", "stage": 5, "agent": "planner"},
+        ])
+        mod = _load_hook_module()
+        note = mod._traceability_gap_note(tmp_path, 5)
+        assert "2 gap(s)" in note
+
+    def test_malformed_line_skipped_not_crashed(self, tmp_path):
+        forge = tmp_path / ".forge"
+        forge.mkdir(parents=True, exist_ok=True)
+        (forge / "traceability-gaps.jsonl").write_text("not json\n{\"stage\": 5, \"agent\": \"planner\", \"id\": \"REQ-1\"}\n")
+        mod = _load_hook_module()
+        note = mod._traceability_gap_note(tmp_path, 5)
+        assert "1 gap(s)" in note
+
+    def test_end_to_end_via_subprocess(self, tmp_path):
+        _make_state(tmp_path, stage=5)
+        self._write_gaps(tmp_path, [
+            {"id": "REQ-004", "category": "unimplemented", "file": "pipeline/01-srs/srs.md",
+             "detail": "never referenced", "stage": 5, "agent": "planner"},
+        ])
+        r = _run(str(tmp_path))
+        assert r.returncode == 0
+        assert "Traceability" in r.stdout
+        assert "planner" in r.stdout
+        assert "REQ-004" in r.stdout
+
+    def test_end_to_end_no_gaps_no_mention(self, tmp_path):
+        _make_state(tmp_path, stage=5)
+        r = _run(str(tmp_path))
+        assert r.returncode == 0
+        assert "Traceability" not in r.stdout
+
+
 class TestNonForgeDir:
     def test_no_pipeline_silent_exit_0(self, tmp_path):
         r = _run(str(tmp_path))
