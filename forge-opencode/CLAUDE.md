@@ -23,7 +23,21 @@ Skills/agents/scripts are identical to the Claude Code version.
 
 ## Commands
 
-Same as Claude Code version: `/forge:init`, `/forge:srs`, `/forge:status`, etc.
+Same as Claude Code version: `/forge:init`, `/forge:srs`, `/forge:status`, etc., plus
+two OpenCode-only additions:
+
+- `/forge:orchestrate` — full-pipeline driver (`agents/orchestrator.md` +
+  `skills/forge-orchestrate/SKILL.md`). OpenCode's `session.idle` payload never
+  carries a `transcript_path` (no OpenCode event exposes one), so
+  `stop-reflect.py`'s automatic done-signal detection is permanently `False` here —
+  there is no passive path to a per-stage `state.md` advance. This agent is the
+  active replacement: it explicitly runs `state-manager.py advance` after every
+  stage's gate passes and re-reads `state.md` to confirm the write landed, rather
+  than assuming it.
+- `/forge:validate` — pipeline gap analysis (`scripts/validate-traceability.py` +
+  `skills/forge-validate/SKILL.md`): malformed/misplaced ID detection, unimplemented
+  (orphaned) requirement detection, and a rollup of the existing traceability/gate
+  scripts into one report.
 
 ## Differences from Claude Code Version
 
