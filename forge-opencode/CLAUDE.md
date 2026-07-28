@@ -41,7 +41,17 @@ Same as Claude Code version: `/forge:init`, `/forge:srs`, `/forge:status`, etc.
 
 ## Scripts
 
-All 72 Python scripts work unchanged — they read `FORGE_ROOT` env var for their path.
+Most Python scripts work unchanged — they read `FORGE_ROOT` env var for their path.
+Two scripts have diverged from the root Claude Code plugin specifically for this
+port (root and `forge-opencode/` are no longer byte-identical for these):
+
+- `scripts/extract-lessons.py` gained a `--propose` flag (emits YAML to stdout
+  instead of writing `tasks/lessons.md` directly) — `hooks/stop-reflect.py`'s Step 2
+  now calls it with `--cwd`/`--input`/`--propose` and `cwd=` pinned on the
+  subprocess. Previously it was called with `--transcript`/`--since-flag`, which
+  don't exist in the script's argparse — every invocation failed with an argparse
+  usage error (exit 2), silently, so lessons were never written under this port.
+- `scripts/validate-traceability.py` is new (see Commands above).
 
 ## Dependencies
 
