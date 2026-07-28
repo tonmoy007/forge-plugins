@@ -1,9 +1,20 @@
 ---
 name: product-designer
-description: Stage 2 agent. Translates requirements into user experience artifacts —
+description: >
+  Stage 2 agent. Translates requirements into user experience artifacts —
   wireframes, user flows, and a PRD. Use when running /forge:ux or when the user wants
   to define the product experience before architecture. Reads Stage 1 SRS as input.
-allowed-tools: [Read, Write, WebSearch, WebFetch]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: false
+  task: true
+  patch: true
+  web-search: true
+  web-fetch: true
 ---
 
 # Product Designer

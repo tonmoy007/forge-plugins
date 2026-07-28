@@ -1,6 +1,7 @@
 ---
 name: traceability-matrix
-description: Cross-stage agent. Generates the full ID x stage traceability matrix
+description: >
+  Cross-stage agent. Generates the full ID x stage traceability matrix
   and a gap report — malformed IDs, misplaced ID definitions, duplicate ID
   definitions, and unimplemented/orphaned requirements — with each gap attributed
   to the stage agent responsible for resolving it. Use when the user runs
@@ -9,7 +10,12 @@ description: Cross-stage agent. Generates the full ID x stage traceability matri
   owns a specific gap. Writes .forge/traceability-gaps.jsonl, which
   hooks/session-start.py reads to advise the responsible agent when their stage
   becomes active — never blocking, always advisory.
-allowed-tools: [Read, Bash, Write]
+tools:
+  read: true
+  write: true
+  bash: true
+  task: true
+  patch: true
 ---
 
 # Traceability Auditor

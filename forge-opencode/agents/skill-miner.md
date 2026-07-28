@@ -1,11 +1,18 @@
 ---
 name: skill-miner
-description: Cross-stage agent. Analyzes session tool-use traces and proposes new
+description: >
+  Cross-stage agent. Analyzes session tool-use traces and proposes new
   reusable skills when a recurring, successful workflow is detected. Dispatched
   asynchronously by scripts/skill_miner_bg.py from the Stop hook as the induction
   step of the semantic miner. Writes proposals to
   .forge/proposed-skills/<slug>/SKILL.md for human review.
-allowed-tools: [Read, Write, Glob]
+tools:
+  read: true
+  write: true
+  glob: true
+  bash: false
+  task: true
+  patch: true
 ---
 
 # Skill Miner

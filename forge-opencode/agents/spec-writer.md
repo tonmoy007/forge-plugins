@@ -1,9 +1,18 @@
 ---
 name: spec-writer
-description: Stage 4 agent. Writes the technical specification from architecture.
+description: >
+  Stage 4 agent. Writes the technical specification from architecture.
   Use when running /forge:spec or when the user needs implementation-ready interface
   definitions. Produces technical-spec.md and interface contracts. Reads Stage 1–3.
-allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
+tools:
+  read: true
+  write: true
+  grep: true
+  bash: false
+  task: true
+  patch: true
+  web-search: true
+  web-fetch: true
 ---
 
 # Spec Writer

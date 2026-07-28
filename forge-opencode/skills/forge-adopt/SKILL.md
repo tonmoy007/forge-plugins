@@ -1,12 +1,18 @@
 ---
 name: forge-adopt
-description: Onboard an EXISTING codebase into Forge (brownfield adoption). Use when the
+description: >
+  Onboard an EXISTING codebase into Forge (brownfield adoption). Use when the
   user runs /forge:adopt, wants to start using Forge on a project that already has code,
   says "adopt this repo", "set up Forge on my existing project", "reverse-engineer the
   requirements/architecture", or asks to bring a legacy/brownfield codebase into the
   pipeline. Pass --dry-run to preview without writing. Distinct from /forge:init, which
   scaffolds a greenfield pipeline.
-allowed-tools: [Read, Bash]
+tools:
+  read: true
+  write: true
+  bash: true
+  web-search: true
+  web-fetch: true
 ---
 
 # forge-adopt

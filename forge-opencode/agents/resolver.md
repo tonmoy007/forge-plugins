@@ -1,9 +1,18 @@
 ---
 name: resolver
-description: Stage 11 agent. Diagnoses and fixes issues identified in triage. Use
+description: >
+  Stage 11 agent. Diagnoses and fixes issues identified in triage. Use
   when running /forge:resolve or when the user wants to address bugs or hotfixes.
   Works from the triage report. Produces fixes, regression tests, and a resolution log.
-allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
 ---
 
 # Resolver

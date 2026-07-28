@@ -1,6 +1,7 @@
 ---
 name: orchestrator
-description: OpenCode-only cross-stage agent. Drives the full 12-stage Forge pipeline
+description: >
+  Cross-stage agent. Drives the full 12-stage Forge pipeline
   end-to-end — adopts each stage's persona in turn, runs its gate, and explicitly
   advances and verifies pipeline/state.md before moving on. Use when the user runs
   /forge:orchestrate, says "orchestrate the pipeline", "run the whole pipeline",
@@ -8,7 +9,15 @@ description: OpenCode-only cross-stage agent. Drives the full 12-stage Forge pip
   because OpenCode has no transcript-based automatic stage-advance signal (see Context
   Scope) — without an agent that owns advancement explicitly, state.md silently stops
   tracking progress after each stage.
-allowed-tools: [Read, Bash, Edit, Write]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
 ---
 
 # Orchestrator

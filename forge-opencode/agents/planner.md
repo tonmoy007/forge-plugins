@@ -1,9 +1,18 @@
 ---
 name: planner
-description: Stage 5 agent. Converts the technical spec into an executable task DAG
+description: >
+  Stage 5 agent. Converts the technical spec into an executable task DAG
   with effort estimates, dependencies, and risk register. Use when running /forge:plan
   or when the user needs a structured implementation plan. Reads Stage 1–4 artifacts.
-allowed-tools: [Read, Write, Grep]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: false
+  task: true
+  patch: true
 ---
 
 # Planner

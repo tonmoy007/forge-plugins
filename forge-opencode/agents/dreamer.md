@@ -1,11 +1,32 @@
 ---
 name: dreamer
-description: Nightly lesson consolidation agent. Applies confidence decay to
+description: >
+  Nightly lesson consolidation agent. Applies confidence decay to
   low-confidence lessons, detects duplicate and contradicting lesson pairs
   (flag only — never auto-merges or auto-resolves), and produces a daily digest.
   Optionally generates a cheap-model consolidation summary when background agents
   are available. Triggered by /forge:dreamer-run.
-allowed-tools: [Read, Bash]
+tools:
+  read: true
+  write: false
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: false
+permissions:
+  bash:
+    "rm -rf *": "ask"
+    "rm -rf /*": "deny"
+    "sudo *": "deny"
+    "> /dev/*": "deny"
+  edit:
+    "**/*.env*": "deny"
+    "**/*.key": "deny"
+    "**/*.secret": "deny"
+    "node_modules/**": "deny"
+    ".git/**": "deny"
 ---
 
 # Dreamer

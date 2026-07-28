@@ -1,9 +1,18 @@
 ---
 name: release-manager
-description: Stage 12 agent. Prepares and executes a versioned release. Use when
+description: >
+  Stage 12 agent. Prepares and executes a versioned release. Use when
   running /forge:release or when the user wants to cut a release. Produces changelog,
   version bump, release notes, and post-release checklist. Reads Stage 1–11 artifacts.
-allowed-tools: [Read, Write, Bash]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
 ---
 
 # Release Manager

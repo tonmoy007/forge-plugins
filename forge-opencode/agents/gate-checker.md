@@ -1,10 +1,31 @@
 ---
 name: gate-checker
-description: Cross-stage agent. Evaluates whether the current stage's gate criteria
+description: >
+  Cross-stage agent. Evaluates whether the current stage's gate criteria
   are met, reasoning about ambiguous or partial results that the mechanical check-gate.py
   script cannot resolve. Invoked when check-gate.py returns inconclusive results
   or when the user explicitly requests a gate assessment.
-allowed-tools: [Read, Bash, Glob]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
+permissions:
+  bash:
+    "rm -rf *": "ask"
+    "rm -rf /*": "deny"
+    "sudo *": "deny"
+    "> /dev/*": "deny"
+  edit:
+    "**/*.env*": "deny"
+    "**/*.key": "deny"
+    "**/*.secret": "deny"
+    "node_modules/**": "deny"
+    ".git/**": "deny"
 ---
 
 # Gate Checker

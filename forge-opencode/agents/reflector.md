@@ -1,10 +1,19 @@
 ---
 name: reflector
-description: Cross-stage agent. Reviews the just-completed conversation turn and writes
+description: >
+  Cross-stage agent. Reviews the just-completed conversation turn and writes
   a brief reflection entry to pipeline/state.md. Invoked by the Stop hook after every
   session. Identifies patterns, corrections, and quality signals without repeating
   work already in lessons.md.
-allowed-tools: [Read, Write]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: false
+  task: true
+  patch: true
 ---
 
 # Reflector

@@ -1,9 +1,20 @@
 ---
 name: requirements-analyst
-description: Stage 1 agent. Extracts complete, testable requirements from vague project
+description: >
+  Stage 1 agent. Extracts complete, testable requirements from vague project
   descriptions. Use when running /forge:srs or when the user wants to define what to
   build. Produces pipeline/01-srs/srs.md with numbered REQ-IDs and acceptance criteria.
-allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: false
+  task: true
+  patch: true
+  web-search: true
+  web-fetch: true
 ---
 
 # Requirements Analyst

@@ -1,10 +1,31 @@
 ---
 name: lesson-extractor
-description: Cross-stage agent. Reviews correction flags and session patterns to
+description: >
+  Cross-stage agent. Reviews correction flags and session patterns to
   extract lessons worth persisting to tasks/lessons.md. Invoked by extract-lessons.py
   from the Stop hook. Only surfaces lessons that are actionable, new, and not already
   captured.
-allowed-tools: [Read, Write]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: false
+  task: true
+  patch: true
+permissions:
+  bash:
+    "rm -rf *": "ask"
+    "rm -rf /*": "deny"
+    "sudo *": "deny"
+    "> /dev/*": "deny"
+  edit:
+    "**/*.env*": "deny"
+    "**/*.key": "deny"
+    "**/*.secret": "deny"
+    "node_modules/**": "deny"
+    ".git/**": "deny"
 ---
 
 # Lesson Extractor

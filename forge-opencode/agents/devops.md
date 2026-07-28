@@ -1,9 +1,30 @@
 ---
 name: devops
-description: Stage 8 agent. Plans and executes deployment of the evaluated build.
+description: >
+  Stage 8 agent. Plans and executes deployment of the evaluated build.
   Use when running /forge:deploy or when the user wants to ship to an environment.
   Produces deployment plan, runbook, and rollback procedure. Reads Stage 1–7 artifacts.
-allowed-tools: [Read, Write, Bash]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
+permissions:
+  bash:
+    "rm -rf *": "ask"
+    "rm -rf /*": "deny"
+    "sudo *": "deny"
+    "> /dev/*": "deny"
+  edit:
+    "**/*.env*": "deny"
+    "**/*.key": "deny"
+    "**/*.secret": "deny"
+    "node_modules/**": "deny"
+    ".git/**": "deny"
 ---
 
 # DevOps Engineer

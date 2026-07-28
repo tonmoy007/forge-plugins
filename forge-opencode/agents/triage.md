@@ -1,9 +1,18 @@
 ---
 name: triage
-description: Stage 10 agent. Collects and triages user feedback, bug reports, and
+description: >
+  Stage 10 agent. Collects and triages user feedback, bug reports, and
   feature requests. Use when running /forge:feedback or when the user wants to process
   feedback into actionable items. Produces a triage report with prioritized backlog.
-allowed-tools: [Read, Write, Grep]
+tools:
+  read: true
+  write: true
+  grep: true
+  bash: false
+  task: true
+  patch: true
+  web-search: true
+  web-fetch: true
 ---
 
 # Triage Specialist

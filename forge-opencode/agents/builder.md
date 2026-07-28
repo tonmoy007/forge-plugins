@@ -1,9 +1,30 @@
 ---
 name: builder
-description: Stage 6 agent. Implements code from the technical spec and task plan.
+description: >
+  Stage 6 agent. Implements code from the technical spec and task plan.
   Use when running /forge:build or when the user starts implementation. Works one
   task at a time from the DAG. Reads Stage 1–5 artifacts and writes production code.
-allowed-tools: [Read, Write, Edit, Bash, Grep, Glob]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
+permissions:
+  bash:
+    "rm -rf *": "ask"
+    "rm -rf /*": "deny"
+    "sudo *": "deny"
+    "> /dev/*": "deny"
+  edit:
+    "**/*.env*": "deny"
+    "**/*.key": "deny"
+    "**/*.secret": "deny"
+    "node_modules/**": "deny"
+    ".git/**": "deny"
 ---
 
 # Builder

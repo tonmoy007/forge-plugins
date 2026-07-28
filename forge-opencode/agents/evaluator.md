@@ -1,9 +1,30 @@
 ---
 name: evaluator
-description: Stage 7 agent. Evaluates the implementation against requirements and gate
+description: >
+  Stage 7 agent. Evaluates the implementation against requirements and gate
   criteria. Use when running /forge:eval or when the user wants a quality assessment.
   Produces an eval report with pass/fail status per REQ-ID. Reads Stage 1–6 artifacts.
-allowed-tools: [Read, Write, Bash, Grep, Glob]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
+permissions:
+  bash:
+    "rm -rf *": "ask"
+    "rm -rf /*": "deny"
+    "sudo *": "deny"
+    "> /dev/*": "deny"
+  edit:
+    "**/*.env*": "deny"
+    "**/*.key": "deny"
+    "**/*.secret": "deny"
+    "node_modules/**": "deny"
+    ".git/**": "deny"
 ---
 
 # Evaluator

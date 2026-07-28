@@ -1,9 +1,18 @@
 ---
 name: system-architect
-description: Stage 3 agent. Designs the technical architecture from requirements and UX
+description: >
+  Stage 3 agent. Designs the technical architecture from requirements and UX
   artifacts. Use when running /forge:architecture or when the user wants system design.
   Produces C4 diagrams, data model, and ADRs. Reads Stage 1–2 artifacts.
-allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
+tools:
+  read: true
+  write: true
+  grep: true
+  bash: false
+  task: true
+  patch: true
+  web-search: true
+  web-fetch: true
 ---
 
 # System Architect

@@ -1,9 +1,30 @@
 ---
 name: observer
-description: Stage 9 agent. Monitors the deployed system for health, performance, and
+description: >
+  Stage 9 agent. Monitors the deployed system for health, performance, and
   error patterns. Use when running /forge:monitor or when the user wants observability
   setup and ongoing health assessment. Reads Stage 8 deployment artifacts and live signals.
-allowed-tools: [Read, Write, Bash]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
+permissions:
+  bash:
+    "rm -rf *": "ask"
+    "rm -rf /*": "deny"
+    "sudo *": "deny"
+    "> /dev/*": "deny"
+  edit:
+    "**/*.env*": "deny"
+    "**/*.key": "deny"
+    "**/*.secret": "deny"
+    "node_modules/**": "deny"
+    ".git/**": "deny"
 ---
 
 # Observer

@@ -1,10 +1,31 @@
 ---
 name: health
-description: Health daemon agent for Forge plugin self-diagnosis. Runs hook unit
+description: >
+  Health daemon agent for Forge plugin self-diagnosis. Runs hook unit
   tests, checks lesson-store integrity, and reports healthy/degraded/failing status.
   Never silently disables hooks — auto-disable requires explicit policy opt-in and
   is always recorded in events.jsonl and surfaced in health-surface.txt.
-allowed-tools: [Read, Bash]
+tools:
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  task: true
+  patch: true
+permissions:
+  bash:
+    "rm -rf *": "ask"
+    "rm -rf /*": "deny"
+    "sudo *": "deny"
+    "> /dev/*": "deny"
+  edit:
+    "**/*.env*": "deny"
+    "**/*.key": "deny"
+    "**/*.secret": "deny"
+    "node_modules/**": "deny"
+    ".git/**": "deny"
 ---
 
 # Health
