@@ -165,6 +165,45 @@ Configure under `autopilot:` in `.forge/config.yaml` (per-stage model routing, b
 self-heal, verify). Long runs survive context limits via checkpoint → compact → continue —
 see [`references/autopilot-context.md`](references/autopilot-context.md).
 
+### 🧭 Orchestrator — a verify-every-advance pipeline driver
+
+`/forge:orchestrate` is a lighter, single-purpose alternative to autopilot: no self-heal,
+no background dispatch, no context checkpointing — in exchange for one guarantee nothing
+else in the system makes. Every driver that advances `pipeline/state.md` (the automatic
+Stop-hook path, and even autopilot's own `advance` step) calls `state-manager.py advance`
+and trusts its exit code. The Orchestrator persona (`agents/orchestrator.md`) never does —
+it re-reads `state.md` after every single advance and confirms `current_stage` actually
+moved before reporting a stage complete.
+
+```
+/forge:orchestrate              # current stage → end of cycle
+/forge:orchestrate to stage 7   # run through a target
+```
+
+Use autopilot for self-heal, background dispatch, or long unattended runs; use the
+Orchestrator when you want a dedicated persona whose only job is making sure the pipeline's
+bookkeeping never silently falls behind the work.
+
+### 🕸️ Traceability matrix & gap attribution
+
+`/forge:validate` and `/forge:trace-matrix` both run on `scripts/_trace_scan.py`, which
+scans every `pipeline/**/*.md` doc for four gap categories the per-stage gates don't check:
+malformed IDs (wrong case/separator/digit-padding), misplaced ID definitions (a `REQ-*`
+heading defined outside its home doc), duplicate ID definitions, and unimplemented/orphaned
+requirements (defined but never referenced downstream).
+
+- `/forge:validate` — a pass/fail gap-analysis report, plus a rollup of the existing
+  `traceability-check.py --full-chain` and gate-completeness scripts into one pass.
+- `/forge:trace-matrix` — the full id x stage matrix (which stage defines vs merely
+  references each id), with every gap **attributed to the specific stage agent
+  responsible for it** — an "unimplemented" REQ is attributed to the earliest downstream
+  stage that should have referenced it, not the stage that originally defined it.
+
+`/forge:trace-matrix` writes `.forge/traceability-gaps.jsonl` — a fresh snapshot, not an
+accumulating log. `hooks/session-start.py` reads it and surfaces an advisory note only to
+the agent whose stage is currently active ("2 gap(s) assigned to you") — informational
+only, never blocking.
+
 ### 🔀 Dynamic workflows — parallel agent DAGs
 
 Beyond the linear pipeline, Forge has a general **workflow engine**: an arbitrary DAG of
@@ -312,6 +351,9 @@ See [`references/daemon-bus.md`](references/daemon-bus.md).
 | `/forge:sprint` | Slice the task DAG into bounded, reviewable sprints (`plan`/`review`/`list`) |
 | `/forge:flow` | Run a user-defined workflow DAG from `.forge/workflows/*.yaml` |
 | `/forge:autopilot` · `/forge:autopilot-stop` | Run / halt hands-off pipeline execution |
+| `/forge:orchestrate` | A dedicated, single-purpose pipeline driver that re-verifies `state.md` after every stage advance rather than trusting the command's exit code — see [Orchestrator vs autopilot](#-orchestrator--a-verify-every-advance-pipeline-driver) |
+| `/forge:validate` | Pipeline gap analysis — malformed/misplaced/duplicate IDs, unimplemented requirements — plus a rollup of the traceability/gate scripts into one pass/fail report |
+| `/forge:trace-matrix` | Full id x stage traceability matrix, with every gap attributed to the responsible stage agent — see [Traceability matrix & gap attribution](#-traceability-matrix--gap-attribution) |
 
 ---
 
