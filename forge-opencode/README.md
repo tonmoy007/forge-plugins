@@ -28,10 +28,32 @@ Copy `forge-opencode/` to `~/.config/opencode/plugin/forge-opencode/` or `.openc
 ## Usage
 
 ```
-/forge:init      # scaffold pipeline
-/forge:srs       # write requirements
-/forge:status    # check current stage
+/forge:init         # scaffold pipeline
+/forge:srs          # write requirements
+/forge:status       # check current stage
+/forge:orchestrate  # drive the whole pipeline, stage by stage (see below)
+/forge:validate     # gap analysis — malformed/misplaced/unimplemented IDs, traceability
 ```
+
+## Full-Pipeline Orchestration
+
+OpenCode has no transcript-based "done" signal (see Architecture below), so the
+Claude Code version's automatic stage-advance never fires here. `/forge:orchestrate`
+(`agents/orchestrator.md`) is the OpenCode-native replacement: it adopts a dedicated
+Orchestrator persona that runs each stage's own skill in turn, checks its gate, and
+— critically — explicitly advances `pipeline/state.md` and **re-reads it to confirm
+the advance landed** before calling a stage done. See
+`skills/forge-orchestrate/SKILL.md` for the full protocol and how it relates to
+`/forge:autopilot` (self-heal / background dispatch — still the right tool for that).
+
+## Validation & Traceability
+
+`/forge:validate` (`scripts/validate-traceability.py`) runs a full gap analysis over
+the pipeline: malformed IDs (wrong case/separator/digit-padding), misplaced ID
+definitions (e.g. a `REQ-*` heading defined outside `pipeline/01-srs/srs.md`),
+unimplemented/orphaned requirements (a `REQ-*`/`NFR-*` never referenced past Stage 1),
+and the existing `traceability-check.py --full-chain` + gate-completeness scripts,
+folded into one report. See `skills/forge-validate/SKILL.md`.
 
 ## Architecture
 

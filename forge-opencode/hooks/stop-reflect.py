@@ -343,12 +343,14 @@ def main() -> None:
                 result = subprocess.run(
                     [
                         sys.executable, str(script),
-                        "--transcript", transcript_path,
-                        "--since-flag", str(correction_flags),
+                        "--cwd", str(cwd),
+                        "--input", str(correction_flags),
+                        "--propose",
                     ],
                     capture_output=True,
                     text=True,
                     timeout=15,
+                    cwd=str(cwd),
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     for raw in _parse_lesson_output(result.stdout, session_id, current_stage):

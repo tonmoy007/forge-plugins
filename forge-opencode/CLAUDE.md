@@ -23,7 +23,21 @@ Skills/agents/scripts are identical to the Claude Code version.
 
 ## Commands
 
-Same as Claude Code version: `/forge:init`, `/forge:srs`, `/forge:status`, etc.
+Same as Claude Code version: `/forge:init`, `/forge:srs`, `/forge:status`, etc., plus
+two OpenCode-only additions:
+
+- `/forge:orchestrate` — full-pipeline driver (`agents/orchestrator.md` +
+  `skills/forge-orchestrate/SKILL.md`). OpenCode's `session.idle` payload never
+  carries a `transcript_path` (no OpenCode event exposes one), so
+  `stop-reflect.py`'s automatic done-signal detection is permanently `False` here —
+  there is no passive path to a per-stage `state.md` advance. This agent is the
+  active replacement: it explicitly runs `state-manager.py advance` after every
+  stage's gate passes and re-reads `state.md` to confirm the write landed, rather
+  than assuming it.
+- `/forge:validate` — pipeline gap analysis (`scripts/validate-traceability.py` +
+  `skills/forge-validate/SKILL.md`): malformed/misplaced ID detection, unimplemented
+  (orphaned) requirement detection, and a rollup of the existing traceability/gate
+  scripts into one report.
 
 ## Differences from Claude Code Version
 
@@ -41,7 +55,17 @@ Same as Claude Code version: `/forge:init`, `/forge:srs`, `/forge:status`, etc.
 
 ## Scripts
 
-All 72 Python scripts work unchanged — they read `FORGE_ROOT` env var for their path.
+Most Python scripts work unchanged — they read `FORGE_ROOT` env var for their path.
+Two scripts have diverged from the root Claude Code plugin specifically for this
+port (root and `forge-opencode/` are no longer byte-identical for these):
+
+- `scripts/extract-lessons.py` gained a `--propose` flag (emits YAML to stdout
+  instead of writing `tasks/lessons.md` directly) — `hooks/stop-reflect.py`'s Step 2
+  now calls it with `--cwd`/`--input`/`--propose` and `cwd=` pinned on the
+  subprocess. Previously it was called with `--transcript`/`--since-flag`, which
+  don't exist in the script's argparse — every invocation failed with an argparse
+  usage error (exit 2), silently, so lessons were never written under this port.
+- `scripts/validate-traceability.py` is new (see Commands above).
 
 ## Dependencies
 
