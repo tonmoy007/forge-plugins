@@ -6,6 +6,11 @@ Trigger/Rule/Why entries to tasks/lessons.md.
 
 Rule-based extraction is always available. Pass --llm to route through
 the lesson-extractor agent (falls back to rule-based on any failure).
+
+Pass --propose to skip the direct file write and instead print the
+extracted lessons as YAML to stdout — the caller (hooks/stop-reflect.py)
+then validates each proposal and writes it via the Proposal->Validator->
+Executor rails, which also mirrors it into .forge/lessons.yaml.
 """
 
 from __future__ import annotations
@@ -22,6 +27,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +261,21 @@ def extract_lesson(flag: CorrectionFlag, use_llm: bool = False) -> Optional[Less
     return _rule_based_extract(flag)
 
 
+def emit_proposals(lessons: list[Lesson]) -> None:
+    """Print extracted lessons as YAML to stdout — propose only, no file write.
+
+    Keys match what hooks/stop-reflect.py's _parse_lesson_output reads
+    (trigger/rule/why); stage_tags is intentionally omitted since Lesson
+    carries keyword tags, not stage numbers — the caller defaults it to
+    the current stage.
+    """
+    payload = [
+        {"trigger": l.trigger, "rule": l.rule, "why": l.why}
+        for l in lessons
+    ]
+    print(yaml.safe_dump(payload, sort_keys=False))
+
+
 def format_lesson(lesson: Lesson) -> str:
     """Render a Lesson as the tasks/lessons.md markdown format."""
     tags_str = ", ".join(lesson.tags)
@@ -343,6 +365,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print without writing")
     parser.add_argument("--since", metavar="YYYY-MM-DD", help="Skip flags older than date")
     parser.add_argument("--llm", action="store_true", help="Use lesson-extractor agent")
+    parser.add_argument(
+        "--propose",
+        action="store_true",
+        help="Print extracted lessons as YAML to stdout instead of writing "
+        "tasks/lessons.md directly — for callers that validate before persisting",
+    )
     args = parser.parse_args(argv)
 
     # REQ-EXTRACT-CWD-001: derive default paths from --cwd; explicit flags override.
@@ -369,6 +397,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             continue
         lessons.append(lesson)
         existing_titles.append(lesson.title)
+
+    if args.propose:
+        emit_proposals(lessons)
+        return 0
 
     append_lessons(args.output, lessons, dry_run=args.dry_run)
     if not args.dry_run:
