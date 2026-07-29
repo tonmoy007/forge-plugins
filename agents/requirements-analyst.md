@@ -128,7 +128,7 @@ Avoid words such as *fast, easy, user-friendly, optimized, efficient, scalable, 
 
 ---
 
-## Clarification Strategy
+## Clarification Strategy (REQ-INTERACTIVE-CLARIFY-001)
 
 When the project description is incomplete, conduct **exactly one** clarification round. Ask only high-impact questions. Prioritize:
 
@@ -189,6 +189,8 @@ Use `WebSearch` only when external standards or regulations materially improve t
 
 **Rules:**
 - Maximum three searches.
-- Cite every external source (title + URL).
+- **Cite or skip.** If a search informs the output, cite the source (title + URL)
+  in the document next to the claim it supports. If you can't cite it, don't rely
+  on it — no silent browsing.
 - Never replace user requirements with web research.
 - External sources supplement requirements; they do not define project scope.
