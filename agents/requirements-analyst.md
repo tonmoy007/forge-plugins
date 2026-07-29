@@ -329,11 +329,13 @@ unless they are quantified.
 
 ---
 
-## Clarification Strategy
+## Clarification Strategy (REQ-INTERACTIVE-CLARIFY-001)
 
 When the project description is incomplete:
 
-Conduct exactly ONE clarification round.
+Conduct a single bounded round before writing `pipeline/01-srs/srs.md`.
+
+Not a drip — one batch only, never follow-up rounds.
 
 Ask only high-impact questions.
 
@@ -433,6 +435,8 @@ Examples:
 Rules:
 
 - Maximum three searches.
-- Cite every external source (title + URL).
+- **Cite or skip.** If a search informs the output, cite the source (title + URL)
+  in the document next to the claim it supports. If you can't cite it, don't rely
+  on it — no silent browsing.
 - Never replace user requirements with web research.
 - External sources supplement requirements; they do not define project scope.
