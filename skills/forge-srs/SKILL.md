@@ -131,6 +131,11 @@ The persona is solely responsible for:
 - SRS generation
 - web research (when appropriate)
 
+The persona conducts a single bounded round of clarification questions
+(REQ-INTERACTIVE-CLARIFY-001) before writing `pipeline/01-srs/srs.md` — one
+batch, not a drip. Unanswered questions become documented assumptions in
+the SRS.
+
 Apply any project profile overrides loaded during pre-flight.
 
 If an existing SRS already exists, refine it incrementally unless the user has
