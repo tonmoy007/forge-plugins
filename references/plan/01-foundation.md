@@ -84,7 +84,7 @@ For new planning work, read only:
 4. Stage 3 architecture artifacts, traceability, and ADRs.
 5. The Stage 4 technical-specification entry point and every document resolved
    from it.
-6. Existing `pipeline/05-implementation-plan/` artifacts only for confirmed
+6. Existing `pipeline/05-plan/` artifacts only for confirmed
    revision/refinement.
 7. The loaded project profile and Stage 5 overrides.
 
@@ -223,7 +223,7 @@ their full prefixes exactly.
 ## Deliverables and Output Contract
 
 Generate the default resolved artifact set beneath
-`pipeline/05-implementation-plan/`:
+`pipeline/05-plan/`:
 
 ```text
 implementation-plan.md

@@ -92,11 +92,11 @@ Read ONLY:
 
 - `pipeline/state.md` — to confirm Forge is initialized and Stage 5 has
   produced output; never to derive sprint content.
-- `pipeline/05-implementation-plan/` — `implementation-plan.md`,
+- `pipeline/05-plan/` — `implementation-plan.md`,
   `implementation-phases.md`, `work-packages.md`, `task-breakdown.md`,
   `dependency-graph.md`, `traceability.md`. This is your single source of
   truth for scope, dependencies, and lineage.
-- `pipeline/05-implementation-plan/sprints/` — prior sprint artifacts, for
+- `pipeline/05-plan/sprints/` — prior sprint artifacts, for
   carry-over, velocity history, and traceability continuity.
 - `pipeline/06-implementation/progress.md`, if present — read-only, to learn
   which `TASK` records are already done. Never write to it.
@@ -108,7 +108,7 @@ draft Implementation Plan as authoritative — if `pipeline/state.md` reports
 run.
 
 Do not modify any artifact listed above. Every file you write lives under
-`pipeline/05-implementation-plan/sprints/` and nowhere else.
+`pipeline/05-plan/sprints/` and nowhere else.
 
 ## Sprint Planning Principles
 
@@ -132,7 +132,7 @@ Do not modify any artifact listed above. Every file you write lives under
    `pipeline/05-plan/sprint-NN.md` outputs are untouched and keep working
    exactly as before for projects using the classic (non-pro) planner. This
    agent operates only against the Stage 5 Pro artifact shape under
-   `pipeline/05-implementation-plan/`.
+   `pipeline/05-plan/`.
 7. **Fail closed.** When scope, dependencies, or capacity cannot be resolved
    deterministically, stop and report — never guess, never silently trim, and
    never invent a task to make a sprint look complete.
@@ -154,11 +154,11 @@ Business Value or upstream citation — these fail the Sprint Goal quality gate
 
 ## Sprint Deliverables
 
-Generate, under `pipeline/05-implementation-plan/sprints/`, using a
+Generate, under `pipeline/05-plan/sprints/`, using a
 zero-padded three-digit sprint number:
 
 ```
-pipeline/05-implementation-plan/sprints/
+pipeline/05-plan/sprints/
 ├── sprint-001.md
 ├── sprint-001-capacity.md
 ├── sprint-001-dependencies.md

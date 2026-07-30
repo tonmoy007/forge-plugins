@@ -152,7 +152,7 @@ This agent SHALL:
 - Select tasks deterministically: carry-over first, then dependency-ordered
   ready tasks, bounded by capacity.
 - Re-affirm existing `TASK` lineage; never invent, repair, or renumber it.
-- Keep every sprint artifact under `pipeline/05-implementation-plan/sprints/`.
+- Keep every sprint artifact under `pipeline/05-plan/sprints/`.
 - Leave `pipeline/state.md`, Stage 1–5 artifacts, and `progress.md` untouched.
 - Stop and report on every Validation/Failure condition rather than
   proceeding with an unresolved defect.
@@ -191,7 +191,7 @@ Risks recorded: <N>
 Traceability: <N>/<N> tasks resolved
 Validation: PASS
 
-This sprint is a view over pipeline/05-implementation-plan/. The
+This sprint is a view over pipeline/05-plan/. The
 Implementation Plan and pipeline state are unchanged. Stage 6 may build
 committed tasks directly, with or without this sprint file.
 ```

@@ -3,7 +3,7 @@ name: forge-sprint-pro
 description: >
   Optional Sprint Planning & Execution layer over the Stage 5 Pro
   Implementation Plan. Orchestrates Sprint Planner Pro to slice
-  `pipeline/05-implementation-plan/` into deterministic, capacity-bounded,
+  `pipeline/05-plan/` into deterministic, capacity-bounded,
   traceable sprint backlogs. Not a pipeline stage — never advances or
   mutates pipeline state.
 allowed-tools:
@@ -76,11 +76,11 @@ Resolve every required Stage 5 Pro input with the document resolver — never
 assume a flat file layout:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-implementation-plan/implementation-plan
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-implementation-plan/work-packages
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-implementation-plan/task-breakdown
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-implementation-plan/dependency-graph
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-implementation-plan/traceability
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-plan/implementation-plan
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-plan/work-packages
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-plan/task-breakdown
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-plan/dependency-graph
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/05-plan/traceability
 ```
 
 If any required document does not resolve, STOP. List every missing artifact.
@@ -138,7 +138,7 @@ review.
 no-LLM** selector, but it is hardwired to the legacy artifact shape:
 `pipeline/05-plan/task-dag.md`, `T-\d+` identifiers, and
 `pipeline/05-plan/sprint-NN.md` output. It has no awareness of
-`pipeline/05-implementation-plan/`, `TASK-\d+` identifiers, or the
+`pipeline/05-plan/`, `TASK-\d+` identifiers, or the
 `sprints/` output directory this skill uses. This skill does not modify
 `scripts/sprint.py` — the legacy `forge-sprint` skill continues to depend on
 it unchanged.
@@ -162,7 +162,7 @@ Two cases follow from this:
    `/forge:sprint` skill, which continues to call `scripts/sprint.py`
    unchanged.
 
-Never invoke `scripts/sprint.py` against `pipeline/05-implementation-plan/`
+Never invoke `scripts/sprint.py` against `pipeline/05-plan/`
 paths — it will not find its expected files and will exit non-zero with a
 message about the legacy DAG, which would be confusing and incorrect in this
 context.
@@ -181,7 +181,7 @@ the requested sub-workflow:
 - **`retro`** — run the persona's Retrospective workflow (typically alongside
   `review`). Produces `sprint-NNN-retrospective.md`.
 - **`list`** — read existing files under
-  `pipeline/05-implementation-plan/sprints/` and report sprint numbers, task
+  `pipeline/05-plan/sprints/` and report sprint numbers, task
   counts, and done/carried/blocked status per sprint. Read-only; writes
   nothing.
 

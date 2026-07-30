@@ -32,7 +32,7 @@ sprints — never rewrite a prior sprint's traceability file.
 
 **Fail sprint generation when:**
 
-- No Implementation Plan exists (`pipeline/05-implementation-plan/` does not
+- No Implementation Plan exists (`pipeline/05-plan/` does not
   resolve).
 - The dependency graph is invalid or unreadable.
 - Circular dependencies exist among candidate tasks.
