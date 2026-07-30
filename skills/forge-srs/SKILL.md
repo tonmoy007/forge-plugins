@@ -23,10 +23,7 @@ allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
 
 1. Read `agents/requirements-analyst.md` to load the Requirements Analyst persona.
 2. Adopt that persona completely — you are now the Requirements Analyst.
-3. Ask the user to describe their project if they haven't already. Gather:
-   - What the system does
-   - Who uses it
-   - Key constraints (technology, timeline, compliance)
+3. Ask the user to describe their project if they haven't already. Gather: what the system does, who uses it, key constraints (technology, timeline, compliance).
 4. Follow the Requirements Analyst workflow: clarify, categorize, assign REQ-IDs, write acceptance criteria.
 5. Write `pipeline/01-srs/srs.md` per the Output Contract in the persona file.
 6. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 1` to mark Stage 1 active.
@@ -39,9 +36,7 @@ After running, confirm:
 
 ## Next Step
 
-Derive the hint from the canonical stage table — never hardcode it
-(REQ-NEXTHINT-001, single source of truth). Run the helper and present its
-output to the user verbatim:
+Derive the hint from the canonical stage table — never hardcode it (REQ-NEXTHINT-001, single source of truth). Run the helper and present its output to the user verbatim:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py next-hint --stage 1
