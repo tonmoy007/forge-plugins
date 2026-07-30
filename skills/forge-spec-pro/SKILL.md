@@ -125,9 +125,11 @@ stage-advance gates. Record every applied override in the output.
 
 ## Load Spec Writer Pro
 
-Read `agents/spec-writer-pro.md` and adopt the persona completely. The persona
-is the source of truth for Stage 4 business rules, artifact semantics,
-identifier rules, validation, quality gates, and failure behavior. This skill
+Read `agents/spec-writer-pro.md` and adopt the persona completely. Then load
+every mandatory section-wise instruction in `references/spec/` using the
+agent's Reference Loading Protocol. Together, the agent and its references are
+the source of truth for Stage 4 business rules, artifact semantics, identifier
+rules, validation, quality gates, and failure behavior. This skill
 orchestrates; it does not duplicate or reinterpret persona logic.
 
 ---
@@ -252,8 +254,8 @@ invented artifacts, redefined Stage 1–3 artifacts, and implementation code.
 
 ## Validation and Repair Loop
 
-Run every deterministic validation and quality gate defined by
-`agents/spec-writer-pro.md`, plus profile-supplied validation rules. Validate
+Run every deterministic validation and quality gate defined by the
+`agents/spec-writer-pro.md` reference set, plus profile-supplied validation rules. Validate
 contract completeness, schema/DTO integrity, error safety, state/sequence
 consistency, integration failure semantics, security, performance,
 compatibility, operations, cross-document consistency, identifier integrity,
