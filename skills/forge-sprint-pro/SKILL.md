@@ -104,19 +104,33 @@ Sprint Planning has no dedicated stage number in
 override block — the same one Stage 5 Pro itself loads — since Sprint
 Planning operates directly on Stage 5's output and shares its domain
 (Microservices, Monolith, Library, CLI, Mobile, ML, Embedded, Infrastructure,
-etc.). Pass the result unchanged to Sprint Planner Pro. Only
-`additional_artifacts`, `additional_steps`, `additional_concerns`, and
-`skip_steps` apply to sprint concerns; `replace_with` overrides intended for
-Stage 5's own artifact generation are not relevant here and should be ignored
-by this skill. Never let a profile bypass Validation, Traceability, or the
-never-mutate-pipeline-state rule.
+etc.). Load and pass the result unchanged to Sprint Planner Pro. The
+persona's `references/sprint-plan/05-workflow-governance.md` Profile
+Overrides section controls handling of `additional_artifacts`,
+`additional_steps`, `additional_concerns`, and `skip_steps`, and states that
+`replace_with` does not apply to Sprint Planning. Never let a profile bypass
+Validation, Traceability, or the never-mutate-pipeline-state rule.
 
-## Load Sprint Planner Pro
+## Load Sprint Planner Pro and References
 
-Read `agents/sprint-planner-pro.md` and adopt Sprint Planner Pro. Follow its
-Workflow section exactly for `plan`, its Sprint Review workflow for `review`,
-and its Retrospective workflow alongside review. Do not omit a rule, gate, or
-workflow step from that file.
+Read `agents/sprint-planner-pro.md`, adopt Sprint Planner Pro, and follow its
+Reference Loading Protocol exactly. The following files are mandatory agent
+instructions:
+
+```text
+references/sprint-plan/01-foundation.md
+references/sprint-plan/02-capacity-dependency.md
+references/sprint-plan/03-risk-allocation.md
+references/sprint-plan/04-traceability-validation.md
+references/sprint-plan/05-workflow-governance.md
+```
+
+Load each reference when the agent requires it and load all five before final
+validation or completion. Do not omit, summarize away, substitute, or weaken a
+reference instruction. Follow the Workflow in
+`references/sprint-plan/05-workflow-governance.md` exactly for `plan`, its
+Sprint Review Workflow for `review`, and its Retrospective Workflow alongside
+review.
 
 ## Script Integration
 
@@ -135,9 +149,11 @@ Two cases follow from this:
    `scripts/sprint.py` cannot parse them. Sprint Planner Pro performs the
    selection itself, following the same deterministic algorithm class the
    script implements (topological/dependency-first ordering, carry-over
-   tasks lead, capacity-bounded fill — see the persona's Dependency Analysis
-   and Workflow sections) but reading `dependency-graph.md` and
-   `task-breakdown.md` directly instead of shelling out to the script. This
+   tasks lead, capacity-bounded fill — see
+   `references/sprint-plan/02-capacity-dependency.md` and the Workflow in
+   `references/sprint-plan/05-workflow-governance.md`) but reading
+   `dependency-graph.md` and `task-breakdown.md` directly instead of shelling
+   out to the script. This
    is not a duplication of business logic for the shape the script already
    handles — it is the only way to support a shape the script was never
    built to parse, without editing the script.
