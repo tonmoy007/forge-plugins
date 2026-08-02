@@ -1,0 +1,34 @@
+name: doc-review
+description: >
+  Fan a document out to two independent reviewers, then synthesize their notes into one
+  consolidated review. A small diamond (split → {reviewer-a, reviewer-b} → synthesize) that
+  dogfoods the workflow engine: heterogeneous per-node prompts, depends_on edges, and
+  {{upstream}} data passing. Run with `/forge:flow doc-review` (needs orchestration.flows_enabled).
+nodes:
+  - id: split
+    prompt: >
+      Read the target document and return JSON {"sections": [...]} listing its major sections
+      (id + one-line summary each) so reviewers can divide the work.
+
+  - id: reviewer-a
+    depends_on: [split]
+    model: claude-haiku-4-5
+    schema: {type: object}
+    prompt_template: >
+      You are reviewer A. Given these sections: {{split}} — review for CORRECTNESS and CLARITY.
+      Return JSON {"findings": [{"section": str, "issue": str, "severity": "low|med|high"}]}.
+
+  - id: reviewer-b
+    depends_on: [split]
+    model: claude-haiku-4-5
+    schema: {type: object}
+    prompt_template: >
+      You are reviewer B. Given these sections: {{split}} — review for COMPLETENESS and
+      STRUCTURE. Return JSON {"findings": [{"section": str, "issue": str, "severity": "low|med|high"}]}.
+
+  - id: synthesize
+    depends_on: [reviewer-a, reviewer-b]
+    schema: {type: object}
+    prompt_template: >
+      Merge reviewer A ({{reviewer-a}}) and reviewer B ({{reviewer-b}}) into ONE deduplicated,
+      severity-sorted review. Return JSON {"review": [{"section": str, "issue": str, "severity": str}]}.

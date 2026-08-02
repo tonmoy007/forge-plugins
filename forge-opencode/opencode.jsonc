@@ -1,0 +1,17 @@
+{
+  "name": "forge-opencode",
+  "version": "0.1.0",
+  "description": "Forge SDLC orchestrator for OpenCode — gated 12-stage pipeline with learning",
+  "author": "Saddam (port from Claude Code)",
+  "license": "MIT",
+  "plugin": {
+    "file": "plugin.js",
+    "location": "global"
+  },
+  "hooks": {
+    "session": ["session.created", "session.idle", "session.deleted", "session.compacted"],
+    "tool": ["tool.execute.before", "tool.execute.after"],
+    "message": ["message.send.before"],
+    "file": ["file.written", "file.edited"]
+  }
+}

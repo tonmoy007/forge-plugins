@@ -1,0 +1,19 @@
+{
+  "name": "forge-opencode",
+  "version": "0.1.0",
+  "description": "Forge SDLC orchestrator for OpenCode — gated 12-stage pipeline with learning",
+  "main": "plugin.js",
+  "type": "module",
+  "author": "Saddam (port from Claude Code)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "sdlc",
+    "pipeline",
+    "forge"
+  ]
+}

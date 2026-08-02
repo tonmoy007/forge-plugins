@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a1a"/>
+      <stop offset="50%" stop-color="#12122a"/>
+      <stop offset="100%" stop-color="#1a0a2e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6c63ff"/>
+      <stop offset="50%" stop-color="#e94560"/>
+      <stop offset="100%" stop-color="#ff6b35"/>
+    </linearGradient>
+    <radialGradient id="orb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6c63ff" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#6c63ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e94560" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#e94560" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" stroke-opacity="0.035" stroke-width="1"/>
+    </pattern>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="card-bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a3a" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#0a0a1a" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="box-purple" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2a1a3a"/><stop offset="100%" stop-color="#150d1f"/></linearGradient>
+    <linearGradient id="box-green" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a3a2a"/><stop offset="100%" stop-color="#0d1f15"/></linearGradient>
+    <linearGradient id="box-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2a4a"/><stop offset="100%" stop-color="#0d1525"/></linearGradient>
+    <linearGradient id="box-orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3a2a1a"/><stop offset="100%" stop-color="#1f150d"/></linearGradient>
+    <linearGradient id="scan" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8a7bff" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#8a7bff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#8a7bff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="packet" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="40%" stop-color="#8af0ff" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+
+  <!-- Drifting nebula glow -->
+  <circle cx="330" cy="190" r="320" fill="url(#orb)">
+    <animate attributeName="cx" values="330;430;330" dur="19s" repeatCount="indefinite"/>
+    <animate attributeName="cy" values="190;250;190" dur="23s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="1060" cy="470" r="280" fill="url(#orb2)">
+    <animate attributeName="cy" values="470;380;470" dur="21s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Starfield (twinkle) -->
+  <g fill="#cfd0ff">
+    <circle cx="150" cy="120" r="1.5" opacity="0.5"><animate attributeName="opacity" values="0.1;0.9;0.1" dur="3.2s" begin="0s" repeatCount="indefinite"/></circle>
+    <circle cx="470" cy="70" r="1.2" opacity="0.4"><animate attributeName="opacity" values="0.1;0.8;0.1" dur="4.1s" begin="0.6s" repeatCount="indefinite"/></circle>
+    <circle cx="640" cy="150" r="1.6" opacity="0.5"><animate attributeName="opacity" values="0.1;0.9;0.1" dur="3.7s" begin="1.1s" repeatCount="indefinite"/></circle>
+    <circle cx="760" cy="60" r="1.1" opacity="0.4"><animate attributeName="opacity" values="0.1;0.7;0.1" dur="4.6s" begin="0.3s" repeatCount="indefinite"/></circle>
+    <circle cx="820" cy="540" r="1.5" opacity="0.5"><animate attributeName="opacity" values="0.1;0.9;0.1" dur="3.4s" begin="1.7s" repeatCount="indefinite"/></circle>
+    <circle cx="560" cy="430" r="1.2" opacity="0.4"><animate attributeName="opacity" values="0.1;0.8;0.1" dur="4.3s" begin="2.2s" repeatCount="indefinite"/></circle>
+    <circle cx="240" cy="600" r="1.3" opacity="0.45"><animate attributeName="opacity" values="0.1;0.8;0.1" dur="3.9s" begin="0.9s" repeatCount="indefinite"/></circle>
+    <circle cx="1180" cy="540" r="1.5" opacity="0.5"><animate attributeName="opacity" values="0.1;0.9;0.1" dur="3.6s" begin="1.4s" repeatCount="indefinite"/></circle>
+    <circle cx="1240" cy="120" r="1.2" opacity="0.4"><animate attributeName="opacity" values="0.1;0.8;0.1" dur="4.2s" begin="0.2s" repeatCount="indefinite"/></circle>
+    <circle cx="60" cy="430" r="1.3" opacity="0.45"><animate attributeName="opacity" values="0.1;0.8;0.1" dur="3.8s" begin="2.6s" repeatCount="indefinite"/></circle>
+    <circle cx="700" cy="300" r="1.1" opacity="0.35"><animate attributeName="opacity" values="0.1;0.7;0.1" dur="4.8s" begin="1.9s" repeatCount="indefinite"/></circle>
+    <circle cx="380" cy="350" r="1.2" opacity="0.4"><animate attributeName="opacity" values="0.1;0.8;0.1" dur="4.0s" begin="3.1s" repeatCount="indefinite"/></circle>
+  </g>
+
+  <!-- HUD corner brackets -->
+  <g stroke="#6c63ff" stroke-width="2" fill="none">
+    <path d="M24 58 L24 24 L58 24"/>
+    <path d="M1256 58 L1256 24 L1222 24"/>
+    <path d="M24 582 L24 616 L58 616"/>
+    <path d="M1256 582 L1256 616 L1222 616"/>
+    <animate attributeName="stroke-opacity" values="0.25;0.65;0.25" dur="4.5s" repeatCount="indefinite"/>
+  </g>
+
+  <!-- Scanline sweep -->
+  <rect x="0" y="0" width="1280" height="90" fill="url(#scan)">
+    <animateTransform attributeName="transform" type="translate" values="0,-90;0,640" dur="9s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- Logo -->
+  <rect x="60" y="54" width="56" height="56" rx="14" fill="url(#accent)" filter="url(#softglow)"/>
+  <text x="88" y="96" font-size="34" font-weight="800" fill="#0a0a1a" text-anchor="middle">F</text>
+  <text x="132" y="96" font-size="30" font-weight="700" fill="#e8e8ff">Forge</text>
+
+  <!-- Title -->
+  <text x="60" y="180" font-size="62" font-weight="800" fill="#f0f0ff" letter-spacing="-1.5">SDLC Orchestrator</text>
+  <text x="60" y="244" font-size="62" font-weight="800" fill="url(#accent)" letter-spacing="-1.5" filter="url(#glow)">for Claude Code</text>
+
+  <!-- Subtitle (evergreen — no per-release numbers) -->
+  <text x="62" y="288" font-size="18.5" fill="#9a9ac8">Gated stages · REQ-ID traceability · Parallel agent workflows · Self-improving skills</text>
+
+  <!-- Install pill -->
+  <rect x="60" y="316" width="648" height="46" rx="23" fill="#15152e" stroke="#3a3a6a" stroke-width="1"/>
+  <text x="82" y="344" font-family="ui-monospace, monospace" font-size="15" fill="#6c63ff">$</text>
+  <text x="100" y="344" font-family="ui-monospace, monospace" font-size="15" fill="#a8a8d8">/plugin marketplace add tonmoy007/forge-plugins</text>
+
+  <!-- Pipeline label -->
+  <text x="62" y="412" font-family="ui-monospace, monospace" font-size="11" fill="#5a5a82" letter-spacing="3">GATED 12-STAGE PIPELINE</text>
+
+  <!-- Pipeline stages -->
+  <g font-family="ui-monospace, monospace" text-anchor="middle">
+    <rect x="60" y="430" width="100" height="56" rx="8" fill="url(#box-purple)" stroke="#6c63ff" stroke-width="1.5"/>
+    <text x="110" y="454" font-size="11" fill="#b0b0d0">Requirements</text>
+    <text x="110" y="472" font-size="9" fill="#6c63ff">Stage 1</text>
+    <text x="165" y="465" font-size="16" fill="#3a3a6a">→</text>
+
+    <rect x="185" y="430" width="100" height="56" rx="8" fill="url(#box-green)" stroke="#4ade80" stroke-width="1.5"/>
+    <text x="235" y="454" font-size="11" fill="#b0d0b0">Product</text>
+    <text x="235" y="472" font-size="9" fill="#4ade80">Stage 2</text>
+    <text x="290" y="465" font-size="16" fill="#3a3a6a">→</text>
+
+    <rect x="310" y="430" width="100" height="56" rx="8" fill="url(#box-blue)" stroke="#4488ff" stroke-width="1.5"/>
+    <text x="360" y="454" font-size="11" fill="#a0b0d0">Architecture</text>
+    <text x="360" y="472" font-size="9" fill="#4488ff">Stage 3</text>
+    <text x="415" y="465" font-size="16" fill="#3a3a6a">→</text>
+
+    <rect x="435" y="430" width="100" height="56" rx="8" fill="url(#box-orange)" stroke="#ff6b35" stroke-width="1.5"/>
+    <text x="485" y="454" font-size="11" fill="#d0b0a0">Build</text>
+    <text x="485" y="472" font-size="9" fill="#ff6b35">Stage 4+</text>
+    <text x="540" y="465" font-size="16" fill="#3a3a6a">→</text>
+
+    <!-- Gate (pulsing) -->
+    <circle cx="578" cy="458" r="18" fill="none" stroke="#e94560" stroke-width="2">
+      <animate attributeName="r" values="17;20;17" dur="2.2s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-opacity" values="1;0.4;1" dur="2.2s" repeatCount="indefinite"/>
+    </circle>
+    <text x="578" y="464" font-size="16" fill="#e94560">G</text>
+    <text x="601" y="465" font-size="16" fill="#3a3a6a">→</text>
+
+    <rect x="621" y="430" width="100" height="56" rx="8" fill="url(#box-purple)" stroke="#a855f7" stroke-width="1.5"/>
+    <text x="671" y="454" font-size="11" fill="#c0a0d0">Review</text>
+    <text x="671" y="472" font-size="9" fill="#a855f7">Gate</text>
+    <text x="726" y="465" font-size="16" fill="#3a3a6a">→</text>
+
+    <rect x="746" y="430" width="100" height="56" rx="8" fill="url(#box-green)" stroke="#00c853" stroke-width="1.5"/>
+    <text x="796" y="454" font-size="11" fill="#a0d0b0">Release</text>
+    <text x="796" y="472" font-size="9" fill="#00c853">Stage 12</text>
+    <text x="858" y="465" font-size="16" fill="#3a3a6a">···</text>
+  </g>
+
+  <!-- Data packets flowing through the pipeline -->
+  <circle r="9" fill="url(#packet)">
+    <animateMotion path="M70,458 L846,458" dur="5.5s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear"/>
+    <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.05;0.5;0.95;1" dur="5.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="7" fill="url(#packet)">
+    <animateMotion path="M70,458 L846,458" dur="5.5s" begin="2.75s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.05;0.5;0.95;1" dur="5.5s" begin="2.75s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Feature cards (evergreen; each lands in README.md) -->
+  <!-- 1: Gated pipeline -->
+  <rect x="870" y="80" width="350" height="90" rx="12" fill="url(#card-bg)" stroke="#2a2a5a" stroke-width="1"/>
+  <rect x="870" y="80" width="350" height="3" rx="2" fill="#e94560"><animate attributeName="opacity" values="0.5;1;0.5" dur="3s" begin="0s" repeatCount="indefinite"/></rect>
+  <text x="895" y="115" font-family="ui-monospace, monospace" font-size="12" fill="#e94560" font-weight="700">GATED PIPELINE</text>
+  <text x="895" y="140" font-size="14" fill="#a0a0c8">Nothing ships until each</text>
+  <text x="895" y="158" font-size="14" fill="#a0a0c8">stage's gate passes.</text>
+
+  <!-- 2: Traceability -->
+  <rect x="870" y="185" width="350" height="90" rx="12" fill="url(#card-bg)" stroke="#2a2a5a" stroke-width="1"/>
+  <rect x="870" y="185" width="350" height="3" rx="2" fill="#6c63ff"><animate attributeName="opacity" values="0.5;1;0.5" dur="3s" begin="0.75s" repeatCount="indefinite"/></rect>
+  <text x="895" y="220" font-family="ui-monospace, monospace" font-size="12" fill="#6c63ff" font-weight="700">REQ-ID TRACEABILITY</text>
+  <text x="895" y="245" font-size="14" fill="#a0a0c8">Every artifact &amp; test traces</text>
+  <text x="895" y="263" font-size="14" fill="#a0a0c8">back to a numbered requirement.</text>
+
+  <!-- 3: Parallel workflows -->
+  <rect x="870" y="290" width="350" height="90" rx="12" fill="url(#card-bg)" stroke="#2a2a5a" stroke-width="1"/>
+  <rect x="870" y="290" width="350" height="3" rx="2" fill="#38bdf8"><animate attributeName="opacity" values="0.5;1;0.5" dur="3s" begin="1.5s" repeatCount="indefinite"/></rect>
+  <text x="895" y="325" font-family="ui-monospace, monospace" font-size="12" fill="#38bdf8" font-weight="700">PARALLEL AGENT WORKFLOWS</text>
+  <text x="895" y="350" font-size="14" fill="#a0a0c8">Compose &amp; fan out DAGs of</text>
+  <text x="895" y="368" font-size="14" fill="#a0a0c8">agents beyond the fixed pipeline.</text>
+
+  <!-- 4: Self-improving -->
+  <rect x="870" y="395" width="350" height="90" rx="12" fill="url(#card-bg)" stroke="#2a2a5a" stroke-width="1"/>
+  <rect x="870" y="395" width="350" height="3" rx="2" fill="#00c853"><animate attributeName="opacity" values="0.5;1;0.5" dur="3s" begin="2.25s" repeatCount="indefinite"/></rect>
+  <text x="895" y="430" font-family="ui-monospace, monospace" font-size="12" fill="#00c853" font-weight="700">SELF-IMPROVING SKILLS</text>
+  <text x="895" y="455" font-size="14" fill="#a0a0c8">Your successful workflows are</text>
+  <text x="895" y="473" font-size="14" fill="#a0a0c8">mined into reusable skills.</text>
+
+  <!-- Bottom bar -->
+  <rect x="60" y="582" width="1160" height="1" fill="#2a2a5a"/>
+  <text x="60" y="610" font-size="13" fill="#555577">Install: /plugin marketplace add tonmoy007/forge-plugins  ·  /plugin install forge@forge-plugins</text>
+  <text x="900" y="610" font-size="13" fill="#555577">github.com/tonmoy007/forge-plugins</text>
+</svg>
