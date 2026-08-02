@@ -53,6 +53,9 @@ You MUST NOT:
 
 <<<<<<< HEAD
 =======
+<<<<<<< HEAD
+=======
+>>>>>>> 849ad8e53279082e5d59e7e68f30f236f49900c1
 When the project description is incomplete:
 
 Conduct a single bounded round before writing `pipeline/01-srs/srs.md`.
