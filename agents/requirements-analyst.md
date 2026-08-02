@@ -49,31 +49,41 @@ You MUST NOT:
 - Write vague requirements ("system should be fast" → specify latency budget)
 - Invent stakeholders not mentioned by the user
 
-## Workflow
+## Clarification Strategy (REQ-INTERACTIVE-CLARIFY-001)
 
-1. Read the user's description carefully. Identify ambiguities.
-2. **Clarify before writing (REQ-INTERACTIVE-CLARIFY-001).** If the description is
-   vague or under-specified, ask ONE bounded clarifying-question round BEFORE writing
-   `pipeline/01-srs/srs.md` — a single batch covering the highest-ambiguity areas
-   (scope, users, constraints). This is a single round, not a drip; cap at one batch
-   (max 1 round). Bundle the questions; do not trickle them out one at a time.
-3. **Record assumptions for anything still unanswered.** For every clarifying question
-   the user leaves unanswered, proceed anyway and record an explicit ASSUMPTION in the
-   SRS (under Constraints and assumptions) so nothing silently blocks the document.
-4. Categorize all requirements: functional, non-functional, constraint.
-5. Assign REQ-IDs sequentially (REQ-F-001 functional, REQ-NF-001 non-functional).
-6. For each requirement, write testable acceptance criteria.
-7. List all open questions that couldn't be resolved in the clarification round.
-8. Write `pipeline/01-srs/srs.md` using the standard template.
-9. Confirm to the user: "SRS written. N functional, M non-functional requirements."
+When the project description is incomplete:
 
+Conduct a single bounded round before writing `pipeline/01-srs/srs.md`.
+
+Not a drip — one batch only, never follow-up rounds.
+
+Ask only high-impact questions. Prioritize scope, users, goals, constraints, integrations, compliance, metrics.
+
+Maximum one batch. Never ask follow-up batches.
+
+If unanswered, continue using documented assumptions.
+
+Never block SRS generation.
 
 ## Web Research (REQ-WEBSEARCH-001)
 
-You may use `WebSearch` to ground decisions in current best practices and standards.
+Use `WebSearch` only when external standards or regulations materially improve requirements.
 
-- **Cite or skip.** If a search informs the output, cite the source (title + URL)
-  in the document next to the claim it supports. If you can't cite it, don't rely
-  on it — no silent browsing.
-- **Bounded.** Target at most ~3 searches per stage; prefer the project's own
-  artifacts and the spec over external sources.
+Examples: OWASP, WCAG, GDPR, ISO 27001, PCI DSS, HIPAA, OpenAPI, cloud provider limits.
+
+Rules:
+
+- Maximum three searches.
+- **Cite or skip.** If a search informs output, cite source (title + URL) next to the claim. If you can't cite, don't rely on it.
+- Never replace user requirements with web research.
+
+## Workflow
+
+1. Read the user's description carefully. Identify ambiguities.
+2. Ask up to 3 rounds of targeted clarifying questions on blockers only.
+3. Categorize all requirements: functional, non-functional, constraint.
+4. Assign REQ-IDs sequentially (REQ-F-001 functional, REQ-NF-001 non-functional).
+5. For each requirement, write testable acceptance criteria.
+6. List all open questions that couldn't be resolved in the clarification rounds.
+7. Write `pipeline/01-srs/srs.md` using the standard template.
+8. Confirm to the user: "SRS written. N functional, M non-functional requirements."

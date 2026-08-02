@@ -1,0 +1,65 @@
+---
+name: forge-spec
+description: Run Stage 4 of the Forge pipeline — technical specification. Use when the
+  user says /forge:spec, wants interface definitions, data schemas, API contracts, or
+  a full technical spec. Requires Stage 1–3. Invokes the spec-writer persona.
+allowed-tools: [Read, Write, Grep]
+---
+
+# /forge:spec — Technical Specification
+
+## When to Use
+
+- User says `/forge:spec`
+- User wants precise interface definitions, API contracts, type schemas, or behavioral contracts
+- Working in a Forge project at Stage 3 or 4
+
+## Pre-flight Check
+
+**Entry gate (REQ-GATE-ENTRY-001)** — before adopting the persona, verify the
+prior stage's artifact exists:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py preflight --stage 4
+```
+
+If it exits non-zero, **STOP**: present its message verbatim and do not proceed —
+the prior stage must be completed first (or use `/forge:force-advance` to skip
+intentionally).
+
+1. Read `pipeline/state.md` — confirm Forge project.
+2. Confirm `pipeline/03-architecture/architecture.md` exists. If not: "Complete Stage 3 first (`/forge:arch`)."
+3. If stage > 4, ask if the user wants to revise the spec.
+4. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 4` to load project-type overrides. Note any `additional_artifacts` (e.g., ML: model-spec.md, data-spec.md) and `additional_concerns` (e.g., library: public-vs-internal API, semver commitment, bundle budget).
+
+## Steps
+
+1. Read `agents/spec-writer.md` to load the Spec Writer persona.
+2. Adopt that persona — you are now the Spec Writer.
+3. Read the architecture in **either layout** (single-file or split per
+   REQ-LARGEDOC-001) via the resolver — never hard-code the `.md` path:
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/read-doc.py pipeline/03-architecture/architecture
+   ```
+   Also read its ADRs.
+4. Read `pipeline/01-srs/srs.md` for REQ-ID traceability.
+5. Follow the Spec Writer workflow: enumerate interfaces, define types, write API specs, trace to REQ-IDs. Add the profile's `additional_artifacts` and address `additional_concerns` in the spec.
+6. **Outline, then confirm (REQ-INTERACTIVE-CONFIRM-001).** Before generating the full technical spec, present a short OUTLINE / table of contents — the module breakdown, the interfaces and endpoints you intend to specify, the data schemas, and any profile extra artifacts. Then **PAUSE and ask the user to confirm** ("Shall I write the full spec, or adjust the outline first?"). Do not write the full document until the user confirms — this gives them a cheap chance to redirect before the expensive generation.
+7. Write `pipeline/04-spec/technical-spec.md` and any profile-specified extra artifacts per the Output Contract. If the spec grows large, split it per `references/large-doc-layout.md` (a `technical-spec/` directory with an `index.md` manifest); downstream stages read it through `read-doc.py` either way.
+8. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 4` to mark Stage 4 active.
+
+## Verification
+
+After running, confirm:
+- `pipeline/04-spec/technical-spec.md` exists with typed interfaces and REQ-ID traces
+- `pipeline/state.md` shows `current_stage: 4`
+
+## Next Step
+
+Derive the hint from the canonical stage table — never hardcode it
+(REQ-NEXTHINT-001, single source of truth). Run the helper and present its
+output to the user verbatim:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py next-hint --stage 4
+```
