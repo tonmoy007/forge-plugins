@@ -61,6 +61,7 @@ Every API shall define: API ID, Purpose, Method, URI, Authentication, Authorizat
 
 Fail if:
 - an API has no owner
+- an API is owned by more than one service
 - an API is unused
 - duplicate APIs exist
 - undocumented authentication exists
@@ -172,6 +173,7 @@ The stage SHALL fail if any of the following occur:
 | 10 | Circular dependencies |
 | 11 | Broken cross-document references |
 | 12 | Implementation details introduced |
+| 13 | Profile-required constraint unmet |
 
 If implementation-specific artifacts appear, remove them. Defer them to Stage 4.
 

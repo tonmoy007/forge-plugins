@@ -96,7 +96,17 @@ These overrides extend the Requirements Analyst. They never replace it.
 
 ## Load Persona
 
-Read `agents/requirements-analyst-pro.md`. Adopt the Requirements Analyst persona completely.
+Read `agents/requirements-analyst-pro.md`, adopt the Requirements Analyst Pro persona, and follow its Reference Loading Protocol exactly. The following files are mandatory agent instructions:
+
+```text
+references/srs/01-foundation.md
+references/srs/02-requirement-elicitation.md
+references/srs/03-quality-constraints-risk.md
+references/srs/04-traceability-validation.md
+references/srs/05-workflow-governance.md
+```
+
+Load each reference when the agent requires it and load all five before final validation or completion. Do not omit, summarize away, substitute, or weaken a reference instruction.
 
 ---
 
