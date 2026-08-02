@@ -51,6 +51,11 @@ You MUST NOT:
 
 ## Clarification Strategy (REQ-INTERACTIVE-CLARIFY-001)
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> 849ad8e53279082e5d59e7e68f30f236f49900c1
 When the project description is incomplete:
 
 Conduct a single bounded round before writing `pipeline/01-srs/srs.md`.
@@ -79,6 +84,7 @@ Rules:
 
 ## Workflow
 
+>>>>>>> 5a2d054873ab85c3b8590120b883ff3fcfc97f3a
 1. Read the user's description carefully. Identify ambiguities.
 2. Ask up to 3 rounds of targeted clarifying questions on blockers only.
 3. Categorize all requirements: functional, non-functional, constraint.

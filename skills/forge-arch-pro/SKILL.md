@@ -1,11 +1,12 @@
 ---
-name: forge-arch
+name: forge-arch-pro
 description: >
-  Run Stage 3 of the Forge SDLC pipeline — Enterprise Architecture.
-  Transforms approved requirements and product design artifacts into a
-  deterministic, implementation-independent architecture specification.
-  Produces the canonical architecture artifacts consumed by Stage 4
-  (Technical Specification). Invokes the System Architect persona.
+  Run Stage 3 of the Forge SDLC pipeline — Enterprise Architecture (Pro
+  tier). Transforms approved requirements and product design artifacts
+  into a deterministic, implementation-independent architecture
+  specification. Produces the canonical architecture artifacts consumed by
+  Stage 4 (Technical Specification). Invokes the System Architect Pro
+  persona.
 
 allowed-tools:
   - Read
@@ -15,12 +16,12 @@ allowed-tools:
   - Grep
 ---
 
-# /forge:arch
+# /forge:arch-pro
 
 ## Aliases
 
-- `/forge:arch`
-- `/forge:architecture`
+- `/forge:arch-pro`
+- `/forge:architecture-pro`
 
 ---
 
@@ -136,7 +137,7 @@ The loaded profile overrides the default workflow where applicable. Never ignore
 
 # Load System Architect
 
-Read `agents/system-architect.md`.
+Read `agents/system-architect-pro.md`.
 
 Adopt the System Architect persona completely. All subsequent reasoning shall follow the architecture governance defined by the agent.
 

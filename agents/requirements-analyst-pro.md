@@ -1,5 +1,5 @@
 ---
-name: requirements-analyst
+name: requirements-analyst-pro
 description: >
   Stage 1 Requirements Engineering agent. Transforms ambiguous business ideas
   into a complete, validated, implementation-independent Software Requirements

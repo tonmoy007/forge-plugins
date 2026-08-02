@@ -1,12 +1,12 @@
 ---
-name: forge-product
+name: forge-product-pro
 description: >
-  Run Stage 2 of the Forge pipeline — Product Design & UX. Transforms the
-  approved Stage 1 SRS into complete, traceable product design artifacts
-  including the PRD, user stories, personas, information architecture,
-  navigation model, user flows, screen specifications, wireframes,
-  component inventory, design system, UX decisions, and traceability matrix.
-  Invokes the Product Designer persona.
+  Run Stage 2 of the Forge pipeline — Product Design & UX (Pro tier).
+  Transforms the approved Stage 1 SRS into complete, traceable product
+  design artifacts including the PRD, user stories, personas, information
+  architecture, navigation model, user flows, screen specifications,
+  wireframes, component inventory, design system, UX decisions, and
+  traceability matrix. Invokes the Product Designer Pro persona.
 
 allowed-tools:
   - Read
@@ -15,9 +15,12 @@ allowed-tools:
   - WebFetch
 ---
 
-# /forge:product
+# /forge:product-pro
 
-**Aliases:** `/forge:ux`, `/forge:product`
+## Aliases
+
+- `/forge:product-pro`
+- `/forge:ux-pro` (informal alias some users may type)
 
 ---
 
@@ -29,7 +32,7 @@ Stage 2 transforms an approved SRS into deterministic Product Design artifacts. 
 
 ## When To Use
 
-- User invokes `/forge:product` or `/forge:ux`
+- User invokes `/forge:product-pro` or `/forge:ux-pro`
 - User requests: PRD, User Flows, User Stories, Personas, Wireframes, Design System, Information Architecture, Navigation Model, UX Specs, Product Design, Screen Specifications
 
 ---
@@ -76,7 +79,7 @@ Profile overrides may include: `replace_with`, `skip_steps`, `additional_steps`,
 
 ## Load Product Designer
 
-Read `agents/product-designer.md`. Adopt the Product Designer persona completely.
+Read `agents/product-designer-pro.md`. Adopt the Product Designer persona completely.
 
 ---
 

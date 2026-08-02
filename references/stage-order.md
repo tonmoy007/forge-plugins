@@ -20,6 +20,11 @@
 > - `name` / `label`: short / human stage name
 > - `skill`: the `/forge:*` command that drives the stage
 > - `agent`: the persona file in `agents/`
+> - `pro_skill` / `pro_agent` (optional, stages 1–5 only): the enterprise-grade
+>   Pro-tier `/forge:*-pro` command and its `agents/*-pro.md` persona, where a
+>   Pro variant exists for the stage. Additive fields — absence means no Pro
+>   variant is registered for that stage. Unknown/optional keys never break
+>   the parser in `scripts/_stage_table.py`.
 > - `primary_artifact`: the canonical handoff file this stage produces that the
 >   next stage consumes — used as the prerequisite marker by the next stage
 > - `prerequisite` / `prerequisite_skill`: the file (and the skill that produces
@@ -46,6 +51,8 @@ stages:
     label: "Requirements / SRS"
     skill: "/forge:srs"
     agent: "requirements-analyst"
+    pro_skill: "/forge:srs-pro"
+    pro_agent: "requirements-analyst-pro"
     primary_artifact: "pipeline/01-srs/srs.md"
     prerequisite: null
     prerequisite_skill: null
@@ -59,6 +66,8 @@ stages:
     label: "Product + UX + Design System"
     skill: "/forge:product"
     agent: "product-designer"
+    pro_skill: "/forge:product-pro"
+    pro_agent: "product-designer-pro"
     primary_artifact: "pipeline/02-product-ux/prd.md"
     prerequisite: "pipeline/01-srs/srs.md"
     prerequisite_skill: "/forge:srs"
@@ -72,6 +81,8 @@ stages:
     label: "Architecture"
     skill: "/forge:arch"
     agent: "system-architect"
+    pro_skill: "/forge:arch-pro"
+    pro_agent: "system-architect-pro"
     primary_artifact: "pipeline/03-architecture/architecture.md"
     prerequisite: "pipeline/02-product-ux/prd.md"
     prerequisite_skill: "/forge:product"
@@ -85,6 +96,8 @@ stages:
     label: "Technical Spec"
     skill: "/forge:spec"
     agent: "spec-writer"
+    pro_skill: "/forge:spec-pro"
+    pro_agent: "spec-writer-pro"
     primary_artifact: "pipeline/04-spec/technical-spec.md"
     prerequisite: "pipeline/03-architecture/architecture.md"
     prerequisite_skill: "/forge:arch"
@@ -98,6 +111,8 @@ stages:
     label: "Plan / Task DAG"
     skill: "/forge:plan"
     agent: "planner"
+    pro_skill: "/forge:plan-pro"
+    pro_agent: "planner-pro"
     primary_artifact: "pipeline/05-plan/task-dag.md"
     prerequisite: "pipeline/04-spec/technical-spec.md"
     prerequisite_skill: "/forge:spec"
