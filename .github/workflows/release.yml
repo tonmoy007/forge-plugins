@@ -65,8 +65,11 @@ jobs:
             exit 0
           fi
           # Title defaults to the tag when the optional `title` input is omitted, so the
-          # release name is never a stale hard-coded theme. Read from an env var (never inline
-          # ${{ }}) so a dispatcher-supplied title can't inject into the shell.
+          # release name is never a stale hard-coded theme. Read from the TITLE env var (set above
+          # from inputs.title) rather than an inline GitHub expression, so a dispatcher-supplied
+          # title can't inject into the shell. NOTE: do not write a literal GitHub expression in
+          # this run block even inside a comment — the whole script is scanned for template
+          # expressions, and an empty one fails to parse ("An expression was expected").
           gh release create "$TAG" \
             --target "$TARGET" \
             --title "${TITLE:-$TAG}" \

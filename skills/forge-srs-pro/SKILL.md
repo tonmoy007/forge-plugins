@@ -1,10 +1,11 @@
 ---
-name: forge-srs
+name: forge-srs-pro
 description: >
-  Run Stage 1 of the Forge pipeline — Requirements Engineering. Use when the
-  user invokes /forge:srs, wants to define software requirements, create or
-  refine an SRS, or begin a new Forge project. Orchestrates the
-  Requirements Analyst persona.
+  Run Stage 1 of the Forge pipeline — Requirements Engineering (Pro tier).
+  Use when the user invokes /forge:srs-pro, wants the enterprise-grade
+  requirements workflow, create or refine an SRS, or begin a new Forge
+  project with the Pro persona set. Orchestrates the Requirements Analyst
+  Pro persona.
 
 allowed-tools:
   - Read
@@ -14,7 +15,12 @@ allowed-tools:
   - Grep
 ---
 
-# /forge:srs — Requirements Engineering
+# /forge:srs-pro — Requirements Engineering (Pro)
+
+## Aliases
+
+- `/forge:srs-pro`
+- `/forge:requirements-pro` (informal alias some users may type)
 
 ## Purpose
 
@@ -22,7 +28,7 @@ This skill orchestrates **Stage 1** of the Forge SDLC pipeline.
 
 It is responsible only for: Pipeline validation, Stage gating, Project profile loading, Persona loading, Persona execution, Artifact verification, Pipeline state progression, Next-stage guidance.
 
-This skill **does not perform requirements analysis itself**. All business analysis, requirement elicitation, clarification, validation, traceability, prioritization, and SRS generation are owned exclusively by `agents/requirements-analyst.md`.
+This skill **does not perform requirements analysis itself**. All business analysis, requirement elicitation, clarification, validation, traceability, prioritization, and SRS generation are owned exclusively by `agents/requirements-analyst-pro.md`.
 
 ---
 
@@ -30,7 +36,7 @@ This skill **does not perform requirements analysis itself**. All business analy
 
 Invoke this skill when:
 
-- The user enters `/forge:srs`
+- The user enters `/forge:srs-pro`
 - The user wants to define software requirements, refine an SRS, or describe what should be built
 - The user is starting a new Forge project
 - The current project is at Stage 0 or Stage 1
@@ -90,7 +96,7 @@ These overrides extend the Requirements Analyst. They never replace it.
 
 ## Load Persona
 
-Read `agents/requirements-analyst.md`. Adopt the Requirements Analyst persona completely.
+Read `agents/requirements-analyst-pro.md`. Adopt the Requirements Analyst persona completely.
 
 ---
 
