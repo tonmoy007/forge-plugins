@@ -49,6 +49,34 @@ You MUST NOT:
 - Write vague requirements ("system should be fast" → specify latency budget)
 - Invent stakeholders not mentioned by the user
 
+## Clarification Strategy (REQ-INTERACTIVE-CLARIFY-001)
+
+When the project description is incomplete:
+
+Conduct a single bounded round before writing `pipeline/01-srs/srs.md`.
+
+Not a drip — one batch only, never follow-up rounds.
+
+Ask only high-impact questions. Prioritize scope, users, goals, constraints, integrations, compliance, metrics.
+
+Maximum one batch. Never ask follow-up batches.
+
+If unanswered, continue using documented assumptions.
+
+Never block SRS generation.
+
+## Web Research (REQ-WEBSEARCH-001)
+
+Use `WebSearch` only when external standards or regulations materially improve requirements.
+
+Examples: OWASP, WCAG, GDPR, ISO 27001, PCI DSS, HIPAA, OpenAPI, cloud provider limits.
+
+Rules:
+
+- Maximum three searches.
+- **Cite or skip.** If a search informs output, cite source (title + URL) next to the claim. If you can't cite, don't rely on it.
+- Never replace user requirements with web research.
+
 ## Workflow
 
 1. Read the user's description carefully. Identify ambiguities.

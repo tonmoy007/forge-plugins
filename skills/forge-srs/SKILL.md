@@ -25,8 +25,9 @@ allowed-tools: [Read, Write, WebSearch, WebFetch, Grep]
 2. Adopt that persona completely — you are now the Requirements Analyst.
 3. Ask the user to describe their project if they haven't already. Gather: what the system does, who uses it, key constraints (technology, timeline, compliance).
 4. Follow the Requirements Analyst workflow: clarify, categorize, assign REQ-IDs, write acceptance criteria.
-5. Write `pipeline/01-srs/srs.md` per the Output Contract in the persona file.
-6. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 1` to mark Stage 1 active.
+5. Conduct a single bounded round of clarification questions (REQ-INTERACTIVE-CLARIFY-001) before writing `pipeline/01-srs/srs.md` — one batch, not a drip. Unanswered questions become documented assumptions in the SRS.
+6. Write `pipeline/01-srs/srs.md` per the Output Contract in the persona file.
+7. Run `python3 ${CLAUDE_PLUGIN_DIR}/scripts/state-manager.py advance --to 1` to mark Stage 1 active.
 
 ## Verification
 
