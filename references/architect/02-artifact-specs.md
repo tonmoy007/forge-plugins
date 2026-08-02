@@ -279,3 +279,21 @@ Every ADR shall include:
 - Referenced Requirements, Features, Services, APIs, Datastores, Deployments
 
 No architectural decision shall exist without an ADR.
+
+---
+
+## Profile Extensions
+
+After the default artifact set, apply profile-specific behavior. Only
+generate profile artifacts when required by the active project profile.
+Examples:
+
+- **ML Systems:** Model Registry, Feature Store, Inference Architecture, GPU
+  Topology
+- **API Platforms:** API Versioning, Pagination Strategy, Idempotency, Rate
+  Limiting
+- **CLI Applications:** Command Tree, Plugin Architecture
+- **IoT Systems:** Device Topology, Edge Components
+
+Every profile artifact follows the same identifier, traceability, and
+validation rules as the default deliverable set.

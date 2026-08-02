@@ -22,66 +22,89 @@ allowed-tools:
 - `/forge:product-pro`
 - `/forge:ux-pro` (informal alias some users may type)
 
----
-
 ## Purpose
 
-Stage 2 transforms an approved SRS into deterministic Product Design artifacts. Defines **what users experience**, not **how the software is built**. Output becomes canonical input for Stage 3 (Architecture).
+This skill orchestrates Stage 2 — Product Design & UX. It performs stage
+gating, profile loading, persona/reference loading, context verification,
+artifact/traceability verification, state advancement, and canonical
+next-stage guidance.
 
----
-
-## When To Use
-
-- User invokes `/forge:product-pro` or `/forge:ux-pro`
-- User requests: PRD, User Flows, User Stories, Personas, Wireframes, Design System, Information Architecture, Navigation Model, UX Specs, Product Design, Screen Specifications
-
----
+This skill does not perform product design. `agents/product-designer-pro.md`
+and its mandatory `references/product/` documents are the sole authority for
+design logic, artifacts, identifiers, flow decomposition, validation, quality
+gates, revisions, failures, and completion behavior.
 
 ## Stage Ownership
 
-- **Stage:** 02 — Product Design & UX
-- **Input:** Stage 1 SRS (`pipeline/01-srs/srs.md`)
-- **Output:** Complete Product Design Specification (`pipeline/02-product-ux/`)
+| Component | Owns |
+|---|---|
+| This skill | Stage orchestration only |
+| Product Designer Pro + `references/product/` | Stage 2 design knowledge and rules |
+| State Manager | Pipeline entry and progression |
 
----
+Do not duplicate or reinterpret persona/reference logic in this skill.
 
 ## Pre-flight Check
 
-### 1. Entry Gate (REQ-GATE-ENTRY-001)
+### Entry Gate (REQ-GATE-ENTRY-001)
+
+Before reading the persona, references, or design artifacts, run:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py preflight --stage 2
 ```
 
-If non-zero: STOP. Display message verbatim. User must complete Stage 1 or use `/forge:force-advance`.
+If it exits non-zero, STOP. Display the returned message verbatim. Do not adopt
+Product Designer Pro, generate artifacts, or bypass the prerequisite. The user
+must complete Stage 1 or use the repository's approved force-advance flow.
 
-### 2. Project Verification
+### Forge Project and Progress Verification
 
-Read `pipeline/state.md`. Verify Forge project initialized, current stage valid, project profile exists. If invalid: STOP.
+Read `pipeline/state.md`. Verify Forge is initialized, state exists, the current
+stage is valid, and a project profile is available. If any condition fails, STOP
+and report it.
 
-### 3. SRS Verification
+If `current_stage > 2`, tell the user that Stage 2 appears complete and offer
+Review, Validate, Revise, or Regenerate. Never overwrite existing Stage 2
+artifacts without explicit confirmation. If `current_stage == 2`, continue only
+as confirmed refinement work.
 
-Verify `pipeline/01-srs/srs.md` exists. If missing: return "Stage 1 (SRS) must be completed before Product Design. Run `/forge:srs`." Do not continue.
+### SRS Verification
 
-### 4. Stage Progress Check
+Verify `pipeline/01-srs/srs.md` exists and is readable. If missing or invalid,
+return "Stage 1 (SRS) must be completed before Product Design. Run `/forge:srs`."
+Do not continue.
 
-If `current_stage > 2`, inform user Stage 2 appears completed. Ask whether to Review, Revise, or Regenerate. Do not overwrite without confirmation.
+### Load Project Profile
 
-### 5. Load Project Profile
+Run:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 2
 ```
 
-Profile overrides may include: `replace_with`, `skip_steps`, `additional_steps`, `additional_artifacts`, `artifact_templates`, `validation_rules`, `quality_gates`. Follow the loaded profile exactly. Never ignore overrides.
+Load and pass its result unchanged to Product Designer Pro. The persona's
+governance reference controls handling of `replace_with`, `additional_artifacts`,
+`additional_steps`, `additional_concerns`, and `skip_steps`. Never let a profile
+bypass entry, ownership, traceability, validation, quality, or advancement gates.
 
----
+## Load Product Designer and References
 
-## Load Product Designer
+Read `agents/product-designer-pro.md`, adopt Product Designer Pro, and follow
+its Reference Loading Protocol exactly. The following files are mandatory agent
+instructions:
 
-Read `agents/product-designer-pro.md`. Adopt the Product Designer persona completely.
+```text
+references/product/01-foundation.md
+references/product/02-information-architecture-flows.md
+references/product/03-design-system-components.md
+references/product/04-traceability-validation.md
+references/product/05-workflow-governance.md
+```
 
----
+Load each reference when the agent requires it and load all five before final
+validation or completion. Do not omit, summarize away, substitute, or weaken a
+reference instruction.
 
 ## Read Context
 
@@ -91,128 +114,77 @@ Read `agents/product-designer-pro.md`. Adopt the Product Designer persona comple
 
 Never use architecture, implementation, API, or source code as design inputs.
 
----
+## Execute Stage
 
-## Execution Workflow
+Provide Product Designer Pro only the context authorized by its foundation and
+workflow references. Execute the persona sequentially, apply loaded profile
+overrides exactly, and allow it to generate only the Stage 2 artifacts governed
+by its references.
 
-### Step 1 — Build Requirement Inventory
-Identify: Functional, Non-functional, Business Rules, Constraints, UX Requirements, External Dependencies. Verify every requirement has a stable REQ-ID.
+## Verification
 
-### Step 2 — Generate Personas (PER-001...)
+Before advancement, verify through the document resolver that the canonical PRD
+entry point and every required, profile-added, and non-skipped Stage 2 artifact
+resolve successfully.
 
-### Step 3 — Group Requirements
-Produce Epics(EP-001...), Capabilities(CAP-001...), Features(FE-001...). Every feature must reference originating REQ IDs.
+Verify that Product Designer Pro reports PASS for all applicable design-
+completeness, traceability, ownership, validation, and quality gates. Confirm
+every design artifact has valid upstream lineage (traces to REQ-IDs), no Stage 1
+requirement was redefined, no implementation code was generated, and no
+unresolved validation error remains.
 
-### Step 4 — Generate User Stories(US-001...)
-Each story includes: Story ID, Requirement References, Acceptance Criteria(AC-001...), Priority
+If verification fails, report the failures and affected artifacts. Do not
+advance. Let Product Designer Pro perform only the deterministic Stage-2-only
+repair permitted by its references; stop and report upstream conflicts or
+unrecoverable failures.
 
-### Step 5 — Create Information Architecture
-Generate `information-architecture.md`
+## Advance Pipeline State
 
-### Step 6 — Create Navigation Model
-Generate `navigation.md`
+Advance only after successful verification:
 
-### Step 7 — Generate User Flows(UF-001...)
-Each flow includes: Flow ID, Actors, Preconditions, Main Flow, Alternate Flow, Exceptions, Postconditions, Screen References(SCR-001...)
-
-### Step 8 — Generate Screen Specifications(SCR-001...)
-Every screen defines: Purpose, Layout, Navigation, States, Permissions, Responsive Behaviour, Accessibility, Business Rules
-
-### Step 9 — Generate Wireframes
-Text only. No images.
-
-### Step 10 — Generate Component Inventory(CMP-001...)
-Each component includes: Component ID, Variants, States, Accessibility, Parent Screens
-
-### Step 11 — Generate Design System
-Include: Color Tokens, Typography, Spacing, Radius, Elevation, Motion, Component Standards
-
-### Step 12 — Generate UX Decision Log(DDR-001...)
-Generate `ux-decisions.md`
-
-### Step 13 — Generate UX Risk Register(UXR-001...)
-Generate `ux-risk-register.md`
-
-### Step 14 — Generate Traceability Matrix
-Create `traceability.md`. Map: `REQ → EP → CAP → FEAT → US → UF → SCR → CMP → AC`. No orphaned artifacts.
-
-### Step 15 — Run Validation
-Validate:
-- Every requirement maps to a feature.
-- Every feature maps to user stories.
-- Every story maps to user flows.
-- Every flow maps to screens.
-- Every screen maps to components.
-- Every component belongs to a screen.
-- Every screen documents Accessibility, Responsive Behaviour, States.
-- No duplicate IDs, invented functionality, or orphaned artifacts.
-
-If validation fails: Repair automatically. Only stop if repair is impossible.
-
-### Step 16 — Write Artifacts
-Generate under `pipeline/02-product-ux/`:
-```
-prd.md
-personas.md
-information-architecture.md
-navigation.md
-user-stories.md
-user-flows.md
-wireframes.md
-screen-specifications.md
-components.md
-design-system.md
-ux-decisions.md
-traceability.md
-ux-risk-register.md
-```
-Do not omit required artifacts.
-
----
-
-## Completion
-
-### Advance Stage
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py advance --to 2
 ```
-If unsuccessful: STOP. Display the error.
 
-### Verify Artifacts
+If advancement fails, display the returned message verbatim and stop. Do not
+claim completion.
 
-All 13 files under `pipeline/02-product-ux/` exist. `pipeline/state.md` contains `current_stage: 2`. Confirm validation status: PASS or FAIL.
+## Completion Report
 
-### Success Summary
-
-Report: Requirements Processed, Personas Generated, Epics, Capabilities, Features, User Stories, User Flows, Screens, Components, Design Decisions, UX Risks, Validation Result
-
----
+Present the Product Designer Pro report derived from generated artifacts, then
+verify `pipeline/state.md` reports `current_stage: 2`. Do not summarize the full
+design unless requested.
 
 ## Next Stage
 
-Derive hint from canonical stage table (REQ-NEXTHINT-001). Run:
+Only after successful advancement, run:
+
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.py next-hint --stage 2
 ```
-Present output verbatim.
 
----
+Present the helper output verbatim.
 
-## Behavioral Rules
+## Orchestration Rules
 
-**Always:** Preserve complete traceability, produce deterministic identifiers, never invent functionality, keep design implementation-independent, prioritize clarity over creativity, prefer explicit documentation over assumptions, fail validation rather than producing ambiguous artifacts
+This skill SHALL run preflight first; load the profile; read Product Designer
+Pro and its mandatory references; preserve upstream ownership; execute the
+persona; verify resolved artifacts, design completeness, traceability, and
+stage ownership; advance only after PASS; and present the canonical next hint.
 
-**Never:** Design APIs, design databases, write implementation code, define infrastructure, skip accessibility, skip responsive behavior, skip validation, break traceability
-
----
+This skill SHALL NOT duplicate design logic; redefine upstream work; invent
+functionality, IDs, features, or scope; bypass a gate; advance on failure; write
+implementation code; overwrite confirmed existing design artifacts without
+approval; or claim completion before advancement.
 
 ## Success Criteria
 
 Stage 2 complete only when:
-- Every approved requirement is represented in downstream UX artifacts.
+- Every approved requirement is represented in downstream design artifacts.
 - All generated artifacts pass validation.
 - All documents are written successfully.
 - Stage state is advanced to 2.
 - Next stage hint has been displayed.
 
-The Product Design specification MUST be complete enough that a software architect can begin Stage 3 without additional stakeholder clarification.
+The Product Design specification MUST be complete enough that an architect can
+begin Stage 3 without additional stakeholder clarification.
