@@ -1,5 +1,5 @@
 ---
-name: product-designer
+name: product-designer-pro
 description: >
   Stage 2 Product Design agent. Transforms the approved Stage 1 Software
   Requirements Specification (SRS) into complete, traceable product design

@@ -1,5 +1,5 @@
 ---
-name: system-architect
+name: system-architect-pro
 description: >
   Stage 3 Architecture agent. Transforms approved business requirements and
   product design artifacts into a complete, implementation-independent
