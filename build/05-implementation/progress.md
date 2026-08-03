@@ -5,6 +5,13 @@
 
 ## Current State
 
+- **v0.8.0 (Builder Phase 1: decompose the Stage 6 monolith) IN PROGRESS — T-235..T-240.**
+  Scoped from `docs/builder-pro-plan-analysis.md`'s verdict on `BUILDER_PRO-PLAN.md`:
+  execute Phase 1 only (3 focused sub-agents wired through the existing `forge-build`
+  skill, in-session — no new orchestration machinery). Planning docs:
+  `build/01-srs/srs-v0.8.0.md`, `build/04-plan/task-dag-v0.8.0.md`. Independent of the
+  still-unbuilt v0.7.0 (Docker workflow, T-227..T-234) — no shared files, no ordering
+  dependency. Task status tracked inline here as each lands.
 - **v0.6.1 (caveman mode → static prompt tightening only) RELEASED — T-220..T-226.** Investigated the
   `caveman` token-reduction approach. The one stdlib-legal lever (a terse-output preamble at the dispatch
   chokepoint) was **built behind a default-off `orchestration.caveman_mode` toggle (T-220 config `b49ef00`,
