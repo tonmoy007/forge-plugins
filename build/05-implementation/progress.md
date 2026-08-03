@@ -5,13 +5,26 @@
 
 ## Current State
 
-- **v0.8.0 (Builder Phase 1: decompose the Stage 6 monolith) IN PROGRESS — T-235..T-240.**
-  Scoped from `docs/builder-pro-plan-analysis.md`'s verdict on `BUILDER_PRO-PLAN.md`:
-  execute Phase 1 only (3 focused sub-agents wired through the existing `forge-build`
-  skill, in-session — no new orchestration machinery). Planning docs:
+- **v0.8.0 (Builder Phase 1: Pro-tier sub-agent pipeline) COMPLETE — T-235..T-240.**
+  Scoped from `docs/builder-pro-plan-analysis.md`'s verdict on `BUILDER_PRO-PLAN.md`
+  (execute Phase 1 only). T-235 `7327f28` Context Loader (read-only, resolves only
+  task-relevant docs). T-236 `cfe358b` Code Generator (context bundle → code+tests
+  only). T-237 `31232a0` Quality Gate Runner (one agent, compile→lint→test→static
+  analysis, per-check report). **Course-corrected mid-build** (user direction): rather
+  than rewiring `forge-build`/`builder.md` in place, shipped a new, separate Pro tier —
+  T-238 `32b5a1d` `agents/builder-pro.md` (orchestrates the three sub-agents by
+  persona-adoption, same technique as `agents/orchestrator.md`) +
+  `skills/forge-build-pro/SKILL.md` (`/forge:build-pro`, mirrors `forge-plan-pro`'s
+  structure) — matching the coexistence pattern every other stage already uses
+  (`forge-plan-pro`, `forge-spec-pro`, etc.). `skills/forge-build/SKILL.md` and
+  `agents/builder.md` are **untouched**, enforced by a byte-diff regression test, not
+  just documented intent. T-239 `fc65753` cross-file wiring + non-regression tests.
+  T-240 (this entry) full sweep: 1925 unit tests pass, `validate-plugin.py` 0,
+  `full-pipeline.sh` 12/12 + traceability intact. Planning docs:
   `build/01-srs/srs-v0.8.0.md`, `build/04-plan/task-dag-v0.8.0.md`. Independent of the
-  still-unbuilt v0.7.0 (Docker workflow, T-227..T-234) — no shared files, no ordering
-  dependency. Task status tracked inline here as each lands.
+  still-unbuilt v0.7.0 (Docker workflow, T-227..T-234) — no shared files. Deferred
+  (per the analysis's own risk assessment): traceability/`forge explain`, recovery
+  state machine, enterprise artifact files, AI-agnostic adapters, extra builder modes.
 - **v0.6.1 (caveman mode → static prompt tightening only) RELEASED — T-220..T-226.** Investigated the
   `caveman` token-reduction approach. The one stdlib-legal lever (a terse-output preamble at the dispatch
   chokepoint) was **built behind a default-off `orchestration.caveman_mode` toggle (T-220 config `b49ef00`,

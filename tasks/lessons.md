@@ -167,6 +167,40 @@
 
 ---
 
+### 2026-08-03 — A subagent that hits its session limit mid-task may have already finished — verify on disk, don't trust only its final message
+
+- **Trigger**: Dispatching parallel subagents for independent tasks; one or more sends
+  only an `idle_notification` with `idleReason: "failed"` / a session-limit message,
+  never a completion report.
+- **Rule**: Before treating a silently-failed subagent's task as incomplete or
+  re-dispatching it, check the actual filesystem/test state first (`git status`, run
+  the task's own tests). A subagent can finish all its work and then hit a hard session
+  limit in the gap before it sends the final summary message — the work is done, only
+  the report is missing. Re-running or discarding it wastes the completed work.
+- **Why**: During the T-235/T-236/T-237 parallel build, two of three subagents reported
+  only a session-limit failure with no summary. Direct inspection showed all expected
+  files existed and all their tests already passed — nothing was actually lost.
+- **Tags**: [orchestration, subagents, session-limits, verification, T-236, T-237]
+
+### 2026-08-03 — Before rewiring a live skill/agent, check whether this repo already has a coexistence pattern for the same kind of upgrade
+
+- **Trigger**: Asked to "decompose" or "upgrade" a stage's monolithic agent/skill
+  (Stage 6 `builder.md` / `forge-build` in this case).
+- **Rule**: This repo already established a Pro-tier coexistence pattern for every
+  other stage (`forge-plan-pro` + `planner-pro.md`, `forge-spec-pro` +
+  `spec-writer-pro.md`, `forge-arch-pro`, `forge-product-pro`, `forge-sprint-pro`,
+  `forge-srs-pro`) — a **new**, separate `<stage>-pro` agent + skill, with the original
+  left completely untouched. Check for that pattern (`ls skills/ | grep pro`) *before*
+  editing a live, working skill file in place, even when an analysis document
+  recommends rewiring it directly. When both are plausible, ask rather than assuming
+  the analysis document's literal wording is the intended architecture for this repo.
+- **Why**: Initial work on T-238 rewired `skills/forge-build/SKILL.md` in place
+  (matching `docs/builder-pro-plan-analysis.md`'s literal wording), then had to be
+  reverted (`git reset --hard`, no harm since unpushed) once the user pointed out the
+  existing `-pro` convention. Checking `ls skills/ | grep pro` first would have caught
+  this before any code was written.
+- **Tags**: [architecture, conventions, forge-build, pro-tier, T-238]
+
 ## Patterns by Category
 
 ### Plugin Development

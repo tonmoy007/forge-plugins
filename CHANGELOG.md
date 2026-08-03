@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Builder Pro (Stage 6 Pro tier) — `/forge:build-pro`.** Scoped from
+  `docs/builder-pro-plan-analysis.md`'s Phase-1-only verdict on `BUILDER_PRO-PLAN.md`:
+  the monolithic single-persona Builder is decomposed into three focused sub-agents —
+  `agents/context-loader.md` (resolves only task-relevant docs, not the full spec/
+  architecture), `agents/code-generator.md` (context bundle → code + tests only), and
+  `agents/quality-gate-runner.md` (one agent chaining compile → lint → test → static
+  analysis, per-check pass/fail report). `agents/builder-pro.md` orchestrates them by
+  in-session persona adoption (the same technique `agents/orchestrator.md` uses across
+  stages), and `skills/forge-build-pro/SKILL.md` wraps it with the usual stage gating,
+  profile loading, and commit/progress/advance steps — mirroring the structure already
+  used by `forge-plan-pro`, `forge-spec-pro`, `forge-arch-pro`, `forge-product-pro`,
+  `forge-sprint-pro`, and `forge-srs-pro`. `/forge:build` and `agents/builder.md` are
+  **unchanged** — both tiers coexist, enforced by a byte-diff regression test
+  (`test_builder_pipeline_wiring.py`). Deferred per the analysis's risk assessment:
+  traceability/`forge explain`, a recovery state machine, enterprise artifact files,
+  AI-agnostic adapters, and additional builder modes. Ref: T-235..T-240.
+
 ### Planned
 - Claude Code marketplace publication (pending marketplace availability)
 
