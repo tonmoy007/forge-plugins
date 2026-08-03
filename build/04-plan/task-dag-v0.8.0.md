@@ -78,22 +78,25 @@ suite green after every task, not just at the end.
 
 ## Milestone 2: Wiring
 
-### T-238 [M] Wire the three sub-agents into `forge-build` SKILL.md
-- **Description**: Rewrite the "Steps" section of `skills/forge-build/SKILL.md`: replace
-  the single "Read `agents/builder.md`, adopt persona" step with a sequence — adopt
-  Context Loader (produce context bundle) → adopt Code Generator (consumes the bundle,
-  produces code+tests) → adopt Quality Gate Runner (gates pass/fail) → on pass, run the
-  *existing* commit + progress-update steps inline (unchanged, not a new persona).
-  `agents/builder.md` is left in the repo untouched (AC-BUILDPIPE-001b) — it is no
-  longer referenced by the default single-task flow, but nothing deletes it this phase.
-  Milestone batch mode (`--milestone N`) calls this same per-task sequence once per task
-  in the batch — no separate code path.
-- **Files**: `skills/forge-build/SKILL.md`
-- **Done when**: SKILL.md references `context-loader.md` → `code-generator.md` →
-  `quality-gate-runner.md` in that order (AC-BUILDPIPE-001a); existing narration
-  contract (Starting/Result/Next), pause-on-first-failure, and Verification/Next Step
-  sections are unchanged; `test_build_batch.py` and any existing narration tests still
-  pass unmodified (AC-BUILDCOMPAT-001a).
+### T-238 [M] New `forge-build-pro` skill (does not touch `forge-build`)
+- **Description**: **Revised 2026-08-03** — course-corrected away from rewiring
+  `forge-build/SKILL.md` in place. Instead, create `skills/forge-build-pro/SKILL.md`
+  (aliases `/forge:build-pro`), mirroring the structure of `skills/forge-plan-pro/
+  SKILL.md`: frontmatter, Aliases, Purpose, Stage Ownership, Pre-flight Check (entry
+  gate + progress verification), Load Project Profile, then an "Execute the Sub-Agent
+  Pipeline" section sequencing adopt Context Loader (produce context bundle) → adopt
+  Code Generator (consumes the bundle, produces code+tests) → adopt Quality Gate Runner
+  (gates pass/fail) → on pass, the same inline commit + progress-update + advance +
+  next-hint steps `forge-build` already uses. `skills/forge-build/SKILL.md` and
+  `agents/builder.md` are not touched — both tiers coexist, exactly like every other
+  stage's Pro variant.
+- **Files**: `skills/forge-build-pro/SKILL.md`
+- **Done when**: `forge-build-pro/SKILL.md` references `context-loader.md` →
+  `code-generator.md` → `quality-gate-runner.md` in that order (AC-BUILDPIPE-001a);
+  `skills/forge-build/SKILL.md` and `agents/builder.md` are unchanged from their
+  pre-T-235 content, verified by a regression test (AC-BUILDPIPE-001b); existing
+  `test_build_batch.py` and narration tests still pass unmodified
+  (AC-BUILDCOMPAT-001a).
 - **Depends on**: T-235, T-236, T-237
 - **REQ-IDs**: REQ-BUILDPIPE-001, REQ-BUILDCOMPAT-001
 

@@ -60,18 +60,24 @@ explicit correction of the original 13-agent plan).
 - **AC-BUILDGATE-001a**: Persona runs all four checks and reports pass/fail per check,
   not just an aggregate boolean.
 
-### REQ-BUILDPIPE-001 — Wire the pipeline into `forge-build`
+### REQ-BUILDPIPE-001 — New `forge-build-pro` skill, `forge-build` untouched
 
-`skills/forge-build/SKILL.md` Steps sequence: adopt Context Loader → adopt Code
-Generator (consumes the bundle) → adopt Quality Gate Runner → existing commit +
-progress-update steps (kept inline in the skill, not a new persona, per the analysis's
-final recommendation). Replaces the current single `agents/builder.md` adoption step
-for the default single-task flow.
+**Revised 2026-08-03** (course-corrected mid-build, T-238): instead of rewiring the
+existing `skills/forge-build/SKILL.md`, follow the same coexistence pattern already
+established for every other stage's Pro tier (`forge-plan-pro`, `forge-spec-pro`,
+`forge-arch-pro`, `forge-product-pro`, `forge-sprint-pro`, `forge-srs-pro`): a new,
+separate `skills/forge-build-pro/SKILL.md` (aliases `/forge:build-pro`) that owns stage
+gating, profile loading, and orchestration, and sequences the three sub-agents —
+Context Loader → Code Generator → Quality Gate Runner → existing inline commit +
+progress-update steps. `skills/forge-build/SKILL.md` and `agents/builder.md` are not
+modified at all — both tiers coexist exactly like every other stage, selected by which
+command the user runs (`/forge:build` vs `/forge:build-pro`).
 
-- **AC-BUILDPIPE-001a**: SKILL.md references all three new agent files, in this order.
-- **AC-BUILDPIPE-001b**: `agents/builder.md` is left in the repo, unmodified, as
-  reference/fallback — not deleted in this phase (risk mitigation: "keep forge-build
-  functional throughout the transition").
+- **AC-BUILDPIPE-001a**: `forge-build-pro/SKILL.md` references all three new agent
+  files, in order.
+- **AC-BUILDPIPE-001b**: `skills/forge-build/SKILL.md` and `agents/builder.md` are
+  byte-for-byte unchanged by this feature — verified by a regression test, not just
+  documented intent.
 
 ### REQ-BUILDCOMPAT-001 — Preserve existing contracts
 
