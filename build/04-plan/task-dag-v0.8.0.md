@@ -1,156 +1,236 @@
-# Task DAG — Forge v0.8.0 (Builder Phase 1: decompose the Stage 6 monolith)
+# Task DAG — Forge v0.8.0 (Builder Pro — BUILDER_PRO-PLAN.md Phase 2)
 
-> **Status**: Ready to build (2026-08-03). Derived from `build/01-srs/srs-v0.8.0.md`,
-> itself derived from `docs/builder-pro-plan-analysis.md`'s "Recommended Execution Plan"
-> (Phase 1 only — decompose the builder monolith into 3 focused sub-agents wired through
-> the existing `forge-build` skill).
+> **Status**: Ready to build (2026-08-03). **Revision 2** — derived from
+> `build/01-srs/srs-v0.8.0.md` Revision 2, itself derived from `BUILDER_PRO-PLAN.md`'s
+> own appended Phase 2 section (not the trimmed 3-agent plan `docs/
+> builder-pro-plan-analysis.md` recommended, which was Revision 1 and is now removed
+> by T-241).
 >
-> Numbering continues from v0.7.0 (`T-227..T-234`, planned but not yet built); this is
-> **T-235..T-240**. Independent of v0.7.0's Docker workflow feature — no shared files.
->
-> Format: `T-NNN [size] title` — Size: S (~30min), M (~2hr), L (~half-day). Every task
-> in this DAG is sized S or M by design — the analysis's own risk register flags
-> "13 sub-agents = untestable surface" and "scope consumes months" as the top risks, so
-> each task here is small enough to execute (and review) in a short context window.
+> T-235..T-240 (Revision 1) **shipped and were then superseded** — see
+> `build/05-implementation/progress.md` for that history. This revision is
+> **T-241..T-251**.
 >
 > | Milestone | Tasks | Gate |
 > |-----------|-------|------|
-> | M1 Sub-agents (parallelizable) | T-235, T-236, T-237 | v0.6.1 landed |
-> | M2 Wiring | T-238 | M1 landed |
-> | M3 Verification + release | T-239, T-240 | M2 landed |
+> | M1 Remove superseded Revision 1 | T-241 | v0.6.1 landed + Revision 1 commits present |
+> | M2 References (parallelizable) | T-242, T-243, T-244, T-245, T-246 | M1 landed |
+> | M3 Engine + agent (parallelizable with each other, not with M2) | T-247, T-248 | M2 landed |
+> | M4 Skill wiring | T-249 | M3 landed |
+> | M5 Tests + verification | T-250, T-251 | M4 landed |
 
-**Invariants** (every task): TDD red-first (write the failing structural test before the
-agent `.md` file); each new `agents/*.md` follows the existing frontmatter contract
-(`name`, `description`, `allowed-tools`) exactly as seen in `agents/builder.md` /
-`agents/reflector.md`; no task deletes or behavior-changes `agents/builder.md` (it stays
-as-is per REQ-BUILDPIPE-001 / AC-BUILDPIPE-001b); no task touches `build-batch.py`,
-`state-manager.py`, or narration contract behavior (REQ-BUILDCOMPAT-001); full unit
-suite green after every task, not just at the end.
-
----
-
-## Milestone 1: Sub-agents (T-235, T-236, T-237 are independent — safe to build in parallel)
-
-### T-235 [S] Extract Context Loader sub-agent
-- **Description**: New `agents/context-loader.md` persona. Given a task ID, it resolves
-  the task-dag entry (task resolution — folded in, no separate Task Resolver agent per
-  AC-BUILDCTX-001b), then returns only the technical-spec section, architecture/
-  interface/DTO excerpts, and profile `additional_criteria` tied to that task's declared
-  `Files` — not the full spec or architecture doc. Read-only: `allowed-tools: [Read, Grep, Glob]`.
-- **Files**: `agents/context-loader.md`, `tests/unit/test_context_loader_agent.py`
-- **Done when**: `test_context_loader_agent.py` passes — frontmatter valid, `allowed-tools`
-  is exactly `[Read, Grep, Glob]` (no `Write`/`Edit`/`Bash` — it never mutates), file
-  documents the "only task-relevant docs" contract (AC-BUILDCTX-001a) and the folded-in
-  task-resolution responsibility (AC-BUILDCTX-001b).
-- **Depends on**: none
-- **REQ-IDs**: REQ-BUILDCTX-001, REQ-BUILDTEST-001
-
-### T-236 [S] Extract Code Generator sub-agent
-- **Description**: New `agents/code-generator.md` persona. Consumes the context bundle
-  produced by Context Loader (T-235's output contract) plus the task definition; writes
-  production code and tests only — no context resolution, no commit, no progress.md
-  write, no gate-running. This is the narrowed-down remainder of `agents/builder.md`'s
-  "implement + write tests" steps, with everything else stripped out.
-- **Files**: `agents/code-generator.md`, `tests/unit/test_code_generator_agent.py`
-- **Done when**: `test_code_generator_agent.py` passes — frontmatter valid,
-  `allowed-tools` includes `Write`/`Edit`/`Bash`/`Read`/`Grep`/`Glob` but the persona's
-  Output Contract section lists only code + test files (AC-BUILDGEN-001a) and explicitly
-  states it does not commit or update progress.md.
-- **Depends on**: none (built against the context-bundle contract defined in this task's
-  test/spec, not against T-235's actual file — safe to run in parallel with T-235)
-- **REQ-IDs**: REQ-BUILDGEN-001, REQ-BUILDTEST-001
-
-### T-237 [S] Build Quality Gate Runner sub-agent
-- **Description**: New `agents/quality-gate-runner.md` persona — **one** agent chaining
-  compile → lint → test → static analysis, reusing existing project-detected commands
-  and `scripts/load-profile.py` `additional_criteria` (the same pattern `forge-build`
-  already calls). Explicitly not four separate agents — Linter/Static Analyzer/Build
-  Runner stay as shell steps this one persona runs in sequence, per the analysis's
-  correction of the original 13-agent plan.
-- **Files**: `agents/quality-gate-runner.md`, `tests/unit/test_quality_gate_runner_agent.py`
-- **Done when**: `test_quality_gate_runner_agent.py` passes — frontmatter valid,
-  `allowed-tools` includes `Bash`/`Read`, persona documents all four checks with
-  per-check pass/fail reporting (AC-BUILDGATE-001a), not a single aggregate boolean.
-- **Depends on**: none
-- **REQ-IDs**: REQ-BUILDGATE-001, REQ-BUILDTEST-001
+**Invariants**: `skills/forge-build/SKILL.md` and `agents/builder.md` stay byte-identical
+to the pre-T-235 baseline (commit `6a22fa1`) through every task in this revision —
+re-verified by `test_builder_pipeline_wiring.py` (rewritten in T-250, same guard
+approach as Revision 1's version). `scripts/build_executor.py` is stdlib-first and may
+import in-repo modules (`_workflow`, `parallel_build`) but no new third-party
+dependency. TDD red-first per task. Full unit suite green after every task.
 
 ---
 
-## Milestone 2: Wiring
+## Milestone 1: Remove superseded Revision 1
 
-### T-238 [M] New `forge-build-pro` skill (does not touch `forge-build`)
-- **Description**: **Revised 2026-08-03** — course-corrected away from rewiring
-  `forge-build/SKILL.md` in place. Instead, create `skills/forge-build-pro/SKILL.md`
-  (aliases `/forge:build-pro`), mirroring the structure of `skills/forge-plan-pro/
-  SKILL.md`: frontmatter, Aliases, Purpose, Stage Ownership, Pre-flight Check (entry
-  gate + progress verification), Load Project Profile, then an "Execute the Sub-Agent
-  Pipeline" section sequencing adopt Context Loader (produce context bundle) → adopt
-  Code Generator (consumes the bundle, produces code+tests) → adopt Quality Gate Runner
-  (gates pass/fail) → on pass, the same inline commit + progress-update + advance +
-  next-hint steps `forge-build` already uses. `skills/forge-build/SKILL.md` and
-  `agents/builder.md` are not touched — both tiers coexist, exactly like every other
-  stage's Pro variant.
+### T-241 [S] Remove Revision 1's sub-agent decomposition
+- **Description**: Delete the three Revision-1 sub-agent persona files and their tests
+  — they implemented context-resolution and gate-execution as LLM personas, which
+  `BUILDER_PRO-PLAN.md`'s actual Phase 2 section specifies as deterministic script
+  logic instead (`scripts/build_executor.py`, built in T-248). Their domain content
+  (the context-bundle field list, the four-check gate enumeration) carries forward into
+  `references/build/02-context-resolution.md` (T-243) and
+  `references/build/03-execution-verification.md` (T-244) — read them before deleting
+  so nothing of value is lost, just relocated from persona prose to reference-doc prose
+  and script code.
+- **Files removed**: `agents/context-loader.md`, `agents/code-generator.md`,
+  `agents/quality-gate-runner.md`, `tests/unit/test_context_loader_agent.py`,
+  `tests/unit/test_code_generator_agent.py`, `tests/unit/test_quality_gate_runner_agent.py`,
+  `tests/unit/test_builder_pipeline_wiring.py` (rewritten from scratch in T-250 against
+  the new architecture, not edited in place).
+- **Files kept, to be rewritten in place** (not deleted): `agents/builder-pro.md`,
+  `skills/forge-build-pro/SKILL.md` — correct final paths, wrong content; T-247/T-249
+  rewrite them.
+- **Done when**: The four superseded files (and their tests) no longer exist; full
+  suite still passes (no dangling references to the removed files anywhere else);
+  `build/05-implementation/progress.md`'s existing T-235/236/237 entries are left as
+  historical record with a note that they were superseded, not deleted from history.
+- **Depends on**: none (T-235..T-240 already merged to this branch)
+- **REQ-IDs**: (removal task, no new REQ)
+
+---
+
+## Milestone 2: `references/build/` (independent of each other — parallelizable)
+
+### T-242 [S] `references/build/01-foundation.md`
+- **Description**: Ownership (Builder Pro vs. Classic `agents/builder.md` boundary),
+  scope, ID conventions reused from the existing scheme (T-IDs, REQ-IDs), and the
+  Output Contract (code + tests + a pass/fail verification verdict) — mirrors
+  `references/plan/01-foundation.md`'s shape and level of detail.
+- **Files**: `references/build/01-foundation.md`
+- **Done when**: File exists, one topic (foundation/ownership/output-contract), no
+  overlap with 02-05.
+- **Depends on**: T-241
+- **REQ-IDs**: REQ-BUILDREF-001
+
+### T-243 [S] `references/build/02-context-resolution.md`
+- **Description**: Documents the task → module → interfaces → DTO → requirements →
+  minimal-load algorithm `scripts/build_executor.py` (T-248) implements, and the exact
+  shape of the context bundle it hands to `agents/builder-pro.md` (field names/order —
+  carry forward Revision 1's `context-loader.md` bundle shape: Task ID, Files, REQ-IDs,
+  Task description, Spec excerpt(s), Architecture excerpt(s), Applicable
+  additional_criteria — read that file's content before it's deleted in T-241, or from
+  git history after, to reuse the field list precisely).
+- **Files**: `references/build/02-context-resolution.md`
+- **Done when**: File exists; documents only context-resolution, not generation or
+  gates; the bundle field list matches what T-248's implementation actually produces
+  (reconcile after T-248, don't let the doc and the code drift).
+- **Depends on**: T-241
+- **REQ-IDs**: REQ-BUILDREF-001, REQ-BUILDEXEC-001 (AC-BUILDEXEC-001a)
+
+### T-244 [S] `references/build/03-execution-verification.md`
+- **Description**: The per-task loop (load context → generate → gate → escalate-or-
+  commit), the four-check gate list (compile/lint/test/static analysis — carry forward
+  Revision 1's `quality-gate-runner.md` enumeration and per-check-report requirement),
+  and a new `DEFECT-###` identifier scheme for an escalation when verification fails
+  repeatedly (first use of this identifier type in the repo — define its lifecycle here:
+  when one is opened, what it records, how it's resolved).
+- **Files**: `references/build/03-execution-verification.md`
+- **Done when**: File exists; gate list matches T-248's actual checks; `DEFECT-###` is
+  fully specified (format, fields, lifecycle), not just named.
+- **Depends on**: T-241
+- **REQ-IDs**: REQ-BUILDREF-001, REQ-BUILDEXEC-001 (AC-BUILDEXEC-001b)
+
+### T-245 [S] `references/build/04-traceability-validation.md`
+- **Description**: Extends the existing REQ → SPEC → ADR → MOD → TASK traceability
+  chain (`scripts/traceability-check.py`, `agents/traceability-matrix.md`) to include
+  the generated file as the final link — reuses existing traceability machinery,
+  doesn't invent a parallel one.
+- **Files**: `references/build/04-traceability-validation.md`
+- **Done when**: File exists; explicitly references `traceability-check.py`'s existing
+  chain format rather than redefining one.
+- **Depends on**: T-241
+- **REQ-IDs**: REQ-BUILDREF-001
+
+### T-246 [S] `references/build/05-workflow-governance.md`
+- **Description**: Supported modes — single task, and a milestone-batch equivalent to
+  today's `--milestone N` — explicitly stating the wider six-mode list (module/
+  work-package/sprint/project) from the original unscoped vision stays deferred.
+  Resume semantics (skip-if-done, matching `build-batch.py --resume`), profile
+  interaction (Stage 6 `additional_criteria`), when the parallel/worktree path
+  (`parallel_build.py`) applies vs. plain single-task, failure handling, and the
+  completion report shape.
+- **Files**: `references/build/05-workflow-governance.md`
+- **Done when**: File exists; modes section explicitly scopes to single-task +
+  milestone-batch and states the 6-mode list is deferred (AC-BUILDREF-001b).
+- **Depends on**: T-241
+- **REQ-IDs**: REQ-BUILDREF-001 (AC-BUILDREF-001b)
+
+---
+
+## Milestone 3: Engine + agent
+
+### T-247 [M] Rewrite `agents/builder-pro.md` as a thin router
+- **Description**: Replace the Revision-1 content (which orchestrated three sub-agent
+  personas) with a ~130-line thin router matching `agents/planner-pro.md`'s shape: a
+  short Role/Goal, then a Reference Loading Protocol table naming
+  `references/build/01..05.md` in order. Its own job is narrow — generate code,
+  generate tests, verify the result against the spec — using the context bundle and
+  gate results `build_executor.py` (T-248) provides/consumes; it does not resolve
+  context, run the full gate chain, commit, or write progress.md itself.
+- **Files**: `agents/builder-pro.md`
+- **Done when**: File is close to 130 lines; Reference Loading Protocol table names all
+  five `references/build/0N-*.md` files in order (AC-BUILDAGENT-001a); Output Contract
+  explicitly excludes committing/progress-write/full-gate-running
+  (AC-BUILDAGENT-001b).
+- **Depends on**: T-242, T-243, T-244, T-245, T-246 (needs final reference filenames/
+  content to point to)
+- **REQ-IDs**: REQ-BUILDAGENT-001
+
+### T-248 [L] `scripts/build_executor.py` — the deterministic engine
+- **Description**: New script implementing the Script-owns list: context resolve
+  (deterministic, per `references/build/02-context-resolution.md`), gate execution
+  (per-check pass/fail, per `03-execution-verification.md`), commit + progress write
+  (only after all gates pass), a `build-log.jsonl` append per task attempt, resume
+  (skip done tasks), and — for a multi-task batch — delegating to
+  `scripts/parallel_build.py`'s `run_parallel_build` for worktree isolation and bounded
+  parallel dispatch rather than reimplementing fan-out.
+- **Files**: `scripts/build_executor.py`, `tests/unit/test_build_executor.py`
+- **Done when**: Unit tests cover context-resolve scoping (AC-BUILDEXEC-001a), gate
+  per-check reporting (AC-BUILDEXEC-001b), commit/progress-write-only-on-pass,
+  build-log.jsonl append shape, resume skip-logic, and that the batch path calls into
+  `parallel_build.run_parallel_build` rather than duplicating its logic
+  (AC-BUILDEXEC-001c) — TDD red-first.
+- **Depends on**: T-243, T-244 (needs the algorithms/gate-list they document)
+- **REQ-IDs**: REQ-BUILDEXEC-001
+
+---
+
+## Milestone 4: Skill wiring
+
+### T-249 [M] Rewrite `skills/forge-build-pro/SKILL.md`
+- **Description**: Replace the Revision-1 draft (which never referenced a script) with
+  one that actually invokes `scripts/build_executor.py` for the deterministic steps and
+  adopts `agents/builder-pro.md` for the generative step in between — zero domain logic
+  duplicated in the skill file itself. Keeps the existing gating/profile-loading/
+  narration/next-hint structure already present from Revision 1 (that part was
+  correctly scoped, only the missing script call and the wrong agent content need
+  fixing).
 - **Files**: `skills/forge-build-pro/SKILL.md`
-- **Done when**: `forge-build-pro/SKILL.md` references `context-loader.md` →
-  `code-generator.md` → `quality-gate-runner.md` in that order (AC-BUILDPIPE-001a);
-  `skills/forge-build/SKILL.md` and `agents/builder.md` are unchanged from their
-  pre-T-235 content, verified by a regression test (AC-BUILDPIPE-001b); existing
-  `test_build_batch.py` and narration tests still pass unmodified
-  (AC-BUILDCOMPAT-001a).
-- **Depends on**: T-235, T-236, T-237
-- **REQ-IDs**: REQ-BUILDPIPE-001, REQ-BUILDCOMPAT-001
+- **Done when**: Steps reference both `scripts/build_executor.py` and
+  `agents/builder-pro.md` (AC-BUILDSKILL-001a); `skills/forge-build/SKILL.md` and
+  `agents/builder.md` remain byte-identical to the pre-T-235 baseline
+  (AC-BUILDSKILL-001b).
+- **Depends on**: T-247, T-248
+- **REQ-IDs**: REQ-BUILDSKILL-001
 
 ---
 
-## Milestone 3: Verification + release
+## Milestone 5: Tests + verification
 
-### T-239 [S] Cross-file pipeline-order test
-- **Description**: A structural test asserting `forge-build/SKILL.md` names all three
-  new agent files in the correct order and that each referenced agent file exists on
-  disk — makes AC-BUILDPIPE-001a mechanically verifiable and regression-proof (a future
-  edit that reorders or drops a step fails CI, not just review).
+### T-250 [S] Rewrite the cross-file wiring test
+- **Description**: Replace `test_builder_pipeline_wiring.py` (deleted in T-241) with a
+  version asserting the *new* architecture: `forge-build-pro/SKILL.md` references
+  `build_executor.py` and `builder-pro.md`; `builder-pro.md` references all five
+  `references/build/0N-*.md` files in order; `skills/forge-build/SKILL.md` and
+  `agents/builder.md` are still byte-identical to the `6a22fa1` baseline (same
+  regression guard as Revision 1, just re-applied to the corrected file set).
 - **Files**: `tests/unit/test_builder_pipeline_wiring.py`
-- **Done when**: New test passes; test fails (red) if the SKILL.md step order is broken,
-  proven by a scratch mutation during authoring (not committed).
-- **Depends on**: T-238
-- **REQ-IDs**: REQ-BUILDTEST-001, AC-BUILDPIPE-001a
+- **Done when**: All assertions pass against the T-247/T-248/T-249 output.
+- **Depends on**: T-249
+- **REQ-IDs**: REQ-BUILDSKILL-001 (AC-BUILDSKILL-001a/b)
 
-### T-240 [S] Full regression sweep + progress/changelog update
+### T-251 [S] Full regression sweep + progress/changelog update
 - **Description**: Run the full unit suite, `scripts/validate-plugin.py`, and
   `tests/integration/full-pipeline.sh`. Update `build/05-implementation/progress.md`
-  (mark T-235..T-239 done with commit refs), append a `tasks/lessons.md` entry only if
-  something surprising came up during the build, and add a `[Unreleased]` entry to
-  `CHANGELOG.md` describing the Builder Phase 1 decomposition.
-- **Files**: `build/05-implementation/progress.md`, `CHANGELOG.md`,
-  `tasks/lessons.md` (conditional)
-- **Done when**: Full suite green (same pass count or higher than the pre-T-235
-  baseline, zero new failures), `validate-plugin.py` exits 0, `full-pipeline.sh` exits 0.
-- **Depends on**: T-239
-- **REQ-IDs**: NFR-BUILDPHASE1-001
+  (mark T-241..T-250 done with commit refs, and annotate the superseded T-235/236/237
+  entries), replace the Revision-1 CHANGELOG `[Unreleased]` entry with one describing
+  the actual Phase 2 shape, and add a lessons.md entry on reading the *actual* source
+  document in full before scoping from a secondary analysis of it.
+- **Files**: `build/05-implementation/progress.md`, `CHANGELOG.md`, `tasks/lessons.md`
+- **Done when**: Full suite green, `validate-plugin.py` exits 0, `full-pipeline.sh`
+  exits 0.
+- **Depends on**: T-250
+- **REQ-IDs**: NFR-BUILDPHASE2-001
 
 ---
 
 ## Critical Path
 
 ```
-T-235 ─┐
-T-236 ─┼─→ T-238 ─→ T-239 ─→ T-240
-T-237 ─┘
+T-241 ─┬─→ T-242 ─┐
+       ├─→ T-243 ─┼─→ T-247 ─┐
+       ├─→ T-244 ─┤          ├─→ T-249 ─→ T-250 ─→ T-251
+       ├─→ T-245 ─┘          │
+       └─→ T-246 ────────────┘
+                    T-243+T-244 ─→ T-248 ─┘
 ```
 
-**Critical path length**: 4 tasks (one of T-235/236/237 → T-238 → T-239 → T-240).
-**Parallelizable**: T-235, T-236, T-237 (no shared files, no dependency between them).
-
----
+**Critical path length**: 6 tasks (T-241 → one of T-242..T-246 → T-247/T-248 → T-249 →
+T-250 → T-251). **Parallelizable**: T-242..T-246 (5-way); T-247 and T-248 (2-way, after
+M2).
 
 ## Risk Register
 
-(Carried forward from `docs/builder-pro-plan-analysis.md`'s Risk Assessment table —
-not re-litigated here.)
-
 | ID | Risk | Impact | Likelihood | Mitigation |
 |----|------|--------|------------|------------|
-| R-1 | Scope creep back toward the full 17-task plan | H | M | This DAG is the only authorized scope; Phases 2-4 need a new SRS before any code |
-| R-2 | Wiring (T-238) breaks existing `--milestone N` batch or narration | M | M | AC-BUILDCOMPAT-001a: existing tests must pass unmodified, not just new tests added |
-| R-3 | Sub-agent contracts (context bundle shape) drift between T-235/T-236 since built in parallel | M | L | Contract is fixed in this doc's task descriptions before either task starts |
-| R-4 | `agents/builder.md` silently rots (unreferenced but still shown to users as Stage 6 agent) | L | M | Left explicitly as documented fallback (AC-BUILDPIPE-001b); revisit in a future phase, not this one |
+| R-1 | A second scope misread on the same feature | H | L (now read the primary source directly, not a secondary analysis of it) | This revision quotes `BUILDER_PRO-PLAN.md`'s Phase 2 section verbatim in the SRS rather than paraphrasing |
+| R-2 | `build_executor.py` duplicates `parallel_build.py` logic instead of reusing it | M | M | AC-BUILDEXEC-001c + a test asserting the batch path calls `run_parallel_build` |
+| R-3 | `references/build/0N-*.md` content drifts from what `build_executor.py` actually implements | M | M | T-243/T-244 explicitly say "reconcile after T-248" |
+| R-4 | Reintroducing the deferred 6-mode builder list by accident via 05-workflow-governance.md | L | M | AC-BUILDREF-001b requires an explicit "deferred" statement in that file |
