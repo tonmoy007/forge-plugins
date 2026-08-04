@@ -5,8 +5,27 @@
 
 ## Current State
 
-- **v0.8.0 (Builder Phase 1: Pro-tier sub-agent pipeline) COMPLETE — T-235..T-240.**
-  Scoped from `docs/builder-pro-plan-analysis.md`'s verdict on `BUILDER_PRO-PLAN.md`
+- **v0.8.0 Revision 2 (Builder Pro — BUILDER_PRO-PLAN.md's actual Phase 2) IN
+  PROGRESS — T-241..T-251.** Revision 1 below (T-235..T-240) was scoped from a
+  secondary analysis doc, not `BUILDER_PRO-PLAN.md` itself, and got the shape wrong
+  (three LLM sub-agent personas instead of one thin-router agent + a deterministic
+  script) — **superseded, not deleted from history**. `build/01-srs/srs-v0.8.0.md`
+  and `build/04-plan/task-dag-v0.8.0.md` now hold Revision 2 (T-241..T-251), scoped
+  directly from `BUILDER_PRO-PLAN.md`'s own appended Phase 2 section. **T-241 `d45e676`
+  done**: deleted the three Revision-1 sub-agent persona files
+  (`agents/context-loader.md`, `agents/code-generator.md`,
+  `agents/quality-gate-runner.md`) and their four tests; full unit suite green (1886
+  passed), no dangling references in code or tests. **AC-BUILDEXEC-001d gap-fix
+  `774d6fb`**: T-248's "Done when" list was missing the traceability-update
+  acceptance criterion that `BUILDER_PRO-PLAN.md`'s own per-task pipeline requires as
+  its last step — added, plus a T-248→T-245 dependency. `agents/builder-pro.md`,
+  `skills/forge-build-pro/SKILL.md`, and `CHANGELOG.md` still carry Revision-1 prose
+  referencing the deleted sub-agents — expected, fixed in place by T-247/T-249/T-251,
+  not a regression. **NEXT: T-242..T-246** (M2, `references/build/01..05.md`,
+  parallelizable), then T-247/T-248 (M3), T-249 (M4), T-250/T-251 (M5). Worktree
+  `.claude/worktrees/recursive-wobbling-sky`, branch `builder-pro-plan-execution`.
+- **v0.8.0 Revision 1 (Builder Phase 1: Pro-tier sub-agent pipeline) SUPERSEDED —
+  T-235..T-240.** Scoped from `docs/builder-pro-plan-analysis.md`'s verdict on `BUILDER_PRO-PLAN.md`
   (execute Phase 1 only). T-235 `7327f28` Context Loader (read-only, resolves only
   task-relevant docs). T-236 `cfe358b` Code Generator (context bundle → code+tests
   only). T-237 `31232a0` Quality Gate Runner (one agent, compile→lint→test→static
