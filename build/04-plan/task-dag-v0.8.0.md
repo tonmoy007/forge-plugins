@@ -216,6 +216,45 @@ dependency. TDD red-first per task. Full unit suite green after every task.
 
 ---
 
+## Follow-On (tracked, not blocking the Critical Path)
+
+Discovered mid-build (REQ-BUILDCTX-002): context-resolution depth should be
+configurable rather than fixed forever at spec+plan. Design lives in
+`references/build/02-context-resolution.md` and the SRS; these two tasks implement
+the Stage 5 prompt/persist UX and the widening logic. Sequenced after T-251 —
+Phase 2 ships and is fully usable with the `spec_plan` default before either lands.
+
+### T-252 [S] `forge-plan-pro` Stage 5 entry: prompt + persist `build_context_depth`
+
+- **Description**: Add a pre-flight step to `skills/forge-plan-pro/SKILL.md`: if
+  `pipeline/state.md` has no `build_context_depth` field, ask the user once
+  (`spec_plan` default / `spec_arch_plan` / `full_chain`) and persist the answer via
+  `_state_lib.write_state` — same read-modify-write pattern
+  `scripts/set-profile.py` uses for `project_type`. Never re-prompts once set.
+- **Files**: `skills/forge-plan-pro/SKILL.md`
+- **Done when**: A fresh project with no `build_context_depth` gets prompted once at
+  Stage 5 entry; a project with it already set is not re-prompted
+  (AC-BUILDCTX-002c); unset stays `spec_plan` (AC-BUILDCTX-002b).
+- **Depends on**: T-251
+- **REQ-IDs**: REQ-BUILDCTX-002
+
+### T-253 [M] Wire `build_context_depth` into `build_executor.py`'s context-resolve
+
+- **Description**: Read the optional `build_context_depth` field via `_state_lib`
+  (default `spec_plan` when absent/malformed, fail-soft). At `spec_arch_plan`, also
+  `read-doc.py` resolve `pipeline/03-architecture/*` and fold matching excerpts into
+  the bundle's Architecture excerpt(s) field. At `full_chain`, additionally resolve
+  the full Stage 1-5 canonical set (SRS+traceability, PRD+user-stories+flows, sprint
+  plan when present) — informational context only, the Output Contract and hard
+  REQ-ID invariant are unchanged by depth.
+- **Files**: `scripts/build_executor.py`, `tests/unit/test_build_executor.py`
+- **Done when**: Unit tests cover all three depths + the unset-defaults-to-`spec_plan`
+  case (AC-BUILDCTX-002a/b) — TDD red-first.
+- **Depends on**: T-248, T-252
+- **REQ-IDs**: REQ-BUILDCTX-002
+
+---
+
 ## Critical Path
 
 ```

@@ -63,11 +63,18 @@ A new stdlib-first script, following this repo's script conventions (type hints,
 dataclasses, never-raises where the rest of the orchestration layer never-raises), that
 owns everything mechanical:
 
-- **Context resolve**: given a task ID, deterministically extract (grep/string-match,
-  no LLM call) the task-dag entry, the technical-spec section(s) referencing that
-  task's REQ-IDs/Files, the architecture/interface/DTO excerpts referencing the same,
-  and the profile's Stage 6 `additional_criteria` (reusing `load-profile.py`'s output
-  shape). This replaces Revision 1's `context-loader.md` agent with plain code.
+- **Context resolve**: given a task ID, deterministically resolve (no LLM call) the
+  task-dag entry and the task-relevant spec section(s) via `read-doc.py` against the
+  real canonical base paths (`pipeline/05-plan/task-dag`, `pipeline/04-spec/
+  technical-spec` — single-file or split-directory layout, never a hardcoded flat
+  `.md` grep), plus the profile's Stage 6 `additional_criteria` (reusing
+  `load-profile.py`'s output shape). This replaces Revision 1's `context-loader.md`
+  agent with plain code. **Default depth is spec + plan only** — architecture is not
+  pulled in by default (REQ-BUILDCTX-002 below governs the configurable widening).
+  **Hard invariant, regardless of depth**: a task with no REQ-ID that resolves against
+  `pipeline/01-srs/srs.md` fails context-resolution closed — no bundle is produced, no
+  generation is attempted. Nothing builds without a traceable requirement or spec
+  citation.
 - **Gate execution**: run compile → lint → test → static analysis (project-detected
   commands) plus profile `additional_criteria`, and report **pass/fail per check**
   (never a single aggregate boolean) — replaces Revision 1's `quality-gate-runner.md`
@@ -171,12 +178,47 @@ matching every other Pro skill's "orchestration only" framing.
   byte-for-byte unchanged (same regression test as Revision 1, re-verified here since
   files were touched again during the correction).
 
+### REQ-BUILDCTX-002 — Configurable context depth (design now, ship as tracked follow-on)
+
+User direction mid-build: context-resolution depth should be configurable, not fixed
+at spec+plan forever. Three depths: `spec_plan` (default — spec + plan only, matches
+REQ-BUILDEXEC-001's context-resolve), `spec_arch_plan` (also pulls
+`pipeline/03-architecture/*` via `read-doc.py`), `full_chain` (pulls the entire
+Stage 1-5 canonical set: SRS+traceability, PRD+user-stories+flows, full architecture,
+full spec, full plan, plus sprint-plan when present). The choice is made once, at
+Stage 5 entry (`forge-plan-pro`'s pre-flight prompts if unset), persisted to
+`pipeline/state.md`, and read by Builder Pro's context-resolution — same
+read-modify-write pattern `scripts/set-profile.py` already uses for `project_type`.
+
+This does not block Phase 2's critical path: REQ-BUILDEXEC-001 ships the `spec_plan`
+default now, fully working end to end. The prompt/persist UX
+(`skills/forge-plan-pro/SKILL.md`, a Stage 5 file outside this phase's file list) and
+the widening logic in `build_executor.py`'s context-resolve are **T-252/T-253**,
+explicitly sequenced after T-251 as a tracked follow-on — not silently dropped, not
+implemented ad hoc mid-Phase-2.
+
+Regardless of depth, the hard invariant from REQ-BUILDEXEC-001 always applies: every
+task must comply with a resolvable requirement or specification. No depth setting
+weakens that gate.
+
+- **AC-BUILDCTX-002a**: `pipeline/state.md` gains an optional `build_context_depth`
+  field (`spec_plan` | `spec_arch_plan` | `full_chain`), read via `_state_lib`, same
+  as `project_type`.
+- **AC-BUILDCTX-002b**: Unset defaults to `spec_plan` — byte-identical behavior to
+  REQ-BUILDEXEC-001's default context-resolve, no regression for a project that never
+  opts in.
+- **AC-BUILDCTX-002c**: `forge-plan-pro`'s pre-flight prompts for the depth once, only
+  when unset, and never re-prompts or silently overwrites an explicit prior choice.
+
 ## Explicitly Deferred
 
 Unchanged from Revision 1, still out of scope: `forge explain <file>` traceability CLI,
 a separate recovery state machine beyond progress.md + resume, the 8-artifact
 "enterprise artifacts" wishlist (only `build-log.jsonl` ships), AI-agnostic provider
 adapters, and the 6-mode builder scope list beyond single-task + milestone-batch.
+**New this revision**: REQ-BUILDCTX-002's `spec_arch_plan`/`full_chain` depths and the
+Stage 5 prompt UX are designed but implemented as T-252/T-253, sequenced after T-251
+— tracked, not dropped.
 
 ## Non-Functional
 
