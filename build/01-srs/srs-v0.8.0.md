@@ -74,6 +74,16 @@ owns everything mechanical:
   agent with plain code.
 - **Commit + progress write**: `feat(T-XXX): …` commit and
   `build/05-implementation/progress.md` update, only after all gates pass.
+- **Traceability update**: after commit, extend the existing
+  REQ → SPEC → ADR → MOD → TASK chain to include the file(s) just generated (per
+  `references/build/04-traceability-validation.md`) — this is not optional
+  documentation, it is a required step in `BUILDER_PRO-PLAN.md`'s own per-task
+  pipeline (Context Resolution → Task Execution → Code Generation → Verification →
+  Commit → Progress Tracking → **Traceability Update**), and every other Stage 1-5 Pro
+  tier already treats traceability as a mandatory, not deferred, concern (confirmed by
+  audit: `references/srs|product|architect|spec|plan|sprint-plan/` each ship a
+  traceability-validation file). Reuses `scripts/traceability-check.py`'s existing
+  chain/format rather than a parallel one.
 - **`build-log.jsonl`**: one append-only JSON line per task attempt — task id,
   timestamp, files changed, gate results, commit sha, duration. The single new
   artifact this phase adds (`BUILDER_PRO-PLAN.md`'s original 8-file "enterprise
@@ -93,6 +103,10 @@ owns everything mechanical:
   one boolean (same bar as Revision 1's AC-BUILDGATE-001a, now met by code).
 - **AC-BUILDEXEC-001c**: A batch/parallel run delegates to `parallel_build.py`'s engine
   rather than duplicating worktree or dispatch logic.
+- **AC-BUILDEXEC-001d**: After every successful commit, the traceability chain is
+  extended to include the generated file(s) — not merely documented as a step that
+  *could* happen. Required, not deferred (`BUILDER_PRO-PLAN.md`'s own per-task pipeline
+  ends Context Resolution → … → Commit → Progress Tracking → **Traceability Update**).
 
 ### REQ-BUILDAGENT-001 — `agents/builder-pro.md`: thin router, ~130 lines
 

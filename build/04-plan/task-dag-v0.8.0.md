@@ -147,17 +147,22 @@ dependency. TDD red-first per task. Full unit suite green after every task.
 - **Description**: New script implementing the Script-owns list: context resolve
   (deterministic, per `references/build/02-context-resolution.md`), gate execution
   (per-check pass/fail, per `03-execution-verification.md`), commit + progress write
-  (only after all gates pass), a `build-log.jsonl` append per task attempt, resume
-  (skip done tasks), and — for a multi-task batch — delegating to
+  (only after all gates pass), **traceability update** (extend the REQ → SPEC → ADR →
+  MOD → TASK chain to include the generated file, per `04-traceability-validation.md`
+  — required, not deferred: it's the last step of `BUILDER_PRO-PLAN.md`'s own per-task
+  pipeline, not optional documentation), a `build-log.jsonl` append per task attempt,
+  resume (skip done tasks), and — for a multi-task batch — delegating to
   `scripts/parallel_build.py`'s `run_parallel_build` for worktree isolation and bounded
   parallel dispatch rather than reimplementing fan-out.
 - **Files**: `scripts/build_executor.py`, `tests/unit/test_build_executor.py`
 - **Done when**: Unit tests cover context-resolve scoping (AC-BUILDEXEC-001a), gate
   per-check reporting (AC-BUILDEXEC-001b), commit/progress-write-only-on-pass,
-  build-log.jsonl append shape, resume skip-logic, and that the batch path calls into
+  traceability-chain extension after commit (AC-BUILDEXEC-001d), build-log.jsonl
+  append shape, resume skip-logic, and that the batch path calls into
   `parallel_build.run_parallel_build` rather than duplicating its logic
   (AC-BUILDEXEC-001c) — TDD red-first.
-- **Depends on**: T-243, T-244 (needs the algorithms/gate-list they document)
+- **Depends on**: T-243, T-244, T-245 (needs the algorithms/gate-list/traceability
+  format they document)
 - **REQ-IDs**: REQ-BUILDEXEC-001
 
 ---
