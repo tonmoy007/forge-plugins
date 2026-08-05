@@ -5,25 +5,48 @@
 
 ## Current State
 
-- **v0.8.0 Revision 2 (Builder Pro — BUILDER_PRO-PLAN.md's actual Phase 2) IN
-  PROGRESS — T-241..T-251.** Revision 1 below (T-235..T-240) was scoped from a
-  secondary analysis doc, not `BUILDER_PRO-PLAN.md` itself, and got the shape wrong
+- **v0.8.0 Revision 2 (Builder Pro) COMPLETE — T-241..T-251.** Revision 1 below
+  (T-235..T-240) was scoped from a secondary analysis doc and got the shape wrong
   (three LLM sub-agent personas instead of one thin-router agent + a deterministic
   script) — **superseded, not deleted from history**. `build/01-srs/srs-v0.8.0.md`
-  and `build/04-plan/task-dag-v0.8.0.md` now hold Revision 2 (T-241..T-251), scoped
-  directly from `BUILDER_PRO-PLAN.md`'s own appended Phase 2 section. **T-241 `d45e676`
-  done**: deleted the three Revision-1 sub-agent persona files
-  (`agents/context-loader.md`, `agents/code-generator.md`,
-  `agents/quality-gate-runner.md`) and their four tests; full unit suite green (1886
-  passed), no dangling references in code or tests. **AC-BUILDEXEC-001d gap-fix
-  `774d6fb`**: T-248's "Done when" list was missing the traceability-update
-  acceptance criterion that `BUILDER_PRO-PLAN.md`'s own per-task pipeline requires as
-  its last step — added, plus a T-248→T-245 dependency. `agents/builder-pro.md`,
-  `skills/forge-build-pro/SKILL.md`, and `CHANGELOG.md` still carry Revision-1 prose
-  referencing the deleted sub-agents — expected, fixed in place by T-247/T-249/T-251,
-  not a regression. **NEXT: T-242..T-246** (M2, `references/build/01..05.md`,
-  parallelizable), then T-247/T-248 (M3), T-249 (M4), T-250/T-251 (M5). Worktree
-  `.claude/worktrees/recursive-wobbling-sky`, branch `builder-pro-plan-execution`.
+  and `build/04-plan/task-dag-v0.8.0.md` hold Revision 2. Full lifecycle:
+  T-241 `d45e676` deleted the three Revision-1 sub-agent files + 4 tests. T-242..T-246
+  `38f20bb`/`489ec24`/`1cf9357`/`063cf9d`/`0ef6550` — `references/build/01..05.md`
+  (foundation, context-resolution, execution-verification, traceability-validation,
+  workflow-governance). Mid-M2, a gap-fix `774d6fb` added the missing
+  AC-BUILDEXEC-001d traceability acceptance criterion. T-247 `53650e0` rewrote
+  `agents/builder-pro.md` as a 111-line thin router. **Mid-build correction (user
+  caught it, `d176828`)**: context-resolution was reading flat files copied from the
+  deleted Revision-1 agent without checking they matched what the Pro-tier upstream
+  stages actually produce — rewrote it to resolve every canonical input via
+  `read-doc.py` against the real base paths (`references/stage-order.md` confirmed
+  `pipeline/05-plan/task-dag.md` was already right; architecture is deliberately not
+  read at the default `spec_plan` depth), and captured a new REQ-BUILDCTX-002
+  (configurable context depth, hard REQ-ID traceability invariant) with **T-252/T-253
+  tracked as an explicit follow-on** — not blocking, not silently dropped. T-248
+  `476c06a` shipped `scripts/build_executor.py` (TDD red-first, 29→32 tests) — context
+  resolve, four-check gate, commit/progress-write-only-on-pass, traceability
+  extension, `build-log.jsonl`, `DEFECT-###` escalation, resume, batch delegation to
+  `parallel_build.run_parallel_build`. T-249 `99f9bab` rewrote
+  `skills/forge-build-pro/SKILL.md` to actually invoke the script + agent. T-250
+  `d07b289` rewrote the cross-file wiring test (13/13) against the corrected
+  architecture. **Second correction (user caught it, `3269a3b`)**: `BUILDER_PRO-PLAN.md`
+  is this repo's own internal build-planning input — never citable inside shipped
+  plugin files. Scrubbed all 9 citations from `references/build/*.md` (the only
+  shipped files that had them), kept as directly-stated architecture. **Background
+  security review, `06ced33`**: fixed a `git add` argument-injection (missing `--`
+  pathspec separator) and a fail-open state drift (`consecutive_failures` now counts
+  a malformed `build-log.jsonl` line as a failure instead of silently skipping it, so
+  corruption can't suppress the `DEFECT-###` escalation gate) — +3 regression tests.
+  T-251 (this entry): full sweep — **1931 unit tests pass, `validate-plugin.py` exit
+  0, `full-pipeline.sh` 12/12 gates + traceability intact.** `agents/builder.md` and
+  `skills/forge-build/SKILL.md` verified byte-identical to the pre-T-235 `6a22fa1`
+  baseline throughout. Worktree `.claude/worktrees/recursive-wobbling-sky`, branch
+  `builder-pro-plan-execution`. **NEXT**: T-252/T-253 (REQ-BUILDCTX-002 — Stage 5
+  `forge-plan-pro` context-depth prompt + wiring `build_context_depth` into
+  `build_executor.py`'s context-resolve), tracked follow-on, not urgent — Phase 2
+  ships fully working at the `spec_plan` default. Then merge this branch and open
+  the PR (develop base, per repo convention).
 - **v0.8.0 Revision 1 (Builder Phase 1: Pro-tier sub-agent pipeline) SUPERSEDED —
   T-235..T-240.** Scoped from `docs/builder-pro-plan-analysis.md`'s verdict on `BUILDER_PRO-PLAN.md`
   (execute Phase 1 only). T-235 `7327f28` Context Loader (read-only, resolves only

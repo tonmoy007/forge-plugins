@@ -201,6 +201,52 @@
   this before any code was written.
 - **Tags**: [architecture, conventions, forge-build, pro-tier, T-238]
 
+### 2026-08-05 — Verify a Pro-tier upstream artifact's real shape against `stage-order.md`, never carry a flat-file assumption forward from a deleted file
+
+- **Trigger**: Writing context-resolution or upstream-handoff logic for a stage that
+  reads another stage's Pro-tier output (e.g. Stage 6 Pro reading Stage 4/5 Pro's
+  spec/plan artifacts).
+- **Rule**: Before assuming a canonical artifact is one flat `.md` file, check
+  `references/stage-order.md`'s `primary_artifact` field (the single authoritative,
+  tier-agnostic source of truth) and resolve it through `read-doc.py`, which
+  transparently handles both the single-file and split-directory layouts. Do not
+  copy a path assumption from a deleted or superseded file without re-verifying it —
+  the deleted file may itself have been written against the wrong tier's
+  conventions. Cross-check against a sibling Pro skill that already depends on the
+  same artifact (here, `forge-sprint-pro` already reads
+  `pipeline/05-plan/task-dag.md`) rather than trusting a single reference doc in
+  isolation — reference docs for a stage can drift from what the ecosystem actually
+  depends on (`references/plan/01-foundation.md`'s own Deliverables list names
+  `task-breakdown.md`, which nothing else in the repo reads).
+- **Why**: Revision 2's `references/build/02-context-resolution.md` (T-243) copied
+  `pipeline/04-spec/technical-spec.md` / `pipeline/03-architecture/architecture.md`
+  flat-file reads straight from the deleted Revision-1 `context-loader.md`, without
+  checking whether that matched what the *Pro*-tier upstream stages (`forge-spec-pro`,
+  `forge-arch-pro`) actually produce — which can be a `read-doc.py`-resolved split
+  document set. Caught by the user mid-build; fixed in `d176828` before
+  `scripts/build_executor.py` (T-248) was written against the wrong assumption.
+- **Tags**: [architecture, pro-tier, read-doc, context-resolution, T-243, T-248]
+
+### 2026-08-05 — Internal build-planning docs are inputs to the SRS/task-DAG, never citable inside shipped plugin artifacts
+
+- **Trigger**: Writing or reviewing any file under `agents/`, `skills/`, `references/`,
+  or `scripts/` (the directories that actually ship to a user's plugin install) while
+  a repo-internal planning/brainstorm document (e.g. `BUILDER_PRO-PLAN.md`) informed
+  the design.
+- **Rule**: Cite the internal planning doc only in `build/` (this repo's own SRS,
+  task-DAG, progress, decisions — never shipped) and in commit messages/CHANGELOG
+  entries (project history, not runtime instructions). Every shipped file must read
+  as self-contained architecture — state the rule directly, the way
+  `references/plan/*.md` and every other Stage 1-5 Pro reference set already does —
+  because an end user's install will never have the internal planning doc on disk,
+  and an agent instructed to treat it as authoritative at runtime is depending on a
+  file that doesn't exist outside this dev repo.
+- **Why**: `references/build/01..05.md` (T-242..T-246) cited `BUILDER_PRO-PLAN.md` by
+  name nine times across five files — substantively correct content, wrongly
+  attributed to a document that ships with none of this. Caught by the user; scrubbed
+  in `3269a3b`, keeping the substance as directly-stated rules instead of quotes.
+- **Tags**: [architecture, documentation, pro-tier, references, T-242, T-246]
+
 ## Patterns by Category
 
 ### Plugin Development
