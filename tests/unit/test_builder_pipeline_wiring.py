@@ -5,15 +5,20 @@ builder agent are left completely untouched.
 AC-BUILDSKILL-001a: forge-build-pro/SKILL.md -> scripts/build_executor.py AND
                      agents/builder-pro.md -> references/build/01..05.md, in order.
 AC-BUILDSKILL-001b: skills/forge-build/SKILL.md and agents/builder.md are unchanged
-                     from the pre-T-235 baseline (commit 6a22fa1, the last commit
-                     before this feature's planning commit bd39791) -- verified by
-                     diffing against that commit, not just by absence of new-file
+                     from the pre-T-235 baseline -- verified by diffing against a
+                     literal fixture snapshot, not just by absence of new-file
                      mentions.
+
+Compares against a committed fixture snapshot rather than `git show <old-sha>:path`:
+CI's default `actions/checkout` is shallow (fetch-depth 1, see .github/workflows/
+tests.yml), so an ancestor commit's objects are not guaranteed to be fetched even
+though the sha is a real ancestor of HEAD -- `git show` then fails with exit 128
+("bad object"), not a content mismatch. A fixture comparison has no history-depth
+dependency and works identically locally and in CI.
 """
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -23,10 +28,7 @@ AGENTS = ROOT / "agents"
 SKILLS = ROOT / "skills"
 REFERENCES = ROOT / "references"
 SCRIPTS = ROOT / "scripts"
-
-# The last commit before this feature's planning commit (bd39791) touched anything --
-# an ancestor of HEAD on this branch, so it stays reachable regardless of later commits.
-PRE_FEATURE_SHA = "6a22fa1"
+BASELINE_FIXTURES = ROOT / "tests" / "fixtures" / "pre_pro_tier_baseline"
 
 BUILD_REFERENCES_IN_ORDER = [
     "01-foundation.md",
@@ -35,17 +37,6 @@ BUILD_REFERENCES_IN_ORDER = [
     "04-traceability-validation.md",
     "05-workflow-governance.md",
 ]
-
-
-def _git_show(sha: str, relpath: str) -> str:
-    result = subprocess.run(
-        ["git", "show", f"{sha}:{relpath}"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout
 
 
 def test_builder_pro_agent_references_all_five_build_references_in_order() -> None:
@@ -84,7 +75,7 @@ def test_build_executor_script_exists() -> None:
 
 
 def test_forge_build_skill_unchanged_from_pre_feature_baseline() -> None:
-    baseline = _git_show(PRE_FEATURE_SHA, "skills/forge-build/SKILL.md")
+    baseline = (BASELINE_FIXTURES / "forge-build-SKILL.md").read_text()
     current = (SKILLS / "forge-build" / "SKILL.md").read_text()
     assert current == baseline, (
         "skills/forge-build/SKILL.md must stay byte-identical to the pre-T-235 "
@@ -93,7 +84,7 @@ def test_forge_build_skill_unchanged_from_pre_feature_baseline() -> None:
 
 
 def test_builder_agent_unchanged_from_pre_feature_baseline() -> None:
-    baseline = _git_show(PRE_FEATURE_SHA, "agents/builder.md")
+    baseline = (BASELINE_FIXTURES / "builder.md").read_text()
     current = (AGENTS / "builder.md").read_text()
     assert current == baseline, (
         "agents/builder.md must stay byte-identical to the pre-T-235 baseline -- "
