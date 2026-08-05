@@ -15,8 +15,8 @@ check (`references/build/03-execution-verification.md`), `scripts/build_executor
 appends the generated file path(s) as the `CODE` leaf under that task's existing
 `### T-XXX` entry in **the same file Stage 5 already owns and produces**:
 `pipeline/05-plan/traceability.md`. This is required, not deferred — it is the last
-step of `BUILDER_PRO-PLAN.md`'s own per-task pipeline (Context Resolution → Task
-Execution → Code Generation → Verification → Commit → Progress Tracking →
+step of Builder Pro's own per-task pipeline (Context Resolution → Task Execution →
+Code Generation → Verification → Commit → Progress Tracking →
 **Traceability Update**), and every other Stage 1–5 Pro tier already treats
 traceability as mandatory (`references/srs|product|architect|spec|plan|sprint-plan/`
 each ship a `04-traceability-validation.md`) — Builder Pro closes the same gap for

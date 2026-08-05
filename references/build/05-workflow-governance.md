@@ -9,11 +9,11 @@ This phase supports exactly two modes, both driven by `scripts/build_executor.py
   ready task under one `## Milestone N:` section, in dependency order, one task at a
   time (or in bounded parallel — see Parallel/Worktree Path below).
 
-`BUILDER_PRO-PLAN.md`'s original unscoped vision named six modes (`build task`,
-`build module`, `build work-package`, `build milestone`, `build sprint`,
-`build project`). Module/work-package/sprint/project scope are **explicitly
-deferred** — not implemented, not partially implemented, not silently aliased to
-milestone. Do not reintroduce them without a new SRS revision.
+A broader six-mode vision (`build task`, `build module`, `build work-package`,
+`build milestone`, `build sprint`, `build project`) was considered during scoping.
+Module/work-package/sprint/project scope are **explicitly deferred** — not
+implemented, not partially implemented, not silently aliased to milestone. Do not
+reintroduce them without a new SRS revision.
 
 ## Resume Semantics
 
@@ -64,8 +64,7 @@ Traceability: CODE leaf recorded
 ```
 
 Per batch, the invoking skill additionally reports: tasks attempted, tasks committed,
-tasks with an open `DEFECT-###`, and total duration. This is the CI-pipeline-style
-report `BUILDER_PRO-PLAN.md`'s "Progress" section envisioned, scoped to the fields
-this phase's two artifacts (`build-log.jsonl`, `progress.md`) actually carry — not
-the eleven-field superset (coverage, dependency-report, rollback, etc.) that phase
-explicitly cut.
+tasks with an open `DEFECT-###`, and total duration. This is a CI-pipeline-style
+report scoped to the fields this phase's two artifacts (`build-log.jsonl`,
+`progress.md`) actually carry — not a broader eleven-field superset (coverage,
+dependency-report, rollback, etc.) that was considered and cut during scoping.

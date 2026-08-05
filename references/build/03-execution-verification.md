@@ -2,9 +2,7 @@
 
 ## Per-Task Loop
 
-Every task follows the same deterministic sequence
-(`BUILDER_PRO-PLAN.md`'s "Every Task" pipeline, scoped to what this phase actually
-implements):
+Every task follows the same deterministic sequence:
 
 ```text
 load context   (script — references/build/02-context-resolution.md)

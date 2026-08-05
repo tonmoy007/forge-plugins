@@ -3,8 +3,7 @@
 ## Algorithm
 
 `scripts/build_executor.py` resolves context for one task deterministically — no LLM
-judgment involved — following `BUILDER_PRO-PLAN.md`'s own "Context Resolution"
-shape:
+judgment involved:
 
 ```text
 task id
@@ -118,8 +117,8 @@ context rather than depending on session state.
 ## Token Budget
 
 Because only task-relevant sections load — never the full spec or architecture
-document — token usage per task stays small regardless of overall project size
-(`BUILDER_PRO-PLAN.md`: "Token usage becomes tiny"). A project with a
+document — token usage per task stays small regardless of overall project size. A
+project with a
 10,000-line technical spec and a 50-task plan costs the same per-task context as a
 project with a 500-line spec and 5 tasks, as long as each task's declared `Files`/
 `REQ-IDs` stay narrow.
