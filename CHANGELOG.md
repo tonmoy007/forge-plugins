@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Builder Pro (Stage 6 Pro tier) — `/forge:build-pro`.** An Execution Orchestrator
+  for Stage 6, split between a deterministic script and one thin generative agent:
+  `scripts/build_executor.py` owns everything mechanical — context resolution
+  (resolves only the task-relevant spec section(s) via `read-doc.py`, never the full
+  document; fails closed if a task's REQ-IDs don't resolve against the SRS, so
+  nothing builds without a traceable requirement), the four-check gate
+  (compile/lint/test/static analysis, per-check pass/fail/skipped report, never one
+  aggregate boolean), commit + progress write (only after every check passes),
+  traceability update (extends the existing `pipeline/05-plan/traceability.md` chain
+  with a `CODE` leaf), one `build-log.jsonl` line per attempt, `DEFECT-###`
+  escalation on a second consecutive failure, resume, and batch delegation to
+  `scripts/parallel_build.py`. `agents/builder-pro.md` (a ~110-line thin router) owns
+  only the generative step — write code, write tests, self-check against the spec.
+  `skills/forge-build-pro/SKILL.md` wraps both with the usual stage gating, profile
+  loading, and advance steps — mirroring `forge-plan-pro`, `forge-spec-pro`,
+  `forge-arch-pro`, `forge-product-pro`, `forge-sprint-pro`, and `forge-srs-pro`.
+  `/forge:build` and `agents/builder.md` are **unchanged** — both tiers coexist,
+  enforced by a byte-diff regression test (`test_builder_pipeline_wiring.py`).
+  Deferred: `forge explain`, a recovery state machine beyond progress.md + resume,
+  broader "enterprise artifact" files, AI-agnostic provider adapters, and builder
+  modes beyond single-task + milestone-batch. Configurable context depth beyond the
+  default spec+plan (architecture, or the full Stage 1-5 chain) is designed but
+  tracked as a follow-on, not yet wired. Ref: T-241..T-251.
+
 ### Planned
 - Claude Code marketplace publication (pending marketplace availability)
 

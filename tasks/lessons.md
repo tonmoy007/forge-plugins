@@ -167,6 +167,86 @@
 
 ---
 
+### 2026-08-03 — A subagent that hits its session limit mid-task may have already finished — verify on disk, don't trust only its final message
+
+- **Trigger**: Dispatching parallel subagents for independent tasks; one or more sends
+  only an `idle_notification` with `idleReason: "failed"` / a session-limit message,
+  never a completion report.
+- **Rule**: Before treating a silently-failed subagent's task as incomplete or
+  re-dispatching it, check the actual filesystem/test state first (`git status`, run
+  the task's own tests). A subagent can finish all its work and then hit a hard session
+  limit in the gap before it sends the final summary message — the work is done, only
+  the report is missing. Re-running or discarding it wastes the completed work.
+- **Why**: During the T-235/T-236/T-237 parallel build, two of three subagents reported
+  only a session-limit failure with no summary. Direct inspection showed all expected
+  files existed and all their tests already passed — nothing was actually lost.
+- **Tags**: [orchestration, subagents, session-limits, verification, T-236, T-237]
+
+### 2026-08-03 — Before rewiring a live skill/agent, check whether this repo already has a coexistence pattern for the same kind of upgrade
+
+- **Trigger**: Asked to "decompose" or "upgrade" a stage's monolithic agent/skill
+  (Stage 6 `builder.md` / `forge-build` in this case).
+- **Rule**: This repo already established a Pro-tier coexistence pattern for every
+  other stage (`forge-plan-pro` + `planner-pro.md`, `forge-spec-pro` +
+  `spec-writer-pro.md`, `forge-arch-pro`, `forge-product-pro`, `forge-sprint-pro`,
+  `forge-srs-pro`) — a **new**, separate `<stage>-pro` agent + skill, with the original
+  left completely untouched. Check for that pattern (`ls skills/ | grep pro`) *before*
+  editing a live, working skill file in place, even when an analysis document
+  recommends rewiring it directly. When both are plausible, ask rather than assuming
+  the analysis document's literal wording is the intended architecture for this repo.
+- **Why**: Initial work on T-238 rewired `skills/forge-build/SKILL.md` in place
+  (matching `docs/builder-pro-plan-analysis.md`'s literal wording), then had to be
+  reverted (`git reset --hard`, no harm since unpushed) once the user pointed out the
+  existing `-pro` convention. Checking `ls skills/ | grep pro` first would have caught
+  this before any code was written.
+- **Tags**: [architecture, conventions, forge-build, pro-tier, T-238]
+
+### 2026-08-05 — Verify a Pro-tier upstream artifact's real shape against `stage-order.md`, never carry a flat-file assumption forward from a deleted file
+
+- **Trigger**: Writing context-resolution or upstream-handoff logic for a stage that
+  reads another stage's Pro-tier output (e.g. Stage 6 Pro reading Stage 4/5 Pro's
+  spec/plan artifacts).
+- **Rule**: Before assuming a canonical artifact is one flat `.md` file, check
+  `references/stage-order.md`'s `primary_artifact` field (the single authoritative,
+  tier-agnostic source of truth) and resolve it through `read-doc.py`, which
+  transparently handles both the single-file and split-directory layouts. Do not
+  copy a path assumption from a deleted or superseded file without re-verifying it —
+  the deleted file may itself have been written against the wrong tier's
+  conventions. Cross-check against a sibling Pro skill that already depends on the
+  same artifact (here, `forge-sprint-pro` already reads
+  `pipeline/05-plan/task-dag.md`) rather than trusting a single reference doc in
+  isolation — reference docs for a stage can drift from what the ecosystem actually
+  depends on (`references/plan/01-foundation.md`'s own Deliverables list names
+  `task-breakdown.md`, which nothing else in the repo reads).
+- **Why**: Revision 2's `references/build/02-context-resolution.md` (T-243) copied
+  `pipeline/04-spec/technical-spec.md` / `pipeline/03-architecture/architecture.md`
+  flat-file reads straight from the deleted Revision-1 `context-loader.md`, without
+  checking whether that matched what the *Pro*-tier upstream stages (`forge-spec-pro`,
+  `forge-arch-pro`) actually produce — which can be a `read-doc.py`-resolved split
+  document set. Caught by the user mid-build; fixed in `d176828` before
+  `scripts/build_executor.py` (T-248) was written against the wrong assumption.
+- **Tags**: [architecture, pro-tier, read-doc, context-resolution, T-243, T-248]
+
+### 2026-08-05 — Internal build-planning docs are inputs to the SRS/task-DAG, never citable inside shipped plugin artifacts
+
+- **Trigger**: Writing or reviewing any file under `agents/`, `skills/`, `references/`,
+  or `scripts/` (the directories that actually ship to a user's plugin install) while
+  a repo-internal planning/brainstorm document (e.g. `BUILDER_PRO-PLAN.md`) informed
+  the design.
+- **Rule**: Cite the internal planning doc only in `build/` (this repo's own SRS,
+  task-DAG, progress, decisions — never shipped) and in commit messages/CHANGELOG
+  entries (project history, not runtime instructions). Every shipped file must read
+  as self-contained architecture — state the rule directly, the way
+  `references/plan/*.md` and every other Stage 1-5 Pro reference set already does —
+  because an end user's install will never have the internal planning doc on disk,
+  and an agent instructed to treat it as authoritative at runtime is depending on a
+  file that doesn't exist outside this dev repo.
+- **Why**: `references/build/01..05.md` (T-242..T-246) cited `BUILDER_PRO-PLAN.md` by
+  name nine times across five files — substantively correct content, wrongly
+  attributed to a document that ships with none of this. Caught by the user; scrubbed
+  in `3269a3b`, keeping the substance as directly-stated rules instead of quotes.
+- **Tags**: [architecture, documentation, pro-tier, references, T-242, T-246]
+
 ## Patterns by Category
 
 ### Plugin Development
