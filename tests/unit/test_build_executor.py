@@ -214,6 +214,28 @@ def test_append_build_log_appends_without_truncating(tmp_path: Path) -> None:
     assert len(lines) == 2
 
 
+def test_consecutive_failures_fails_closed_on_corrupted_line(tmp_path: Path) -> None:
+    """A malformed build-log.jsonl line must count as a failure (fail closed), not
+    be silently skipped -- silent skipping would undercount and could suppress the
+    DEFECT-### escalation gate on a corrupted log."""
+    path = tmp_path / be.BUILD_LOG_RELPATH
+    path.parent.mkdir(parents=True)
+    path.write_text('{not valid json\n')
+    assert be.consecutive_failures(tmp_path, "T-001") == 1
+
+
+def test_consecutive_failures_corrupted_line_still_stops_at_a_real_pass(tmp_path: Path) -> None:
+    path = tmp_path / be.BUILD_LOG_RELPATH
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps({"task_id": "T-001", "passed": True}) + "\n"
+        + "{not valid json\n"
+    )
+    # newest-first scan: the corrupted line (counted as a failure) comes before the
+    # earlier passing entry, which still stops the count.
+    assert be.consecutive_failures(tmp_path, "T-001") == 1
+
+
 # --------------------------------------------------------------------------- #
 # record_attempt — commit/progress-write only on pass; traceability extension
 # --------------------------------------------------------------------------- #
@@ -232,6 +254,23 @@ def test_record_attempt_commits_and_writes_progress_on_pass(tmp_path: Path) -> N
     )
     assert result.committed is True
     assert result.commit_sha == "abc1234"
+
+
+def test_record_attempt_git_add_uses_dashdash_pathspec_separator(tmp_path: Path) -> None:
+    """A file path that happens to start with '-' must never be interpreted as a
+    git flag -- 'git add' needs a '--' separator before the pathspecs."""
+    calls: list[list[str]] = []
+
+    def _spy(argv, **kwargs):
+        calls.append(argv)
+        return _fake_git_ok(argv, **kwargs)
+
+    report = be.GateReport(checks=[be.GateCheck(name="test", status="pass")])
+    be.record_attempt(
+        tmp_path, "T-001", ["-evil-looking-path.py"], report, run=_spy, now=1000.0,
+    )
+    add_call = next(c for c in calls if c[:2] == ["git", "add"])
+    assert add_call == ["git", "add", "--", "-evil-looking-path.py"]
     progress = (tmp_path / be.PROGRESS_RELPATH).read_text()
     assert "T-001" in progress
     assert "[x]" in progress

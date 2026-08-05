@@ -439,6 +439,11 @@ def append_build_log(cwd: Path, entry: dict) -> None:
 
 
 def consecutive_failures(cwd: Path, task_id: str) -> int:
+    """Count consecutive failed attempts for a task from the end of build-log.jsonl,
+    stopping at the most recent pass. A malformed line is state we cannot verify --
+    fail closed: count it as a failure (biases toward opening a DEFECT-### sooner)
+    rather than silently skipping it (which would undercount and could suppress the
+    escalation gate on a corrupted log)."""
     path = cwd / BUILD_LOG_RELPATH
     if not path.exists():
         return 0
@@ -449,6 +454,12 @@ def consecutive_failures(cwd: Path, task_id: str) -> int:
         try:
             entry = json.loads(line)
         except json.JSONDecodeError:
+            print(
+                f"build_executor: malformed build-log.jsonl line for {task_id} "
+                "-- counted as a failure (fail closed, not open)",
+                file=sys.stderr,
+            )
+            count += 1
             continue
         if entry.get("task_id") != task_id:
             continue
@@ -552,7 +563,9 @@ def record_attempt(
 
     if passed:
         message = commit_message or f"feat({task_id}): implement task"
-        run(["git", "add", *files], cwd=str(cwd), capture_output=True, text=True)
+        # "--" stops git from treating a file path that happens to start with "-"
+        # as an option (argument injection via an attacker- or agent-chosen path).
+        run(["git", "add", "--", *files], cwd=str(cwd), capture_output=True, text=True)
         commit = run(["git", "commit", "-m", message], cwd=str(cwd), capture_output=True, text=True)
         if commit.returncode == 0:
             sha_result = run(["git", "rev-parse", "HEAD"], cwd=str(cwd), capture_output=True, text=True)
