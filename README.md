@@ -23,6 +23,9 @@ sequencing**. Forge gives you:
   carry from one repo to the next, so your mistake rate drops over time.
 - **A dynamic workflow engine** — run arbitrary **parallel agent DAGs** beyond the fixed
   pipeline, opt-in (new in v0.4.0).
+- **Docker and tooling preflight** — advisory Docker hygiene checks and a declarative CLI
+  registry (`docker`, `gh`, …) that detects what's missing and offers to install it, only
+  after you confirm (new in v0.7.0).
 
 Nothing advances silently and nothing is untraceable. When you *do* need to skip a gate,
 `/forge:force-advance` records **why** — the override is explicit and audited.
@@ -343,6 +346,7 @@ See [`references/daemon-bus.md`](references/daemon-bus.md).
 | `/forge:status` | Current stage, task, blockers, daemon status, recent history |
 | `/forge:resume` | Restore context after a session restart |
 | `/forge:doctor` | Diagnose environment / plugin / gate health and name the fix |
+| `/forge:preflight` | Detect missing required CLIs (docker, docker compose, gh) and offer to install one, only after you confirm — see [`references/docker-and-tooling.md`](references/docker-and-tooling.md) |
 | `/forge:why` | Explain a gate criterion, lesson tag, stage, or current blocker |
 | `/forge:retro` | Cycle-completion retrospective after Stage 12 |
 | `/forge:set-profile` | Set the project-type profile |
