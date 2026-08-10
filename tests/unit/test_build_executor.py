@@ -132,6 +132,127 @@ def test_resolve_context_missing_task_raises(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# read_context_depth / REQ-BUILDCTX-002 -- fail-soft, default spec_plan
+# --------------------------------------------------------------------------- #
+
+
+def _seed_state(tmp_path: Path, depth: str | None = None) -> None:
+    (tmp_path / "pipeline").mkdir(parents=True, exist_ok=True)
+    body = f"---\nbuild_context_depth: {depth}\n---\n\n# Pipeline State\n" if depth else (
+        "---\nschema_version: 1\n---\n\n# Pipeline State\n"
+    )
+    (tmp_path / "pipeline" / "state.md").write_text(body)
+
+
+def test_read_context_depth_defaults_to_spec_plan_when_state_missing(tmp_path: Path) -> None:
+    assert be.read_context_depth(tmp_path) == "spec_plan"
+
+
+def test_read_context_depth_defaults_to_spec_plan_when_unset(tmp_path: Path) -> None:
+    _seed_state(tmp_path)
+    assert be.read_context_depth(tmp_path) == "spec_plan"
+
+
+def test_read_context_depth_defaults_to_spec_plan_on_malformed_value(tmp_path: Path) -> None:
+    _seed_state(tmp_path, "bogus-depth")
+    assert be.read_context_depth(tmp_path) == "spec_plan"
+
+
+@pytest.mark.parametrize("depth", ["spec_plan", "spec_arch_plan", "full_chain"])
+def test_read_context_depth_reads_valid_value(tmp_path: Path, depth: str) -> None:
+    _seed_state(tmp_path, depth)
+    assert be.read_context_depth(tmp_path) == depth
+
+
+# --------------------------------------------------------------------------- #
+# resolve_context at spec_arch_plan / full_chain (REQ-BUILDCTX-002, T-253)
+# --------------------------------------------------------------------------- #
+
+ARCH_TEXT = """\
+## Component: first-service
+
+Covers REQ-FIRST-001. Owns `pkg/first.py`.
+
+## Component: second-service
+
+Covers REQ-SECOND-001. Owns `pkg/second.py`.
+"""
+
+PRD_TEXT = "## Feature: first thing\n\nCovers REQ-FIRST-001.\n"
+USER_STORIES_TEXT = "## Story: first thing\n\nCovers REQ-FIRST-001.\n"
+USER_FLOWS_TEXT = "## Flow: first thing\n\nCovers REQ-FIRST-001.\n"
+
+
+def _seed_full_chain_docs(tmp_path: Path) -> None:
+    (tmp_path / "pipeline" / "03-architecture").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "pipeline" / "03-architecture" / "architecture.md").write_text(ARCH_TEXT)
+    (tmp_path / "pipeline" / "02-product-ux").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "pipeline" / "02-product-ux" / "prd.md").write_text(PRD_TEXT)
+    (tmp_path / "pipeline" / "02-product-ux" / "user-stories.md").write_text(USER_STORIES_TEXT)
+    (tmp_path / "pipeline" / "02-product-ux" / "user-flows.md").write_text(USER_FLOWS_TEXT)
+
+
+def test_resolve_context_spec_arch_plan_populates_architecture_scoped(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    _seed_full_chain_docs(tmp_path)
+    _seed_state(tmp_path, "spec_arch_plan")
+    bundle = be.resolve_context(tmp_path, "T-001")
+    assert bundle.architecture_excerpts is not None
+    assert any("first-service" in s for s in bundle.architecture_excerpts)
+    assert not any("second-service" in s for s in bundle.architecture_excerpts), (
+        "architecture excerpts must stay scoped to the task, same as spec excerpts"
+    )
+    assert bundle.full_chain_excerpts is None
+
+
+def test_resolve_context_spec_arch_plan_missing_architecture_doc_is_empty_not_error(
+    tmp_path: Path,
+) -> None:
+    _seed_project(tmp_path)
+    _seed_state(tmp_path, "spec_arch_plan")
+    bundle = be.resolve_context(tmp_path, "T-001")
+    assert bundle.architecture_excerpts == []
+
+
+def test_resolve_context_full_chain_populates_architecture_and_full_chain_excerpts(
+    tmp_path: Path,
+) -> None:
+    _seed_project(tmp_path)
+    _seed_full_chain_docs(tmp_path)
+    _seed_state(tmp_path, "full_chain")
+    bundle = be.resolve_context(tmp_path, "T-001")
+    assert bundle.architecture_excerpts is not None
+    assert bundle.full_chain_excerpts is not None
+    assert set(bundle.full_chain_excerpts) == {"prd", "user_stories", "user_flows"}
+    assert any("first thing" in s for s in bundle.full_chain_excerpts["prd"])
+
+
+def test_resolve_context_full_chain_includes_latest_sprint_plan_when_present(
+    tmp_path: Path,
+) -> None:
+    _seed_project(tmp_path)
+    _seed_full_chain_docs(tmp_path)
+    _seed_state(tmp_path, "full_chain")
+    sprints_dir = tmp_path / "pipeline" / "05-plan" / "sprints"
+    sprints_dir.mkdir(parents=True)
+    (sprints_dir / "sprint-001.md").write_text("## Sprint 1\n\nCovers REQ-FIRST-001.\n")
+    (sprints_dir / "sprint-002.md").write_text("## Sprint 2\n\nCovers REQ-FIRST-001, latest.\n")
+    bundle = be.resolve_context(tmp_path, "T-001")
+    assert "sprint_plan" in bundle.full_chain_excerpts
+    assert any("latest" in s for s in bundle.full_chain_excerpts["sprint_plan"]), (
+        "must resolve the highest-numbered sprint file, not the first one found"
+    )
+
+
+def test_resolve_context_full_chain_omits_sprint_plan_when_absent(tmp_path: Path) -> None:
+    _seed_project(tmp_path)
+    _seed_full_chain_docs(tmp_path)
+    _seed_state(tmp_path, "full_chain")
+    bundle = be.resolve_context(tmp_path, "T-001")
+    assert "sprint_plan" not in bundle.full_chain_excerpts
+
+
+# --------------------------------------------------------------------------- #
 # Gate — AC-BUILDEXEC-001b per-check reporting, never one aggregate boolean
 # --------------------------------------------------------------------------- #
 
