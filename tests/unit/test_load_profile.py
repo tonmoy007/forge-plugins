@@ -234,6 +234,7 @@ class TestCustomProfiles:
 @pytest.mark.parametrize("ptype", [
     "api", "fullstack", "ml-pipeline", "cli", "library",
     "monorepo", "mobile", "data-contract",   # v0.1.7
+    "docker",   # v0.7.0 / T-232
 ])
 def test_all_standard_profiles_parse(tmp_path, ptype):
     _make_state(tmp_path, ptype)

@@ -39,9 +39,16 @@ def _project_type(tmp_path: Path) -> str:
 
 def test_known_profiles_lists_all(tmp_path: Path) -> None:
     names = _sp.known_profiles(PLUGIN_DIR)
-    for expected in ("api", "fullstack", "ml-pipeline", "monorepo", "mobile", "data-contract"):
+    for expected in ("api", "fullstack", "ml-pipeline", "monorepo", "mobile", "data-contract", "docker"):
         assert expected in names
-    assert len(names) >= 10
+    assert len(names) >= 11
+
+
+def test_set_profile_docker_accepted(tmp_path: Path) -> None:
+    _make_state(tmp_path, "unknown")
+    code, msg = _sp.set_profile(str(tmp_path), "docker", plugin_dir=PLUGIN_DIR)
+    assert code == 0
+    assert _project_type(tmp_path) == "docker"
 
 
 def test_set_valid_profile_updates_state(tmp_path: Path) -> None:

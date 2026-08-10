@@ -168,6 +168,74 @@ class TestScriptSuggestion:
         assert result.get("suggested_profile") == "script"
 
 
+# ---------- T-232 / REQ-DK-004: cross-cutting Docker detection ----------
+
+
+class TestDockerDetection:
+    def test_has_docker_true_when_dockerfile_present(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(tmp_path),
+        )
+        assert result["has_docker"] is True
+        assert any("Dockerfile" in i for i in result["docker_indicators"])
+
+    def test_has_docker_true_when_compose_present(self, tmp_path):
+        (tmp_path / "docker-compose.yml").write_text("services:\n  web:\n")
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(tmp_path),
+        )
+        assert result["has_docker"] is True
+
+    def test_has_docker_false_when_absent(self, tmp_path):
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(tmp_path),
+        )
+        assert result["has_docker"] is False
+        assert "docker_indicators" not in result
+
+    def test_docker_detected_alongside_a_real_app_type_never_overrides_it(self, tmp_path):
+        """A FastAPI-in-Docker project stays `api` — has_docker is informational,
+        never auto-assigned as the profile (AC-DK-004)."""
+        (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
+        result = detect_mod._finalize(
+            {"type": "api", "confidence": 0.9, "indicators": []},
+            str(tmp_path),
+        )
+        assert result["type"] == "api"
+        assert result["project_type"] == "api"
+        assert result["has_docker"] is True
+        assert "suggested_profile" not in result
+
+    def test_suggested_profile_docker_only_when_type_unknown_and_docker_present(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(tmp_path),
+        )
+        assert result.get("suggested_profile") == "docker"
+        assert result["suggested_profile_confidence"] == detect_mod._DOCKER_CONFIDENCE
+        assert any("Dockerfile" in i for i in result["suggested_profile_indicators"])
+
+    def test_no_docker_suggestion_when_type_unknown_but_no_docker_artifacts(self, tmp_path):
+        result = detect_mod._finalize(
+            {"type": "unknown", "confidence": 0.0, "indicators": []},
+            str(tmp_path),
+        )
+        assert "suggested_profile" not in result
+
+    def test_docker_never_suggested_when_type_already_classified(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
+        result = detect_mod._finalize(
+            {"type": "fullstack", "confidence": 0.9, "indicators": []},
+            str(tmp_path),
+        )
+        assert "suggested_profile" not in result
+
+
 # ---------- _count_loc / _is_language_subset helpers ----------
 
 class TestHelpers:
