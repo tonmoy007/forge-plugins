@@ -32,6 +32,11 @@ intentionally).
    If eval-report is missing or shows failures: "Stage 7 evaluation must pass before deploying."
 3. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-gate.py --stage 7` to check gate status.
 4. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-profile.py --cwd . --stage 8` to load project-type overrides. **If the profile sets `skip: true` (CLI, library) the conventional service-deploy is replaced by `package-publish` — produce a package-spec artifact instead of a deployment runbook.**
+5. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_docker_readiness.py --cwd .`
+   **unconditionally** — every project gets this, regardless of profile (it
+   self-no-ops with no Docker artifacts). This is **advisory only**: it exits 0
+   even with findings, and any `WARN:` lines it prints must be relayed to the
+   user as advisory notes — it never blocks and does not gate this stage.
 
 ## Steps
 

@@ -5,6 +5,35 @@
 
 ## Current State
 
+- **v0.7.0 (Docker workflow enforcement + tooling preflight) COMPLETE — T-227..T-233.**
+  Fail-soft, never-block capability layer, orthogonal to the Builder Pro work below (no
+  shared files). M1 Detection core: T-227 `references/tool-registry.md` (declarative,
+  seeded `docker`/`docker compose`/`gh`) + `scripts/tool_preflight.py` (shutil.which +
+  optional version_probe, `.forge/tool-status.json` 24h-TTL cache, mirrors the T-138
+  capability-probe pattern) — 21 tests. T-228 `scripts/check_docker_readiness.py`
+  (advisory hygiene: pinned base image, HEALTHCHECK, non-root USER, `.dockerignore`,
+  compose parse+`services:` — always exits 0, even with findings) — 13 tests. M2
+  Surfacing: T-229 `doctor.py` `check_required_tools` (one warn per missing required
+  tool, install command as `fix`) — 5 tests. T-230 `session-start.py` tool advisory
+  (budget-aware, dropped **first** under token pressure, ahead of lessons/rules — a
+  stricter posture than the existing capability/health/traceability notes) — 10 tests.
+  T-231 `skills/forge-preflight/SKILL.md` (`/forge:preflight` — the sole surface that
+  runs an installer, only after per-tool user confirmation) — 6 tests. T-232 `##
+  Profile: docker` (opt-in, stage_3/8/9 overrides, never auto-assigned) +
+  `forge-deploy/SKILL.md` unconditional hygiene wiring + `detect-project-type.py`
+  `has_docker`/`docker_indicators`/`suggested_profile: docker` (FastAPI-in-Docker stays
+  `api`) — 23 tests across 5 files. T-233 (this entry): ADR-012, `references/
+  docker-and-tooling.md`, README (`/forge:preflight` row + capability bullet), ROADMAP
+  (v0.7.0 marked `⚪ folded` into v0.8.0), `decisions.md`. Full unit suite **2017 pass**
+  (baseline 1949 → +68 across T-227..T-232), `validate-plugin.py` exit 0. **Per user
+  direction: v0.7.0 is not tagged separately — it ships as part of the next release,
+  v0.8.0, alongside Builder Pro below.** SRS `build/01-srs/srs-v0.7.0.md`, DAG
+  `build/04-plan/task-dag-v0.7.0.md`. Worktree `.claude/worktrees/
+  recursive-wobbling-sky`, branch `feat/v0.7.0-docker-tooling`, branched from
+  `develop` (`4f74d32`). **NEXT**: full regression sweep (`full-pipeline.sh`), open the
+  PR against `develop`, then the combined v0.8.0 release (bump-version, CHANGELOG,
+  tag, both remotes).
+
 - **v0.8.0 Revision 2 (Builder Pro) COMPLETE — T-241..T-253.** Revision 1 below
   (T-235..T-240) was scoped from a secondary analysis doc and got the shape wrong
   (three LLM sub-agent personas instead of one thin-router agent + a deterministic

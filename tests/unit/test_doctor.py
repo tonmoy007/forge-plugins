@@ -265,3 +265,76 @@ class TestCLI:
         # We just check that the output doesn't include passing "✓" rows for env when all pass
         # (this test is a smoke test; details vary by host)
         assert "Result:" in out
+
+
+# ---------- check_required_tools (T-229, REQ-TR-003) ----------
+
+
+def test_check_required_tools_flags_missing_required(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_status = doctor.tool_preflight.ToolStatus(
+        present=False, version=None, required=True,
+        reason="always required", install_cmd="brew install gh",
+    )
+    monkeypatch.setattr(doctor.tool_preflight, "check_all", lambda cwd, **k: {"gh": fake_status})
+    results = doctor.check_required_tools(tmp_path, tmp_path)
+    assert len(results) == 1
+    assert results[0].status == "warn"
+    assert results[0].fix == "brew install gh"
+
+
+def test_check_required_tools_no_result_for_present_tool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_status = doctor.tool_preflight.ToolStatus(
+        present=True, version="1.0", required=True, reason="x", install_cmd=None,
+    )
+    monkeypatch.setattr(doctor.tool_preflight, "check_all", lambda cwd, **k: {"gh": fake_status})
+    assert doctor.check_required_tools(tmp_path, tmp_path) == []
+
+
+def test_check_required_tools_no_result_for_not_required_tool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_status = doctor.tool_preflight.ToolStatus(
+        present=False, version=None, required=False, reason="x", install_cmd=None,
+    )
+    monkeypatch.setattr(doctor.tool_preflight, "check_all", lambda cwd, **k: {"docker": fake_status})
+    assert doctor.check_required_tools(tmp_path, tmp_path) == []
+
+
+def test_check_required_tools_never_raises_on_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _boom(cwd, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(doctor.tool_preflight, "check_all", _boom)
+    assert doctor.check_required_tools(tmp_path, tmp_path) == []
+
+
+def test_run_checks_includes_required_tools_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    forge_root = tmp_path / "forge"
+    forge_root.mkdir()
+    (forge_root / ".claude-plugin").mkdir()
+    (forge_root / ".claude-plugin" / "plugin.json").write_text('{"name": "forge"}')
+    (forge_root / "hooks").mkdir()
+    for h in doctor.EXPECTED_HOOKS:
+        (forge_root / "hooks" / h).touch()
+    (forge_root / "agents").mkdir()
+    for i in range(doctor.EXPECTED_STAGE_AGENTS):
+        (forge_root / "agents" / f"a{i}.md").touch()
+    (forge_root / "references").mkdir()
+    (forge_root / "references" / "gate-criteria.md").write_text(
+        "```yaml\nstage: 1\nname: srs\ncriteria:\n  - id: G1-001\n```\n"
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+
+    fake_status = doctor.tool_preflight.ToolStatus(
+        present=False, version=None, required=True, reason="x", install_cmd="brew install gh",
+    )
+    monkeypatch.setattr(doctor.tool_preflight, "check_all", lambda cwd, **k: {"gh": fake_status})
+    results = doctor.run_checks(forge_root, project)
+    assert any(r.name.startswith("tool_") for r in results)
