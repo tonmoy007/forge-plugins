@@ -30,6 +30,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import tool_preflight  # noqa: E402  (check_required_tools — T-229, REQ-TR-003)
+
 MIN_PYTHON = (3, 11)
 MIN_CLAUDE_CODE = (2, 1, 0)
 EXPECTED_HOOKS = [
@@ -377,6 +380,27 @@ def check_state_read_failures(cwd: Path) -> CheckResult:
     )
 
 
+def check_required_tools(forge_root: Path, cwd: Path) -> list[CheckResult]:
+    """One warn-level CheckResult per missing **required** tool_preflight tool
+    (T-229, REQ-TR-003) — a present or not-required tool produces no result.
+    Doctor stays read-only: it reports the install command as `fix`, it never
+    runs it. Never raises — a tool_preflight error degrades to no results."""
+    try:
+        statuses = tool_preflight.check_all(cwd)
+    except Exception:  # noqa: BLE001 — doctor must never crash on tool detection
+        return []
+    results: list[CheckResult] = []
+    for name, status in statuses.items():
+        if status.required and not status.present:
+            slug = re.sub(r"\W+", "_", name).strip("_")
+            results.append(CheckResult(
+                f"tool_{slug}", "project", "warn",
+                f"Required tool {name!r} not found ({status.reason})",
+                fix=status.install_cmd or f"Install {name}",
+            ))
+    return results
+
+
 def check_hook_errors(cwd: Path) -> CheckResult:
     log = cwd / ".forge" / "hook-errors.log"
     if not log.exists():
@@ -526,6 +550,7 @@ def run_checks(forge_root: Path, cwd: Path) -> list[CheckResult]:
     if gi:
         results.append(gi)
     results.append(check_state_read_failures(cwd))
+    results.extend(check_required_tools(forge_root, cwd))
     gate = check_current_stage_gate(forge_root, cwd)
     if gate:
         results.append(gate)
