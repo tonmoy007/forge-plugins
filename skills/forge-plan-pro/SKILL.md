@@ -91,6 +91,36 @@ reference controls handling of `replace_with`, `additional_artifacts`,
 `additional_steps`, `additional_concerns`, and `skip_steps`. Never let a profile
 bypass entry, ownership, traceability, validation, quality, or advancement gates.
 
+## Context Depth for Stage 6 (REQ-BUILDCTX-002)
+
+Stage 6 Pro (`/forge:build-pro`) resolves per-task context at one of three depths:
+`spec_plan` (default), `spec_arch_plan`, or `full_chain` — see
+`references/build/02-context-resolution.md`. This is decided once, here, at Stage 5
+entry, not re-derived per build.
+
+Read `pipeline/state.md`. If `build_context_depth` is already set, skip this step
+silently — never re-prompt or overwrite an explicit prior choice
+(AC-BUILDCTX-002c).
+
+If unset, ask the user which depth Stage 6 should use for this project:
+
+- **`spec_plan`** (recommended default) — spec + plan only. Matches Builder Pro's
+  own principle that Stage 4's spec is already the distilled, implementation-ready
+  contract; Stage 6 does not need to re-derive architecture.
+- **`spec_arch_plan`** — also resolves matching architecture excerpts per task.
+- **`full_chain`** — resolves the full Stage 1–5 canonical set (SRS, PRD/user
+  stories/flows, architecture, spec, plan, sprint plan when present) as additional
+  informational context per task.
+
+Persist the answer:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/set-context-depth.py <depth> --cwd .
+```
+
+If the user has no preference, use the recommended default and move on — do not
+block Stage 5 planning on this decision.
+
 ## Load Planner Pro and References
 
 Read `agents/planner-pro.md`, adopt Planner Pro, and follow its Reference Loading
