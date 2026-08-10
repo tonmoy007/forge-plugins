@@ -24,6 +24,51 @@
 
 ## Decisions
 
+## 2026-08-10 T-233 — Docker/tooling: cross-cutting handling + opt-in profile (ADR-012); v0.7.0 folded into v0.8.0
+
+**Context**: Forge had no Docker workflow awareness — no hygiene check on `Dockerfile`/
+compose, no verification that `docker`/`gh` were installed before a workflow needed them.
+`detect-project-type.py:detect()` returns exactly one mutually-exclusive `type`, so a
+literal 9th "docker" cascade profile would only ever fire for pure-infra repos — a
+Dockerized FastAPI app would still classify as `api` and get no Docker treatment.
+Separately, the user asked to complete v0.7.0 and release it together with the
+already-merged v0.8.0 Builder Pro work rather than as its own tag.
+
+**Decision**: Cross-cutting Docker handling (an advisory `check_docker_readiness.py` run
+**unconditionally** at deploy, self-no-op without artifacts) plus an **opt-in** `docker`
+profile that is suggestion-only and never auto-assigned over a real app type. A
+declarative tool registry (`references/tool-registry.md`) + `tool_preflight.py` reuse the
+existing capability-probe cache pattern (T-138); the only installer surface is
+`/forge:preflight`, gated on explicit per-tool confirmation. v0.7.0 (T-227–T-233) is
+**folded into the v0.8.0 release** rather than tagged separately — same precedent as
+v0.3.2 folding into v0.3.3.
+
+**Why**: Cross-cutting handling covers the common "app that ships a container" case
+without misclassifying it; a mutually-exclusive profile would have missed it entirely.
+Advisory-only (the hygiene script always exits 0) keeps the never-block guarantee that
+every prior release in this program has held. Detect-in-a-hook / install-in-a-skill is the
+only way to offer an install without ever running a command the user hasn't confirmed.
+Folding the two versions into one release avoids a near-immediate second version bump for
+work that landed in the same sitting.
+
+**Alternatives considered**: A literal 9th cascade profile — rejected, would miss the
+common containerized-app case. Auto-installing missing tools — rejected outright during
+2026-06-24 brainstorming. A mechanical blocking gate in base `gate-criteria.md` for Docker
+hygiene — rejected, contradicts the advisory/never-block design this layer is built
+around. Tagging v0.7.0 separately before v0.8.0 — rejected per explicit user direction;
+folding avoids churn for two versions released in the same sitting.
+
+**Consequences**: New `references/tool-registry.md`, `scripts/tool_preflight.py`,
+`scripts/check_docker_readiness.py`, `skills/forge-preflight/SKILL.md`. Changed:
+`scripts/doctor.py` (`check_required_tools`), `hooks/session-start.py` (tool advisory,
+dropped first under token pressure), `skills/forge-deploy/SKILL.md` (unconditional hygiene
+check), `scripts/detect-project-type.py` (`has_docker`/`docker_indicators` + docker
+suggestion), `references/project-type-profiles.md` (`## Profile: docker`). ADR-012.
+`ROADMAP.md` marks v0.7.0 `⚪ folded`; the next release ships as **v0.8.0** covering both
+Builder Pro (T-241–T-253) and this Docker/tooling layer (T-227–T-233).
+
+---
+
 ## 2026-06-24 T-224 — Caveman runtime toggle DROPPED by the measurement gate; ship only static tightening
 
 **Context**: v0.6.1 added an opt-in `orchestration.caveman_mode` that prepends a terse-output preamble

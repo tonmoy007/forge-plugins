@@ -620,6 +620,50 @@ stage_overrides:
 
 ---
 
+## Profile: docker
+
+```yaml
+name: docker
+description: Opt-in overlay for any containerized project. Docker handling is
+  cross-cutting — check_docker_readiness.py runs unconditionally at deploy for
+  every project regardless of profile — so this profile is never required to
+  get that coverage. Select it explicitly (/forge:set-profile docker) or
+  accept the suggestion when Docker artifacts dominate an otherwise-unknown
+  project. Never auto-assigned over a real app type (a Dockerized FastAPI
+  service stays `api`).
+
+stage_emphasis:
+  high: [architecture, deploy]
+  low: []
+
+stage_overrides:
+  stage_3:
+    additional_concerns:
+      - "Multi-stage build strategy"
+      - "Base image and version pinning strategy"
+      - "Build secrets and volume handling"
+      - "Layer caching strategy"
+
+  stage_8:
+    additional_steps:
+      - "Build the image(s)"
+      - "Scan the image(s) for known vulnerabilities"
+      - "Push to the target registry"
+    additional_criteria:
+      - id: G8-DOCKER-001
+        description: Docker hygiene check passes (pinned base image, HEALTHCHECK, non-root USER, .dockerignore present)
+        check: script_returns_zero
+        args: { script: "scripts/check_docker_readiness.py" }
+        severity: warning
+
+  stage_9:
+    additional_concerns:
+      - "Container restart / OOM-kill monitoring"
+      - "Resource limit (CPU/memory) alerting"
+```
+
+---
+
 ## Profile: unknown
 
 ```yaml

@@ -102,6 +102,59 @@ def _ensure_capabilities(cwd: Path) -> None:
         return
 
 
+_TOOL_TTL_SECONDS = 86400  # re-probe registry tools at most once/day, same TTL as the capability probe
+
+
+def _ensure_tool_status(cwd: Path) -> None:
+    """Keep .forge/tool-status.json fresh without blocking (REQ-TR-004).
+
+    Mirrors _ensure_capabilities: this hook only ever reads the cached file — the
+    actual shutil.which + version-probe detection is offloaded to a detached
+    `tool_preflight.py refresh` subprocess, fired only when the cache is missing
+    or older than the TTL. Never raises.
+    """
+    if os.environ.get("FORGE_NO_BACKGROUND") == "1":
+        return  # kill switch — no background work at all (also keeps tests hermetic)
+    forge = cwd / ".forge"
+    status_file = forge / "tool-status.json"
+    try:
+        if status_file.exists() and (time.time() - status_file.stat().st_mtime) < _TOOL_TTL_SECONDS:
+            return  # fresh enough
+        subprocess.Popen(
+            [sys.executable, str(_PLUGIN_DIR / "scripts" / "tool_preflight.py"),
+             "refresh", "--forge-dir", str(forge), "--cwd", str(cwd)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception:  # noqa: BLE001 — tool-status upkeep must never break startup
+        return
+
+
+def _tool_preflight_block(cwd: Path) -> str:
+    """One advisory line per missing **required** tool, read from the cached
+    .forge/tool-status.json (stdlib only — detection runs detached, never
+    inline in this hook). '' when nothing is missing, outside a Forge project,
+    or the cache is absent/unreadable (REQ-TR-004). Never raises.
+    """
+    path = cwd / ".forge" / "tool-status.json"
+    try:
+        if not path.exists():
+            return ""
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    lines = []
+    for name, status in data.items():
+        if name.startswith("_") or not isinstance(status, dict):
+            continue  # metadata key (_checked_at) or malformed entry
+        if status.get("required") and not status.get("present"):
+            reason = status.get("reason", "")
+            lines.append(f"[Forge] ⚠ Required tool `{name}` not found ({reason}) — run /forge:preflight")
+    return "\n".join(lines)
+
+
 def _unread_findings_note(cwd: Path) -> str:
     """One-line note when the Observer (T-142) has left **unread** findings; '' otherwise.
 
@@ -396,6 +449,7 @@ def _compose(
     design: str,
     gate: str,
     rules_text: str = "",
+    tool_text: str = "",
 ) -> str:
     stage = state.get("current_stage", 0)
     stage_name = STAGE_NAMES.get(stage, "unknown")
@@ -429,6 +483,9 @@ def _compose(
 
     if gate:
         lines.append(f"[Forge] Next gate criteria: {gate}")
+
+    if tool_text:
+        lines.append(tool_text)
 
     return "\n".join(lines)
 
@@ -477,6 +534,7 @@ def run(cwd: Path, session_id: str = "", source: str = "") -> Optional[str]:
     _sync_lessons_if_stale(cwd)
     _register_and_promote(cwd)
     _ensure_capabilities(cwd)  # REQ-F-001 — refresh the cached capability probe
+    _ensure_tool_status(cwd)  # REQ-TR-004 — refresh the cached tool-status probe
     _poll_observer_if_running(cwd)  # REQ-F-008 — lazy Observer poll, detached
 
     # Lessons: up to 5 project-level + 3 global
@@ -498,15 +556,20 @@ def run(cwd: Path, session_id: str = "", source: str = "") -> Optional[str]:
 
     gate = _gate_summary(_PLUGIN_DIR, stage)
     rules_text = _rules_block(cwd, stage)
-    context = _compose(state, lessons, design, gate, rules_text)
+    tool_text = _tool_preflight_block(cwd)
+    context = _compose(state, lessons, design, gate, rules_text, tool_text)
 
-    # Enforce token budget (REQ-NF-011): trim lessons first, then drop rules as a
-    # last resort, so the block always stays within budget.
+    # Enforce token budget (REQ-NF-011, REQ-TR-004/AC-TR-003): drop the tool
+    # advisory first, then trim lessons, then drop rules as a last resort, so
+    # the block always stays within budget.
+    if _token_estimate(context) > _MAX_TOKENS:
+        tool_text = ""
+        context = _compose(state, lessons, design, gate, rules_text, tool_text)
     if _token_estimate(context) > _MAX_TOKENS:
         lessons = lessons[:2]
-        context = _compose(state, lessons, design, gate, rules_text)
+        context = _compose(state, lessons, design, gate, rules_text, tool_text)
     if _token_estimate(context) > _MAX_TOKENS:
-        context = _compose(state, lessons, design, gate, "")
+        context = _compose(state, lessons, design, gate, "", tool_text)
 
     # REQ-F-012: surface unread Observer findings; REQ-F-026: Health auto-disable alert
     context += _unread_findings_note(cwd)

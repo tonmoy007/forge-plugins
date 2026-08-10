@@ -510,6 +510,121 @@ class TestBackgroundCapability:
         assert "Health alert" not in r.stdout
 
 
+class TestToolPreflightAdvisory:
+    """T-230 / REQ-TR-004: session-start surfaces one advisory line per missing
+    required tool, read from the cached .forge/tool-status.json (stdlib only),
+    dropped first under token pressure, silent when nothing missing / no cache."""
+
+    def test_missing_required_tool_surfaced(self, tmp_path):
+        _make_state(tmp_path, stage=8, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        (forge / "tool-status.json").write_text(json.dumps({
+            "docker": {"present": False, "version": None, "required": True,
+                       "reason": "Docker artifacts present", "install_cmd": "brew install docker"},
+        }))
+        r = _run(str(tmp_path))
+        assert "docker" in r.stdout
+        assert "/forge:preflight" in r.stdout
+
+    def test_present_required_tool_not_surfaced(self, tmp_path):
+        _make_state(tmp_path, stage=8, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        (forge / "tool-status.json").write_text(json.dumps({
+            "docker": {"present": True, "version": "27.0", "required": True,
+                       "reason": "x", "install_cmd": None},
+        }))
+        r = _run(str(tmp_path))
+        assert "/forge:preflight" not in r.stdout
+
+    def test_missing_but_not_required_tool_not_surfaced(self, tmp_path):
+        _make_state(tmp_path, stage=1, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        (forge / "tool-status.json").write_text(json.dumps({
+            "docker": {"present": False, "version": None, "required": False,
+                       "reason": "no Docker artifacts", "install_cmd": "brew install docker"},
+        }))
+        r = _run(str(tmp_path))
+        assert "/forge:preflight" not in r.stdout
+
+    def test_no_cache_file_no_advisory_no_crash(self, tmp_path):
+        _make_state(tmp_path, stage=1, project_type="api")
+        r = _run(str(tmp_path))
+        assert r.returncode == 0
+        assert "/forge:preflight" not in r.stdout
+
+    def test_unreadable_cache_no_advisory_no_crash(self, tmp_path):
+        _make_state(tmp_path, stage=1, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        (forge / "tool-status.json").write_text("{not valid json")
+        r = _run(str(tmp_path))
+        assert r.returncode == 0
+        assert "/forge:preflight" not in r.stdout
+
+    def test_tool_block_dropped_first_under_token_pressure(self, tmp_path):
+        """A large tool-status.json alone must not push output over budget --
+        it is dropped before lessons/rules trim, not after (AC-TR-003)."""
+        _make_state(tmp_path, stage=8, project_type="api")
+        forge = tmp_path / ".forge"
+        forge.mkdir(exist_ok=True)
+        many_missing = {
+            f"tool-{i}": {"present": False, "version": None, "required": True,
+                          "reason": "x" * 50, "install_cmd": "y" * 50}
+            for i in range(80)
+        }
+        (forge / "tool-status.json").write_text(json.dumps(many_missing))
+        r = _run(str(tmp_path))
+        assert r.returncode == 0
+        assert len(r.stdout) < 8000  # stays under the ~2000-token budget
+        assert "[Forge] Pipeline: Stage 8" in r.stdout  # core context untouched
+        assert "/forge:preflight" not in r.stdout  # the oversized tool block was dropped
+
+    def test_ensure_tool_status_skips_fresh_cache(self, tmp_path, monkeypatch):
+        mod = _load_hook_module()
+        forge = tmp_path / ".forge"
+        forge.mkdir(parents=True)
+        (forge / "tool-status.json").write_text("{}")
+        calls = []
+        monkeypatch.setattr(mod.subprocess, "Popen", lambda *a, **k: calls.append(a))
+        mod._ensure_tool_status(tmp_path)
+        assert calls == []
+
+    def test_ensure_tool_status_refreshes_stale_cache(self, tmp_path, monkeypatch):
+        mod = _load_hook_module()
+        forge = tmp_path / ".forge"
+        forge.mkdir(parents=True)
+        stale = forge / "tool-status.json"
+        stale.write_text("{}")
+        old = os.path.getmtime(stale) - mod._TOOL_TTL_SECONDS - 10
+        os.utime(stale, (old, old))
+        calls = []
+        monkeypatch.setattr(mod.subprocess, "Popen", lambda *a, **k: calls.append(a) or object())
+        mod._ensure_tool_status(tmp_path)
+        assert len(calls) == 1
+        assert "tool_preflight.py" in calls[0][0][1]
+        assert "refresh" in calls[0][0]
+
+    def test_ensure_tool_status_respects_kill_switch(self, tmp_path, monkeypatch):
+        mod = _load_hook_module()
+        monkeypatch.setenv("FORGE_NO_BACKGROUND", "1")
+        calls = []
+        monkeypatch.setattr(mod.subprocess, "Popen", lambda *a, **k: calls.append(a))
+        mod._ensure_tool_status(tmp_path)
+        assert calls == []
+
+    def test_ensure_tool_status_never_raises(self, tmp_path, monkeypatch):
+        mod = _load_hook_module()
+
+        def _boom(*a, **k):
+            raise OSError("boom")
+
+        monkeypatch.setattr(mod.subprocess, "Popen", _boom)
+        mod._ensure_tool_status(tmp_path)  # must not raise
+
+
 class TestRulesInjection:
     """T-159 / REQ-RULES-009: session-start injects always + current-stage rules
     within the token budget; absent rules dir is a clean no-op."""

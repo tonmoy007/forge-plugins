@@ -49,6 +49,14 @@ _SCRIPT_LOC_THRESHOLD = 500
 _SCRIPT_FILE_COUNT_THRESHOLD = 20
 _SCRIPT_CONFIDENCE = 0.85
 
+# Docker is cross-cutting (REQ-DK-004): detected regardless of `type`, never part
+# of the mutually-exclusive cascade. Top-level files only, matching the scope of
+# the other file-presence signals in detect().
+_DOCKER_FILES = frozenset({
+    "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml",
+})
+_DOCKER_CONFIDENCE = 0.85
+
 
 def _read(path: str) -> str:
     try:
@@ -447,13 +455,28 @@ def _detect_script(cwd: str, files: set) -> dict | None:
     }
 
 
+def _detect_docker_artifacts(files: set) -> dict | None:
+    """Return Docker artifact info if a Dockerfile or compose file is present at
+    the top level, else None. Cross-cutting (REQ-DK-004) — this is a pure
+    presence check, independent of the mutually-exclusive `type` cascade."""
+    found = sorted(
+        f for f in files
+        if f == "Dockerfile" or f.startswith("Dockerfile.") or f in _DOCKER_FILES
+    )
+    if not found:
+        return None
+    return {"indicators": [f"{f} present" for f in found]}
+
+
 def _finalize(result: dict, cwd: str) -> dict:
     """Post-process detect() output.
 
     Adds:
       - `project_type` alias (mirrors `type` — matches state.md field name).
-      - `suggested_profile: "script"` (and related fields) when nothing else
-        matched and the project looks tiny enough.
+      - `has_docker` / `docker_indicators` (REQ-DK-004) — cross-cutting, applied
+        regardless of `type`; never overrides a real app type.
+      - `suggested_profile: "script"` or `"docker"` (and related fields) when
+        nothing else matched and the project looks tiny / Docker-dominant.
     """
     result = dict(result)
 
@@ -461,18 +484,29 @@ def _finalize(result: dict, cwd: str) -> dict:
     if "type" in result and "project_type" not in result:
         result["project_type"] = result["type"]
 
-    # Only suggest `script` when nothing else matched.
+    try:
+        files = set(os.listdir(cwd))
+    except OSError:
+        result["has_docker"] = False
+        return result
+
+    docker_match = _detect_docker_artifacts(files)
+    result["has_docker"] = docker_match is not None
+    if docker_match is not None:
+        result["docker_indicators"] = docker_match["indicators"]
+
+    # Only suggest a profile when nothing else matched.
     if result.get("type") == "unknown":
-        try:
-            files = set(os.listdir(cwd))
-        except OSError:
-            return result
         script_match = _detect_script(cwd, files)
         if script_match is not None:
             result["suggested_profile"] = "script"
             result["suggested_profile_confidence"] = _SCRIPT_CONFIDENCE
             result["suggested_profile_indicators"] = script_match["indicators"]
             result["suggested_profile_metadata"] = {"loc": script_match["loc"]}
+        elif docker_match is not None:
+            result["suggested_profile"] = "docker"
+            result["suggested_profile_confidence"] = _DOCKER_CONFIDENCE
+            result["suggested_profile_indicators"] = docker_match["indicators"]
 
     return result
 
