@@ -69,13 +69,14 @@ this repo):
 | Depth | Additionally resolves |
 |---|---|
 | `spec_plan` (default) | nothing beyond Inputs 1-5 above |
-| `spec_arch_plan` | `pipeline/03-architecture/*` (via `read-doc.py`) — matching excerpts fold into the bundle's Architecture excerpt(s) field |
-| `full_chain` | the full Stage 1-5 canonical set: SRS+traceability, PRD+user-stories+flows, full architecture, full spec, full plan, sprint-plan when present — informational context only |
+| `spec_arch_plan` | `pipeline/03-architecture/architecture` (via `read-doc.py`) — matching excerpts fold into the bundle's Architecture excerpt(s) field |
+| `full_chain` | `spec_arch_plan`'s architecture excerpts, plus a `full_chain_excerpts` dict: PRD, user stories, user flows, and the highest-numbered `pipeline/05-plan/sprints/sprint-NNN.md` when one exists — each scoped to the task's REQ-IDs/Files the same way spec/architecture excerpts are; informational context only |
 
-The prompt/persist UX at Stage 5 entry (`forge-plan-pro`'s pre-flight) and the
-`spec_arch_plan`/`full_chain` widening logic are **T-252/T-253** — sequenced after
-T-251, not blocking this phase's critical path. Phase 2 ships fully working at the
-`spec_plan` default.
+`scripts/set-context-depth.py` (T-252) is what `forge-plan-pro`'s Stage 5 pre-flight
+calls to persist the answer, prompting once when `build_context_depth` is unset and
+never re-prompting or overwriting an explicit prior choice
+(AC-BUILDCTX-002c). `read_context_depth()` and the `spec_arch_plan`/`full_chain`
+widening in `resolve_context()` (T-253) are both wired end to end.
 
 ## Hard Requirement Invariant
 
@@ -100,8 +101,9 @@ LLM-persona-to-script move:
 | REQ-IDs | the task-dag entry's declared REQ-IDs |
 | Task description | the entry's Description and Done-when text, verbatim |
 | Spec excerpt(s) | matching section(s) from the `read-doc.py`-resolved `pipeline/04-spec/technical-spec`, quoted not paraphrased; only task-relevant sections |
-| Architecture excerpt(s) | `(not resolved at this depth)` at the default `spec_plan` depth; at `spec_arch_plan`/`full_chain`, matching excerpts from the `read-doc.py`-resolved `pipeline/03-architecture/*`, quoted not paraphrased, or `(none found)` if no matching section exists |
+| Architecture excerpt(s) | `None` at the default `spec_plan` depth; at `spec_arch_plan`/`full_chain`, matching excerpts from the `read-doc.py`-resolved `pipeline/03-architecture/architecture` (an empty list, not `None`, if the doc is missing or has no matching section) |
 | Applicable additional_criteria | Stage 6 `additional_criteria` entries (id, description, severity) from the active profile; `(none)` if no profile is active |
+| full_chain_excerpts | `None` except at the `full_chain` depth; there, a dict keyed `prd`/`user_stories`/`user_flows`/`sprint_plan` (the last key present only when a numbered sprint file exists), each value the task-scoped matching sections |
 
 Only files/sections tied to the task's declared `Files`/`REQ-IDs` are included —
 never the entire spec or architecture doc (AC-BUILDEXEC-001a).

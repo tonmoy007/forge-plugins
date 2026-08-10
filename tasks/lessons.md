@@ -247,6 +247,29 @@
   in `3269a3b`, keeping the substance as directly-stated rules instead of quotes.
 - **Tags**: [architecture, documentation, pro-tier, references, T-242, T-246]
 
+### 2026-08-05 — A test that shells out to `git show <ancestor-sha>:path` can pass locally and fail in CI on the identical commit
+
+- **Trigger**: Writing a regression guard that compares a file's current content
+  against an older commit via `git show <sha>:<path>` (or any `git` command that
+  needs an ancestor's objects, not just the working tree).
+- **Rule**: Check `.github/workflows/*.yml` for the checkout step's `fetch-depth`
+  before writing a test like this. No `fetch-depth` set means `actions/checkout`'s
+  default of `1` — a shallow clone with only the tip commit's objects, even though
+  `git log` on that same ref shows a full, real ancestor chain. `git show <old-sha>`
+  fails there with exit 128 ("bad object"), not a content mismatch — a different
+  failure mode than the test is meant to catch. Prefer a committed literal fixture
+  snapshot (`tests/fixtures/...`) over any git-history lookup for a "this file must
+  stay byte-identical to some earlier point" check; it has no checkout-depth
+  dependency and works identically locally and in CI.
+- **Why**: `test_builder_pipeline_wiring.py`'s two baseline-diff tests (inherited
+  from Revision 1's original version of the file) passed in every local run (full
+  git history available in the dev worktree) but failed on PR #63's actual GitHub
+  Actions run with `git show 6a22fa1:... returned non-zero exit status 128` —
+  `tests.yml` has no `fetch-depth` override. Local pytest runs are not a reliable
+  signal for git-history-shape assumptions; only the real CI checkout is. Fixed by
+  switching to `tests/fixtures/pre_pro_tier_baseline/` (`8e183d1`).
+- **Tags**: [testing, ci, git, github-actions, T-250]
+
 ## Patterns by Category
 
 ### Plugin Development

@@ -35,14 +35,30 @@ from typing import Callable, Optional
 _PLUGIN_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PLUGIN_DIR / "scripts"))
 import parallel_build as _pb  # noqa: E402  (batch path delegates here — AC-BUILDEXEC-001c)
+import _state_lib as _state  # noqa: E402  (build_context_depth — REQ-BUILDCTX-002, T-253)
 
 DAG_BASE = "pipeline/05-plan/task-dag"
 SPEC_BASE = "pipeline/04-spec/technical-spec"
-ARCH_BASE = "pipeline/03-architecture/architecture"  # only at spec_arch_plan/full_chain (T-253)
+ARCH_BASE = "pipeline/03-architecture/architecture"  # only at spec_arch_plan/full_chain
 SRS_BASE = "pipeline/01-srs/srs"
 PROGRESS_RELPATH = "pipeline/06-implementation/progress.md"
 TRACE_RELPATH = "pipeline/05-plan/traceability.md"
 BUILD_LOG_RELPATH = "pipeline/06-implementation/build-log.jsonl"
+SPRINTS_DIR_RELPATH = "pipeline/05-plan/sprints"
+
+# REQ-BUILDCTX-002: context-resolution depth, read from pipeline/state.md's optional
+# build_context_depth field. Default (and only depth T-248 originally wired) is
+# spec_plan; spec_arch_plan/full_chain widen what resolve_context additionally loads.
+CONTEXT_DEPTHS = ("spec_plan", "spec_arch_plan", "full_chain")
+
+# The full Stage 1-5 canonical set resolved at the full_chain depth -- informational
+# only, never gates the hard requirement invariant. Sprint plan is resolved
+# separately (numbered files under pipeline/05-plan/sprints/, not a fixed base path).
+FULL_CHAIN_BASES = {
+    "prd": "pipeline/02-product-ux/prd",
+    "user_stories": "pipeline/02-product-ux/user-stories",
+    "user_flows": "pipeline/02-product-ux/user-flows",
+}
 
 TASK_HEADING = re.compile(r"^#{2,4}\s+.*?\b(T-\d+)\b.*$", re.MULTILINE)
 TASK_ID = re.compile(r"\bT-\d+\b")
@@ -84,6 +100,7 @@ class ContextBundle:
     spec_excerpts: list
     architecture_excerpts: Optional[list]  # None => "(not resolved at this depth)"
     additional_criteria: list
+    full_chain_excerpts: Optional[dict] = None  # only at the full_chain depth
 
 
 @dataclass
@@ -240,6 +257,63 @@ def _stage6_additional_criteria(cwd: Path, *, plugin_dir: Path = _PLUGIN_DIR) ->
     return criteria or []
 
 
+def read_context_depth(cwd: Path) -> str:
+    """Read build_context_depth from pipeline/state.md via _state_lib. Fail-soft
+    (REQ-BUILDCTX-002, AC-BUILDCTX-002b): missing state.md, an unset field, or an
+    unrecognized value all default to 'spec_plan' -- the depth set-context-depth.py
+    (T-252) never writes anything but one of CONTEXT_DEPTHS, so an unrecognized
+    value only occurs from hand-edited or corrupted state, and defaulting is the
+    safe behavior there (same posture as every other optional config field in this
+    repo -- e.g. project_type)."""
+    try:
+        state = _state.read_state(str(cwd))
+    except SystemExit:
+        return "spec_plan"
+    except Exception:
+        return "spec_plan"
+    depth = state.get("build_context_depth") if isinstance(state, dict) else None
+    return depth if depth in CONTEXT_DEPTHS else "spec_plan"
+
+
+def _latest_sprint_base(cwd: Path) -> Optional[str]:
+    """The highest-numbered pipeline/05-plan/sprints/sprint-NNN base path, or None
+    if the directory doesn't exist or has no numbered sprint file. Only the
+    sprint-NNN.md plan itself -- not -capacity/-dependencies/-risk-register/-review/
+    -retrospective/-metrics siblings (references/sprint-plan/01-foundation.md's
+    Sprint Deliverables list)."""
+    sprints_dir = cwd / SPRINTS_DIR_RELPATH
+    if not sprints_dir.is_dir():
+        return None
+    pattern = re.compile(r"^sprint-(\d{3})\.md$")
+    numbered = []
+    for p in sprints_dir.glob("sprint-*.md"):
+        m = pattern.match(p.name)
+        if m:
+            numbered.append((int(m.group(1)), p.stem))
+    if not numbered:
+        return None
+    numbered.sort(key=lambda t: t[0])
+    return f"{SPRINTS_DIR_RELPATH}/{numbered[-1][1]}"
+
+
+def _resolve_full_chain_excerpts(
+    cwd: Path, needles: list, *, plugin_dir: Path,
+) -> dict:
+    """Informational-only widening at the full_chain depth: PRD, user stories, user
+    flows, and (when present) the latest sprint plan, each scoped to the task's
+    REQ-IDs/Files the same way spec/architecture excerpts are. Does not affect the
+    hard requirement invariant (SRS/task-dag stay the source of truth for that)."""
+    bases = dict(FULL_CHAIN_BASES)
+    sprint_base = _latest_sprint_base(cwd)
+    if sprint_base:
+        bases["sprint_plan"] = sprint_base
+    out: dict = {}
+    for name, base in bases.items():
+        text = read_doc(cwd, base, plugin_dir=plugin_dir) or ""
+        out[name] = matching_sections(text, needles)
+    return out
+
+
 def resolve_context(
     cwd: Path, task_id: str, *, plugin_dir: Path = _PLUGIN_DIR,
 ) -> ContextBundle:
@@ -272,14 +346,24 @@ def resolve_context(
     if task.done_when:
         description = f"{description}\nDone when: {task.done_when}"
 
+    depth = read_context_depth(cwd)
+    architecture_excerpts: Optional[list] = None
+    full_chain_excerpts: Optional[dict] = None
+    if depth in ("spec_arch_plan", "full_chain"):
+        arch_text = read_doc(cwd, ARCH_BASE, plugin_dir=plugin_dir) or ""
+        architecture_excerpts = matching_sections(arch_text, needles)
+    if depth == "full_chain":
+        full_chain_excerpts = _resolve_full_chain_excerpts(cwd, needles, plugin_dir=plugin_dir)
+
     return ContextBundle(
         task_id=task.id,
         files=task.files,
         req_ids=task.req_ids,
         description=description,
         spec_excerpts=spec_excerpts,
-        architecture_excerpts=None,  # spec_plan depth only this phase — T-253 widens
+        architecture_excerpts=architecture_excerpts,
         additional_criteria=additional_criteria,
+        full_chain_excerpts=full_chain_excerpts,
     )
 
 
@@ -651,6 +735,7 @@ def _bundle_to_json(bundle: ContextBundle) -> str:
         "spec_excerpts": bundle.spec_excerpts,
         "architecture_excerpts": bundle.architecture_excerpts,
         "additional_criteria": bundle.additional_criteria,
+        "full_chain_excerpts": bundle.full_chain_excerpts,
     }, indent=2)
 
 

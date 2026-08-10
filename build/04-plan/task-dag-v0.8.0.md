@@ -216,13 +216,15 @@ dependency. TDD red-first per task. Full unit suite green after every task.
 
 ---
 
-## Follow-On (tracked, not blocking the Critical Path)
+## Follow-On (tracked, not blocking the Critical Path) — DONE
 
 Discovered mid-build (REQ-BUILDCTX-002): context-resolution depth should be
 configurable rather than fixed forever at spec+plan. Design lives in
 `references/build/02-context-resolution.md` and the SRS; these two tasks implement
 the Stage 5 prompt/persist UX and the widening logic. Sequenced after T-251 —
-Phase 2 ships and is fully usable with the `spec_plan` default before either lands.
+Phase 2 shipped and was fully usable with the `spec_plan` default before either
+landed. **Both now complete**: T-252 `412fba8`, T-253 `0442b88` — see
+`build/05-implementation/progress.md`.
 
 ### T-252 [S] `forge-plan-pro` Stage 5 entry: prompt + persist `build_context_depth`
 

@@ -5,7 +5,7 @@
 
 ## Current State
 
-- **v0.8.0 Revision 2 (Builder Pro) COMPLETE — T-241..T-251.** Revision 1 below
+- **v0.8.0 Revision 2 (Builder Pro) COMPLETE — T-241..T-253.** Revision 1 below
   (T-235..T-240) was scoped from a secondary analysis doc and got the shape wrong
   (three LLM sub-agent personas instead of one thin-router agent + a deterministic
   script) — **superseded, not deleted from history**. `build/01-srs/srs-v0.8.0.md`
@@ -42,11 +42,24 @@
   0, `full-pipeline.sh` 12/12 gates + traceability intact.** `agents/builder.md` and
   `skills/forge-build/SKILL.md` verified byte-identical to the pre-T-235 `6a22fa1`
   baseline throughout. Worktree `.claude/worktrees/recursive-wobbling-sky`, branch
-  `builder-pro-plan-execution`. **NEXT**: T-252/T-253 (REQ-BUILDCTX-002 — Stage 5
-  `forge-plan-pro` context-depth prompt + wiring `build_context_depth` into
-  `build_executor.py`'s context-resolve), tracked follow-on, not urgent — Phase 2
-  ships fully working at the `spec_plan` default. Then merge this branch and open
-  the PR (develop base, per repo convention).
+  `builder-pro-plan-execution`. PR #63 pushed and CI-green (unit/integration/lint)
+  after a follow-up fix: the wiring test's byte-identical baseline check depended on
+  `git show 6a22fa1:path`, which needs an ancestor's objects that CI's default
+  shallow `actions/checkout` (fetch-depth 1) never fetches — swapped for a literal
+  fixture snapshot (`tests/fixtures/pre_pro_tier_baseline/`), no history-depth
+  dependency. **REQ-BUILDCTX-002 follow-on now also DONE**: T-252 `412fba8` —
+  `scripts/set-context-depth.py` + a new "Context Depth for Stage 6" pre-flight
+  section in `skills/forge-plan-pro/SKILL.md` (prompts once when
+  `build_context_depth` is unset, never re-prompts). T-253 `0442b88` —
+  `read_context_depth()` (fail-soft, defaults `spec_plan`) wired into
+  `resolve_context()`: `spec_arch_plan` resolves scoped architecture excerpts,
+  `full_chain` additionally resolves a `full_chain_excerpts` dict (PRD, user
+  stories, user flows, latest numbered sprint plan when present) — informational
+  only, the hard REQ-ID invariant is unchanged by depth. TDD red-first, +18 tests
+  (7 for T-252, 11 for T-253). Full unit suite **1949 pass**, `validate-plugin.py`
+  exit 0. **v0.8.0 Revision 2 is now fully complete, T-241..T-253, nothing tracked
+  and outstanding.** NEXT: push these commits, confirm CI green, then this branch is
+  ready to merge.
 - **v0.8.0 Revision 1 (Builder Phase 1: Pro-tier sub-agent pipeline) SUPERSEDED —
   T-235..T-240.** Scoped from `docs/builder-pro-plan-analysis.md`'s verdict on `BUILDER_PRO-PLAN.md`
   (execute Phase 1 only). T-235 `7327f28` Context Loader (read-only, resolves only

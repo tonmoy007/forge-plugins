@@ -30,9 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   enforced by a byte-diff regression test (`test_builder_pipeline_wiring.py`).
   Deferred: `forge explain`, a recovery state machine beyond progress.md + resume,
   broader "enterprise artifact" files, AI-agnostic provider adapters, and builder
-  modes beyond single-task + milestone-batch. Configurable context depth beyond the
-  default spec+plan (architecture, or the full Stage 1-5 chain) is designed but
-  tracked as a follow-on, not yet wired. Ref: T-241..T-251.
+  modes beyond single-task + milestone-batch. Context-resolution depth is
+  configurable: `spec_plan` (default), `spec_arch_plan` (adds scoped architecture
+  excerpts), or `full_chain` (adds PRD/user-stories/user-flows/latest-sprint-plan
+  excerpts, informational only) — chosen once via a new `/forge:plan-pro` Stage 5
+  pre-flight prompt (`scripts/set-context-depth.py`) and persisted to
+  `pipeline/state.md`. Ref: T-241..T-253.
 
 ### Planned
 - Claude Code marketplace publication (pending marketplace availability)
