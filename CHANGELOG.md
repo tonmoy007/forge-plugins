@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+- Claude Code marketplace publication (pending marketplace availability)
+
+---
+
+## [0.8.0] — 2026-08-11
+
+**Builder Pro + Docker workflow enforcement.** Two independent, orthogonal-file
+releases shipped together: Stage 6's Pro tier (`/forge:build-pro`) and a fail-soft
+tooling/Docker-hygiene capability layer. Both were merged to `main` in the same
+sitting (v0.7.0's PR landing right after v0.8.0's); per user direction v0.7.0 is
+**folded into this release rather than tagged separately** — see ADR-012.
+
 ### Added
 - **Builder Pro (Stage 6 Pro tier) — `/forge:build-pro`.** An Execution Orchestrator
   for Stage 6, split between a deterministic script and one thin generative agent:
@@ -36,9 +49,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   excerpts, informational only) — chosen once via a new `/forge:plan-pro` Stage 5
   pre-flight prompt (`scripts/set-context-depth.py`) and persisted to
   `pipeline/state.md`. Ref: T-241..T-253.
-
-### Planned
-- Claude Code marketplace publication (pending marketplace availability)
+- **Docker workflow enforcement + extensible tooling preflight.** A fail-soft,
+  never-block capability layer: a declarative tool registry
+  (`references/tool-registry.md`) + `scripts/tool_preflight.py` (detects via
+  `shutil.which` + optional version probe, cached like the existing capability
+  probe) backs `scripts/doctor.py`'s new `check_required_tools` warning and a
+  budget-aware tool advisory in `hooks/session-start.py` (dropped first under
+  token pressure). `scripts/check_docker_readiness.py` is an advisory hygiene
+  check (pinned base image, `HEALTHCHECK`, non-root `USER`, `.dockerignore`,
+  compose `services:` parse) wired **unconditionally** into `/forge:deploy` —
+  it always exits 0, even with findings. The sole install surface is the new
+  `/forge:preflight` skill, which only runs an install command after explicit
+  per-tool confirmation. An opt-in `docker` project-type profile is
+  suggestion-only and never auto-assigned over a real app type (a
+  Dockerized FastAPI app still classifies as `api`). ADR-012. Ref: T-227..T-233.
 
 ---
 
