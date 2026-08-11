@@ -4,7 +4,7 @@
 > partner.** Claude already remembers — what it doesn't enforce is *process*. Forge does:
 > gated stages, requirement traceability, and learning that compounds across projects.
 
-[![Tests](https://img.shields.io/badge/tests-1616%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-2031%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![Claude Code](https://img.shields.io/badge/claude--code-%3E%3D2.1.0-blueviolet)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)]()
@@ -25,7 +25,10 @@ sequencing**. Forge gives you:
   pipeline, opt-in (new in v0.4.0).
 - **Docker and tooling preflight** — advisory Docker hygiene checks and a declarative CLI
   registry (`docker`, `gh`, …) that detects what's missing and offers to install it, only
-  after you confirm (new in v0.7.0).
+  after you confirm (folded into v0.8.0).
+- **Pro-tier stages** — deterministic, script-backed variants of the pipeline stages
+  (e.g. `/forge:build-pro`'s `build_executor.py` engine) that coexist with the classic
+  agent-driven stages, opt-in per project (new in v0.8.0).
 
 Nothing advances silently and nothing is untraceable. When you *do* need to skip a gate,
 `/forge:force-advance` records **why** — the override is explicit and audited.
@@ -394,7 +397,7 @@ your-project/
 ## Testing Forge
 
 ```bash
-python3 -m pytest tests/ -q          # 1616 passed
+python3 -m pytest tests/ -q          # 2031 passed
 bash tests/integration/full-pipeline.sh
 # PASS — 28 artifacts present · 12/12 stage gate checks · traceability chain intact
 ```

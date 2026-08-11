@@ -5,6 +5,16 @@
 
 ## Current State
 
+- **v0.8.0 (T-254) RELEASED — combined release: Builder Pro (T-241..T-253) + Docker
+  workflow enforcement (T-227..T-233, folded per ADR-012 rather than tagged as its own
+  v0.7.0).** `bump-version.py 0.8.0`; CHANGELOG `[0.8.0]` consolidates both feature
+  summaries under one dated section; manifests `0.6.1` → `0.8.0`. This supersedes the
+  standalone `T-234 "Release v0.7.0"` task in `task-dag-v0.7.0.md` — that release never
+  happened separately, by design. Branch `chore/release-v0.8.0` off `main` (which by
+  this point already had both `develop→main` merges: PR #65 Builder Pro, PR #67
+  Docker/tooling — `origin/develop` and `origin/main` were byte-identical going in).
+  See below for the full T-227..T-253 build history this release ships.
+
 - **v0.7.0 (Docker workflow enforcement + tooling preflight) COMPLETE — T-227..T-233.**
   Fail-soft, never-block capability layer, orthogonal to the Builder Pro work below (no
   shared files). M1 Detection core: T-227 `references/tool-registry.md` (declarative,
@@ -30,9 +40,8 @@
   v0.8.0, alongside Builder Pro below.** SRS `build/01-srs/srs-v0.7.0.md`, DAG
   `build/04-plan/task-dag-v0.7.0.md`. Worktree `.claude/worktrees/
   recursive-wobbling-sky`, branch `feat/v0.7.0-docker-tooling`, branched from
-  `develop` (`4f74d32`). **NEXT**: full regression sweep (`full-pipeline.sh`), open the
-  PR against `develop`, then the combined v0.8.0 release (bump-version, CHANGELOG,
-  tag, both remotes).
+  `develop` (`4f74d32`). Merged via PR #66→develop, PR #67 develop→main. **Combined
+  v0.8.0 release cut as T-254 above.**
 
 - **v0.8.0 Revision 2 (Builder Pro) COMPLETE — T-241..T-253.** Revision 1 below
   (T-235..T-240) was scoped from a secondary analysis doc and got the shape wrong
@@ -87,8 +96,8 @@
   only, the hard REQ-ID invariant is unchanged by depth. TDD red-first, +18 tests
   (7 for T-252, 11 for T-253). Full unit suite **1949 pass**, `validate-plugin.py`
   exit 0. **v0.8.0 Revision 2 is now fully complete, T-241..T-253, nothing tracked
-  and outstanding.** NEXT: push these commits, confirm CI green, then this branch is
-  ready to merge.
+  and outstanding.** Merged via PR #63/#64→develop, PR #65 develop→main. **Combined
+  v0.8.0 release cut as T-254 above.**
 - **v0.8.0 Revision 1 (Builder Phase 1: Pro-tier sub-agent pipeline) SUPERSEDED —
   T-235..T-240.** Scoped from `docs/builder-pro-plan-analysis.md`'s verdict on `BUILDER_PRO-PLAN.md`
   (execute Phase 1 only). T-235 `7327f28` Context Loader (read-only, resolves only
