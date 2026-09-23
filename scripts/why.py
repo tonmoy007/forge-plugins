@@ -96,17 +96,13 @@ def _import_format_gate_result(plugin_dir: Path):
     return mod
 
 
-def _load_all_criteria(plugin_dir: Path) -> dict[str, dict]:
-    """Return {criterion_id: criterion_dict} across all stages.
-
-    Each value gets an added `_stage` field for cross-referencing.
-    """
-    gate_file = plugin_dir / "references" / "gate-criteria.md"
+def _load_stage_blocks(gate_file: Path) -> dict[int, list[dict]]:
+    """Return {stage: criteria} for every YAML block in a gate-criteria file."""
     if not gate_file.exists():
         return {}
     text = gate_file.read_text()
     blocks = re.findall(r"```yaml\n(.*?)```", text, re.DOTALL)
-    result: dict[str, dict] = {}
+    stages: dict[int, list[dict]] = {}
     for block in blocks:
         try:
             data = yaml.safe_load(block)
@@ -114,8 +110,23 @@ def _load_all_criteria(plugin_dir: Path) -> dict[str, dict]:
             continue
         if not isinstance(data, dict):
             continue
-        stage = data.get("stage")
-        for c in data.get("criteria", []) or []:
+        stages[data.get("stage")] = data.get("criteria", []) or []
+    return stages
+
+
+def _load_all_criteria(plugin_dir: Path, cwd: Path | None = None) -> dict[str, dict]:
+    """Return {criterion_id: criterion_dict} across all stages.
+
+    Each value gets an added `_stage` field for cross-referencing. A stage the
+    project defines in pipeline/gate-criteria.md replaces the plugin's criteria
+    for that stage, matching check-gate.py.
+    """
+    stages = _load_stage_blocks(plugin_dir / "references" / "gate-criteria.md")
+    if cwd is not None:
+        stages.update(_load_stage_blocks(cwd / "pipeline" / "gate-criteria.md"))
+    result: dict[str, dict] = {}
+    for stage, criteria in stages.items():
+        for c in criteria:
             cid = c.get("id")
             if cid:
                 c2 = dict(c)
@@ -141,9 +152,9 @@ def _load_lessons(cwd: Path) -> list[dict]:
 
 # ---------- explainers ----------
 
-def _explain_gate(target: str, plugin_dir: Path) -> dict | None:
+def _explain_gate(target: str, plugin_dir: Path, cwd: Path | None = None) -> dict | None:
     """Look up a gate criterion across all stages."""
-    all_criteria = _load_all_criteria(plugin_dir)
+    all_criteria = _load_all_criteria(plugin_dir, cwd)
     crit = all_criteria.get(target)
     if not crit:
         return None
@@ -185,12 +196,12 @@ def _explain_lesson_tag(tag: str, cwd: Path, limit: int = 5) -> dict | None:
     }
 
 
-def _explain_stage(stage: int, plugin_dir: Path) -> dict | None:
+def _explain_stage(stage: int, plugin_dir: Path, cwd: Path | None = None) -> dict | None:
     """Explain a pipeline stage including its blocker gate count."""
     if stage not in STAGE_NAMES:
         return None
     info = STAGE_NAMES[stage]
-    all_criteria = _load_all_criteria(plugin_dir)
+    all_criteria = _load_all_criteria(plugin_dir, cwd)
     stage_crits = [c for c in all_criteria.values() if c.get("_stage") == stage]
     blocker_count = sum(1 for c in stage_crits if c.get("severity") == "blocker")
     warning_count = sum(1 for c in stage_crits if c.get("severity") != "blocker")
@@ -440,11 +451,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         target = args.target.strip()
         kind = _classify(target)
         if kind == "gate":
-            answer = _explain_gate(target.upper(), plugin_dir)  # REQ-WHYCI-001
+            answer = _explain_gate(target.upper(), plugin_dir, cwd)  # REQ-WHYCI-001
         elif kind == "stage":
             m = _STAGE_PATTERN.match(target)
             stage_num = int(m.group(1)) if m else None
-            answer = _explain_stage(stage_num, plugin_dir) if stage_num else None
+            answer = _explain_stage(stage_num, plugin_dir, cwd) if stage_num else None
         else:
             answer = _explain_lesson_tag(target, cwd)
 

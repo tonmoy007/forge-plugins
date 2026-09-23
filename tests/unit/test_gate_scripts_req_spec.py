@@ -53,6 +53,53 @@ def test_srs_acceptance_fail_no_reqs(tmp_path: Path) -> None:
     assert run("check_srs_acceptance.py", [str(srs)], tmp_path).returncode == 1
 
 
+
+TABLE_SRS = (
+    "| ID | Seed | Requirement | Acceptance conditions |\n"
+    "|---|---|---|---|\n"
+    "| **REQ-F-001** | `P1-FR-X-001` | Does X | Given A, when B, then C |\n"
+    "| **REQ-F-002** | `P1-FR-X-002` | Does Y | — |\n"
+    "| **REQ-NF-001** | `P1-NFR-PLAT-001` | Fast | Given load, when measured, then p95 < 1s |\n"
+    "\nREQ-F-002 is referenced in prose here: acceptance is discussed.\n"
+)
+TABLE_ARGS = [
+    "--id-pattern", r"^\|\s*\*\*(REQ-(?:F|NF)-\d{3})\*\*",
+    "--acceptance-pattern", r"(?i)\bgiven\b.*\bwhen\b.*\bthen\b",
+    "--row-scoped",
+]
+
+
+def test_srs_acceptance_table_rows_flag_missing_row(tmp_path: Path) -> None:
+    srs = _mkfile(tmp_path, "srs.md", TABLE_SRS)
+    r = run("check_srs_acceptance.py", [str(srs)] + TABLE_ARGS, tmp_path)
+    assert r.returncode == 1
+    assert "REQ-F-002" in r.stderr
+    assert "REQ-F-001" not in r.stderr
+    assert "REQ-NF-001" not in r.stderr
+
+
+def test_srs_acceptance_table_rows_pass(tmp_path: Path) -> None:
+    srs = _mkfile(tmp_path, "srs.md",
+                  TABLE_SRS.replace("| Does Y | — |", "| Does Y | Given D, when E, then F |"))
+    r = run("check_srs_acceptance.py", [str(srs)] + TABLE_ARGS, tmp_path)
+    assert r.returncode == 0, r.stderr
+
+
+def test_srs_acceptance_row_scoped_ignores_prose_after_row(tmp_path: Path) -> None:
+    # Without --row-scoped the last row's block runs into the prose below it.
+    srs = _mkfile(tmp_path, "srs.md",
+                  "| **REQ-F-001** | Does X | — |\n\nAcceptance is discussed later.\n")
+    base = [str(srs), "--id-pattern", r"\*\*(REQ-F-\d{3})\*\*"]
+    assert run("check_srs_acceptance.py", base, tmp_path).returncode == 0
+    assert run("check_srs_acceptance.py", base + ["--row-scoped"], tmp_path).returncode == 1
+
+
+def test_srs_acceptance_bad_regex(tmp_path: Path) -> None:
+    srs = _mkfile(tmp_path, "srs.md", "REQ-001 acceptance\n")
+    r = run("check_srs_acceptance.py", [str(srs), "--id-pattern", "("], tmp_path)
+    assert r.returncode == 2
+
+
 # ---------- traceability-check.py ----------
 
 def test_traceability_pass(tmp_path: Path) -> None:

@@ -34,12 +34,14 @@ def _state_readable(cwd: Path) -> bool:
         return False
 
 
-def _load_stage_criteria(plugin_dir: Path, stage: int) -> list[dict]:
-    gate_file = plugin_dir / "references" / "gate-criteria.md"
-    if not gate_file.exists():
-        print(f"error: gate-criteria.md not found at {gate_file}", file=sys.stderr)
-        sys.exit(1)
+# Project-level override: a project may ship its own criteria for any stage in
+# this file (same YAML-block format as references/gate-criteria.md). A stage it
+# defines replaces the plugin's criteria for that stage wholesale; stages it
+# does not define fall back to the plugin.
+PROJECT_GATE_FILE = Path("pipeline") / "gate-criteria.md"
 
+
+def _find_stage_block(gate_file: Path, stage: int) -> list[dict] | None:
     text = gate_file.read_text()
     blocks = re.findall(r"```yaml\n(.*?)```", text, re.DOTALL)
 
@@ -47,12 +49,43 @@ def _load_stage_criteria(plugin_dir: Path, stage: int) -> list[dict]:
         try:
             data = yaml.safe_load(block)
             if isinstance(data, dict) and data.get("stage") == stage:
-                return data.get("criteria", [])
+                return data.get("criteria", []) or []
         except yaml.YAMLError:
             continue
+    return None
+
+
+def _resolve_stage_criteria(plugin_dir: Path, stage: int, cwd: Path) -> tuple[list[dict], str]:
+    """Return (criteria, source) where source is "project" or "plugin"."""
+    project_file = cwd / PROJECT_GATE_FILE
+    if project_file.exists():
+        criteria = _find_stage_block(project_file, stage)
+        if criteria is not None:
+            return criteria, "project"
+    return _load_stage_criteria(plugin_dir, stage), "plugin"
+
+
+def _load_stage_criteria(plugin_dir: Path, stage: int) -> list[dict]:
+    gate_file = plugin_dir / "references" / "gate-criteria.md"
+    if not gate_file.exists():
+        print(f"error: gate-criteria.md not found at {gate_file}", file=sys.stderr)
+        sys.exit(1)
+
+    criteria = _find_stage_block(gate_file, stage)
+    if criteria is not None:
+        return criteria
 
     print(f"error: no gate criteria found for stage {stage}", file=sys.stderr)
     sys.exit(1)
+
+
+def _resolve_script(script_rel: str, cwd: Path, plugin_dir: Path, source: str) -> Path:
+    """Project criteria may name a project-local script; plugin scripts are the fallback."""
+    if source == "project":
+        local = cwd / script_rel
+        if local.exists():
+            return local
+    return plugin_dir / script_rel
 
 
 def _check_file_exists(args: dict, cwd: Path) -> tuple[bool, str]:
@@ -80,11 +113,8 @@ def _check_file_contains(args: dict, cwd: Path) -> tuple[bool, str]:
         return False, f"invalid regex {pattern!r}: {exc}"
 
 
-def _check_script_returns_zero(
-    args: dict, cwd: Path, plugin_dir: Path
-) -> tuple[bool, str]:
+def _check_script_returns_zero(args: dict, cwd: Path, script: Path) -> tuple[bool, str]:
     script_rel = args["script"]
-    script = plugin_dir / script_rel
     if not script.exists():
         return False, f"check script not yet implemented: {script_rel}"
     argv = [sys.executable, str(script)] + [str(a) for a in args.get("argv", [])]
@@ -108,7 +138,7 @@ def _check_all_tests_pass(args: dict, cwd: Path) -> tuple[bool, str]:
     return False, last[:300]
 
 
-def _evaluate(criterion: dict, cwd: Path, plugin_dir: Path) -> dict:
+def _evaluate(criterion: dict, cwd: Path, plugin_dir: Path, source: str = "plugin") -> dict:
     cid = criterion["id"]
     check = criterion["check"]
     args = criterion.get("args", {})
@@ -125,12 +155,13 @@ def _evaluate(criterion: dict, cwd: Path, plugin_dir: Path) -> dict:
             # pass. Report inconclusive and promote severity to blocker regardless
             # of the declared severity — a stub gate must not read as "warnings only".
             script_rel = args.get("script", "")
-            if not (plugin_dir / script_rel).exists():
+            script = _resolve_script(script_rel, cwd, plugin_dir, source)
+            if not script.exists():
                 passed, msg = False, f"check script not implemented: {script_rel}"
                 inconclusive = True
                 severity = "blocker"
             else:
-                passed, msg = _check_script_returns_zero(args, cwd, plugin_dir)
+                passed, msg = _check_script_returns_zero(args, cwd, script)
         elif check == "all_tests_pass":
             passed, msg = _check_all_tests_pass(args, cwd)
         else:
@@ -146,12 +177,13 @@ def _evaluate(criterion: dict, cwd: Path, plugin_dir: Path) -> dict:
         "severity": severity,
         "passed": passed,
         "message": msg,
+        "source": source,
     }
 
 
 def evaluate_stage(stage: int, cwd: Path, plugin_dir: Path) -> dict:
-    criteria = _load_stage_criteria(plugin_dir, stage)
-    details = [_evaluate(c, cwd, plugin_dir) for c in criteria]
+    criteria, source = _resolve_stage_criteria(plugin_dir, stage, cwd)
+    details = [_evaluate(c, cwd, plugin_dir, source) for c in criteria]
 
     # REQ-SILENTSTATE-001: if state.md exists but is unreadable, the whole gate is
     # inconclusive — it must not read as a clean pass against missing data.
@@ -172,6 +204,7 @@ def evaluate_stage(stage: int, cwd: Path, plugin_dir: Path) -> dict:
     failed = len(details) - passed
     return {
         "stage": stage,
+        "criteria_source": source,
         "total": len(details),
         "passed": passed,
         "failed": failed,

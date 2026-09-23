@@ -210,3 +210,105 @@ class TestMultipleStages:
         assert data["stage"] == 6
         ids = [d["id"] for d in data["details"]]
         assert any(i.startswith("G6-") for i in ids)
+
+
+def _write_project_gates(root: Path, body: str) -> None:
+    (root / "pipeline").mkdir(parents=True, exist_ok=True)
+    (root / "pipeline" / "gate-criteria.md").write_text(body)
+
+
+PROJECT_STAGE_1 = """# Project gates
+
+```yaml
+stage: 1
+name: srs
+criteria:
+  - id: G1-P01
+    description: Project-format requirement present
+    check: file_contains
+    args:
+      path: "pipeline/01-srs/srs.md"
+      pattern: "\\\\*\\\\*REQ-F-\\\\d{3}\\\\*\\\\*"
+    severity: blocker
+```
+"""
+
+
+class TestProjectOverride:
+    def test_project_stage_replaces_plugin_criteria(self, tmp_path):
+        _write_srs(tmp_path / "pipeline", "| **REQ-F-001** | works |\n")
+        _write_project_gates(tmp_path, PROJECT_STAGE_1)
+        r = run(["--stage", "1", "--cwd", str(tmp_path), "--plugin-dir", PLUGIN_DIR])
+        assert r.returncode == 0, r.stderr
+        data = json.loads(r.stdout)
+        assert data["criteria_source"] == "project"
+        assert [d["id"] for d in data["details"]] == ["G1-P01"]
+        assert data["details"][0]["passed"] is True
+        assert data["details"][0]["source"] == "project"
+
+    def test_stage_not_in_project_file_falls_back_to_plugin(self, tmp_path):
+        _write_project_gates(tmp_path, PROJECT_STAGE_1)
+        r = run(["--stage", "6", "--cwd", str(tmp_path), "--plugin-dir", PLUGIN_DIR])
+        data = json.loads(r.stdout)
+        assert data["criteria_source"] == "plugin"
+        assert any(d["id"].startswith("G6-") for d in data["details"])
+
+    def test_no_project_file_uses_plugin(self, tmp_path):
+        _write_srs(tmp_path / "pipeline", "REQ-001: works\n")
+        r = run(["--stage", "1", "--cwd", str(tmp_path), "--plugin-dir", PLUGIN_DIR])
+        data = json.loads(r.stdout)
+        assert data["criteria_source"] == "plugin"
+        assert any(d["id"] == "G1-001" for d in data["details"])
+
+    def test_project_script_resolves_in_project_first(self, tmp_path):
+        (tmp_path / "gates").mkdir()
+        (tmp_path / "gates" / "ok.py").write_text("import sys\nsys.exit(0)\n")
+        _write_project_gates(tmp_path, """```yaml
+stage: 1
+criteria:
+  - id: G1-P02
+    description: project-local script
+    check: script_returns_zero
+    args: { script: "gates/ok.py" }
+    severity: blocker
+```
+""")
+        r = run(["--stage", "1", "--cwd", str(tmp_path), "--plugin-dir", PLUGIN_DIR])
+        assert r.returncode == 0, r.stdout
+        detail = json.loads(r.stdout)["details"][0]
+        assert detail["passed"] is True
+
+    def test_project_criteria_can_reuse_plugin_script(self, tmp_path):
+        _write_srs(tmp_path / "pipeline", "## REQ-001\nShall X.\nAcceptance: X happens.\n")
+        _write_project_gates(tmp_path, """```yaml
+stage: 1
+criteria:
+  - id: G1-P03
+    description: plugin script with project argv
+    check: script_returns_zero
+    args:
+      script: "scripts/check_srs_acceptance.py"
+      argv: ["pipeline/01-srs/srs.md"]
+    severity: blocker
+```
+""")
+        r = run(["--stage", "1", "--cwd", str(tmp_path), "--plugin-dir", PLUGIN_DIR])
+        assert r.returncode == 0, r.stdout
+        assert json.loads(r.stdout)["details"][0]["passed"] is True
+
+    def test_missing_project_script_is_inconclusive(self, tmp_path):
+        _write_project_gates(tmp_path, """```yaml
+stage: 1
+criteria:
+  - id: G1-P04
+    description: absent everywhere
+    check: script_returns_zero
+    args: { script: "gates/nope.py" }
+    severity: warning
+```
+""")
+        r = run(["--stage", "1", "--cwd", str(tmp_path), "--plugin-dir", PLUGIN_DIR])
+        assert r.returncode == 2
+        detail = json.loads(r.stdout)["details"][0]
+        assert detail["inconclusive"] is True
+        assert detail["severity"] == "blocker"
