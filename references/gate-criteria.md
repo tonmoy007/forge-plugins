@@ -9,6 +9,15 @@
 > - `check`: how to verify (file_exists | file_contains | script_returns_zero | all_tests_pass)
 > - `args`: parameters for the check
 > - `severity`: blocker | warning (only blockers prevent advancement)
+>
+> **Project overrides.** A project may add `pipeline/gate-criteria.md` in the same
+> format. Any stage it defines **replaces** this file's criteria for that stage
+> (stages it omits still use this file); `check-gate.py` reports
+> `criteria_source: project | plugin`. In project criteria, `script_returns_zero`
+> resolves `script` against the project root first, then the plugin — so a project
+> can ship its own check or reuse a plugin script with its own `argv`.
+> `scripts/check_srs_acceptance.py` accepts `--id-pattern`, `--acceptance-pattern`
+> and `--row-scoped` for SRSs that keep requirements in markdown table rows.
 
 ---
 

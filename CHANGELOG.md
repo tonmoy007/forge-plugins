@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Project gate overrides.** `scripts/check-gate.py` reads `pipeline/gate-criteria.md`
+  from the project when present; a stage defined there replaces the plugin's criteria
+  for that stage, others fall back to `references/gate-criteria.md`. Output gains
+  `criteria_source` (and `source` per criterion). Project `script_returns_zero`
+  criteria resolve scripts in the project first, then the plugin. A missing script is
+  still inconclusive and promoted to blocker (REQ-GATESTUB-001). `scripts/why.py`
+  explains overridden criteria consistently.
+- **`check_srs_acceptance.py` options** `--id-pattern`, `--acceptance-pattern` and
+  `--row-scoped`, so projects whose SRS uses other ID schemes or table-row requirements
+  (e.g. `| **REQ-F-001** | … | Given … when … then … |`) can reuse G1-003. Defaults
+  are unchanged.
+
 ### Planned
 - Claude Code marketplace publication (pending marketplace availability)
 

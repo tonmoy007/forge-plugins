@@ -143,6 +143,28 @@ class TestExplainGate:
         assert answer["fix_hint"] == ""
         assert answer["description"]
 
+    def test_project_override_replaces_stage(self, tmp_path):
+        pd = _make_plugin_dir(tmp_path)
+        project = tmp_path / "project"
+        (project / "pipeline").mkdir(parents=True)
+        (project / "pipeline" / "gate-criteria.md").write_text(
+            "```yaml\n"
+            "stage: 1\n"
+            "criteria:\n"
+            "  - id: G1-P01\n"
+            "    description: Project-format requirement present\n"
+            "    check: file_contains\n"
+            "    severity: blocker\n"
+            "```\n"
+        )
+        answer = why._explain_gate("G1-P01", pd, project)
+        assert answer is not None
+        assert answer["stage"] == 1
+        # the overridden stage's plugin criteria no longer apply
+        assert why._explain_gate("G1-001", pd, project) is None
+        # other stages still come from the plugin
+        assert why._explain_gate("G3-001", pd, project) is not None
+
 
 # ---------- stage explanation ----------
 
